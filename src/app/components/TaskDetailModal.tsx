@@ -16,7 +16,7 @@ interface Task {
     deadline?: string | Date;
     progress?: number;
     maxProgress?: number;
-    color?: string;
+
 }
 
 interface TaskDetailModalProps {
@@ -101,11 +101,11 @@ export default function TaskDetailModal({ task, onClose, onEdit, onUpdate }: Tas
                      onChangeCommitted={handleProgressCommitted}
                      valueLabelDisplay="auto"
                      sx={{ 
-                         color: task.color || 'primary.main',
+                         color: 'primary.main',
                          '& .MuiSlider-thumb': {
                              transition: 'width 0.2s, height 0.2s',
                              '&:hover, &.Mui-focusVisible': {
-                                 boxShadow: `0px 0px 0px 8px ${task.color ? task.color + '33' : 'rgba(25, 118, 210, 0.16)'}`,
+                                 boxShadow: `0px 0px 0px 8px rgba(25, 118, 210, 0.16)`,
                              },
                          }
                      }}

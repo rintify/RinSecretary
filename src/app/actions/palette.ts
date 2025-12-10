@@ -13,43 +13,48 @@ export async function getPalette() {
       where: { userId: session.user.id },
     });
 
-    if (palette) return palette;
+    if (palette) {
+        // Parse JSON string
+        try {
+            return JSON.parse(palette.palette);
+        } catch(e) {
+            return [];
+        }
+    }
 
     // Create default if not exists
-    return await prisma.eventPalette.create({
+    await prisma.eventPalette.create({
       data: {
         userId: session.user.id,
+        palette: "[]"
       },
     });
+    return [];
+
   } catch (error) {
     console.error('Error fetching palette:', error);
     return null;
   }
 }
 
-export async function updatePalette(data: {
-  black?: string;
-  red?: string;
-  blue?: string;
-  yellow?: string;
-  green?: string;
-  purple?: string;
-}) {
+export async function updatePalette(paletteData: any[]) {
   const session = await auth();
   if (!session?.user?.id) throw new Error('Unauthorized');
 
   try {
     const palette = await prisma.eventPalette.upsert({
       where: { userId: session.user.id },
-      update: data,
+      update: {
+          palette: JSON.stringify(paletteData)
+      },
       create: {
         userId: session.user.id,
-        ...data,
+        palette: JSON.stringify(paletteData)
       },
     });
     
     revalidatePath('/');
-    return palette;
+    return JSON.parse(palette.palette);
   } catch (error) {
     console.error('Error updating palette:', error);
     throw new Error('Failed to update palette');

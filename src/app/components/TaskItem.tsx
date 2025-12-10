@@ -16,7 +16,7 @@ interface Task {
   id: string;
   title: string;
   memo?: string;
-  color: string;
+  color?: string;
   type?: string; 
   // Event (Google)
   startTime?: string | Date;
@@ -44,33 +44,31 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
 
   // Deadline logic
   let daysUntilDeadline: number | null = null;
+  let minutesUntilDeadline: number | null = null;
+  
   if (task.deadline) {
-      daysUntilDeadline = differenceInCalendarDays(new Date(task.deadline), new Date());
+      const now = new Date();
+      const d = new Date(task.deadline);
+      daysUntilDeadline = differenceInCalendarDays(d, now);
+      minutesUntilDeadline = differenceInMinutes(d, now);
   }
 
   // Warning: <= 3 days
   const isWarning = daysUntilDeadline !== null && daysUntilDeadline <= 3 && daysUntilDeadline >= 0 && !isDone;
   
-  // Urgent: 0 days (Today)
-  const isUrgent = daysUntilDeadline !== null && daysUntilDeadline === 0 && !isDone;
+  // Urgent: Within 24 hours
+  const isUrgent = minutesUntilDeadline !== null && minutesUntilDeadline < 1440 && minutesUntilDeadline >= 0 && !isDone;
 
   // Chip Label Logic
   let chipLabel = '';
-  if (daysUntilDeadline !== null) {
-      if (daysUntilDeadline === 0 && task.deadline) {
-          const now = new Date();
-          const d = new Date(task.deadline);
-          const diffHours = differenceInHours(d, now);
-          if (diffHours > 0) {
-              chipLabel = `${diffHours}時間前`;
-          } else {
-              const diffMinutes = differenceInMinutes(d, now);
-              if (diffMinutes > 0) {
-                   chipLabel = `${diffMinutes}分前`;
-              } else {
-                   chipLabel = '期限切れ'; 
-              }
-          }
+  if (minutesUntilDeadline !== null && task.deadline) {
+      if (minutesUntilDeadline < 0) {
+          chipLabel = '期限切れ';
+      } else if (minutesUntilDeadline < 60) {
+          chipLabel = `あと${minutesUntilDeadline}分！`;
+      } else if (minutesUntilDeadline < 1440) {
+          const hours = Math.floor(minutesUntilDeadline / 60);
+          chipLabel = `あと${hours}時間！`;
       } else {
           chipLabel = `${daysUntilDeadline}日前`;
       }
@@ -118,7 +116,7 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
   }
 
   // Colors
-  const borderColor = isDone ? '#9e9e9e' : (daysUntilDeadline === 0 ? '#f44336' : '#9acd32'); // Red if today, else Yellow-green
+  const borderColor = isDone ? '#9e9e9e' : (isUrgent ? '#f44336' : '#9acd32'); // Red if urgent, else Yellow-green
   const warningColor = '#ffb74d'; // Orange-yellow chip
   
   return (

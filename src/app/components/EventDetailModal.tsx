@@ -14,7 +14,7 @@ interface EventLocal {
     memo?: string;
     startTime?: string | Date;
     endTime?: string | Date;
-    color?: string;
+
 }
 
 interface EventDetailModalProps {

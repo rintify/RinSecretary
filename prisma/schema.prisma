@@ -61,7 +61,6 @@ model Task {
   id        String   @id @default(cuid())
   title     String
   memo      String?  // Limit to 5000 chars roughly
-  color     String   // Hex code
   
   // New Task Fields
   startDate DateTime @default(now()) // "Start Day" 00:00 default handled in app or here
@@ -82,11 +81,6 @@ model EventPalette {
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  // Color mappings (stores Title for each color)
-  black     String   @default("Work")
-  red       String   @default("Important")
-  blue      String   @default("Personal")
-  yellow    String   @default("Lunch")
-  green     String   @default("Exercise")
-  purple    String   @default("Study")
+  // Color mappings (stores JSON string of PaletteItems)
+  palette   String   @default("[]") // JSON string
 }

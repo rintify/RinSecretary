@@ -19,7 +19,7 @@ export interface TaskLocal {
   progress?: number;
   maxProgress?: number;
   
-  color: string;
+  color?: string;
   memo?: string;
   type?: string; 
 }

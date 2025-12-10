@@ -8,7 +8,6 @@ import {
   Select, MenuItem, FormControl, InputLabel, Tooltip, Stack
 } from '@mui/material';
 import { 
-  Palette as PaletteIcon, 
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
   Check as CheckIcon,
@@ -20,9 +19,8 @@ import { TransitionProps } from '@mui/material/transitions';
 import React, {  // Add React here
   forwardRef
 } from 'react';
-import PaletteEditModal from './PaletteEditModal';
-import { getPalette } from '@/app/actions/palette';
 import { createGoogleEvent } from '@/lib/calendar-actions';
+import { getPalette, updatePalette } from '@/app/actions/palette';
 
 interface BulkEventCreatorProps {
   onBack: () => void;
@@ -56,7 +54,8 @@ const COLORS = [
 ];
 
 // Default Palette to ensure modal works even if fetch fails
-const DEFAULT_PALETTE = {
+// Default Titles
+const DEFAULT_TITLES: Record<string, string> = {
     black: 'Work',
     red: 'Important',
     blue: 'Personal',
@@ -69,24 +68,36 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
   const [startWeekDate, setStartWeekDate] = useState(initialStartWeekDate);
   const [granularity, setGranularity] = useState(30); // 5, 10, 15, 30
   const [selectedColor, setSelectedColor] = useState('black');
-  const [customTitle, setCustomTitle] = useState('');
-  const [paletteModalOpen, setPaletteModalOpen] = useState(false);
-  const [paletteSettings, setPaletteSettings] = useState<any>(DEFAULT_PALETTE);
+  const [colorTitles, setColorTitles] = useState<Record<string, string>>(DEFAULT_TITLES);
   
   // Persistence: Key = 'yyyy-MM-dd', Value = Array(288) of color keys
   const [paintedData, setPaintedData] = useState<Record<string, string[]>>({});
   const [isSaving, setIsSaving] = useState(false);
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  
-  const fetchPalette = async () => {
-    const p = await getPalette();
-    if (p) setPaletteSettings(p);
-  };
-  
-  // Fetch on mount
+
+  // Fetch Palette on Mount
   useEffect(() => {
-      fetchPalette();
+      const loadPalette = async () => {
+          const p = await getPalette(); // returns array
+          if (Array.isArray(p)) {
+              // Convert array to Record
+              const textMap: Record<string, string> = { ...DEFAULT_TITLES };
+              
+              // Apply DB values
+              p.forEach((item: any) => {
+                  if (item.key && item.title) {
+                      textMap[item.key] = item.title;
+                  }
+              });
+
+              // FORCE RESET BLACK
+              textMap['black'] = '';
+
+              setColorTitles(textMap);
+          }
+      };
+      loadPalette();
   }, []);
 
   const days = useMemo(() => {
@@ -194,6 +205,23 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
   const handleSave = async () => {
       setIsSaving(true);
       try {
+          // Prepare Palette Data for DB (Array format)
+          // We save everything EXCEPT 'black' title if we want to follow 'don't save black', 
+          // BUT user said "blackは保存するな" meaning don't persist it for next reload.
+          // However, we might as well just save current state, and the Reload Logic (useEffect ^) handles the reset.
+          // That is cleaner.
+          // But wait, if we save 'black'='Work', next time it resets to ''.
+          // So saving it is fine.
+
+          const paletteToSave = Object.entries(colorTitles).map(([key, title]) => ({
+             key,
+             title,
+             hex: COLORS.find(c => c.key === key)?.hex || '#000000'
+          }));
+
+          // 1. Save Palette Configuration first
+          await updatePalette(paletteToSave);
+
           const eventsToCreate: any[] = [];
           
           // Iterate all day keys in paintedData
@@ -210,37 +238,34 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
                    // Calculate times
                    // Start time
                    const startTotalMin = currentEvent.startSlot * 5;
-                   const startHour = HOURS_START + Math.floor(startTotalMin / 60);
-                   const startMin = startTotalMin % 60;
+                   // const startHour = HOURS_START + Math.floor(startTotalMin / 60);
+                   // const startMin = startTotalMin % 60;
                    
                    const endTotalMin = endSlot * 5;
-                   const endHour = HOURS_START + Math.floor(endTotalMin / 60);
-                   const endMin = endTotalMin % 60;
+                   // const endHour = HOURS_START + Math.floor(endTotalMin / 60);
+                   // const endMin = endTotalMin % 60;
                    
                    // Handle date overflow (24+)
-                   // Actually easy way: baseDate set to 4:00, add minutes
                    const base = setMinutes(setHours(currentDayDate, 4), 0);
                    const startDate = addMinutes(base, startTotalMin);
                    const endDate = addMinutes(base, endTotalMin);
                    
-                   let title = 'New Event';
-                   let memo = '';
-                   
-                   if (currentEvent.color === 'black') {
-                       title = customTitle || 'Work';
-                   } else {
-                       // Look up title from palette
-                       title = paletteSettings?.[currentEvent.color] || 'Event';
+                   // Look up title from local state
+                   let title = colorTitles[currentEvent.color] || 'Event';
+
+                   // Special logic for Black: if empty, default to "なんか"
+                   if (currentEvent.color === 'black' && !title.trim()) {
+                       title = 'なんか';
                    }
+                   
+                   // Note: If using multiple titles for same color in future, need logic.
+                   // Current spec: 1 title per color.
 
                    eventsToCreate.push({
                        title,
-                       memo,
+                       memo: '',
                        startTime: startDate,
                        endTime: endDate,
-                       // We can't easily force color in GCal via this simple API unless we use colorId, 
-                       // but for now we just create the event.
-                       // Ideally we map color to colorId if needed, but per prompt just title is key.
                    });
               };
               
@@ -269,10 +294,6 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
           });
 
           // Batch create
-          // Note: Sending many requests parallel might hit rate limits.
-          // Sequential or chunks is safer.
-          // For now, simple Promise.all with small groups or just all.
-          // Let's do sequential to be safe and simple.
           for (const evt of eventsToCreate) {
               await createGoogleEvent({
                   title: evt.title,
@@ -367,20 +388,13 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
                 ))}
             </Stack>
              
-             {/* Edit Screen Button (Palette Icon) */}
-             <Tooltip title="Edit Palette">
-                 <IconButton onClick={() => setPaletteModalOpen(true)} size="small">
-                     <PaletteIcon />
-                 </IconButton>
-             </Tooltip>
-             
              {/* Custom Title Input */}
-             {selectedColor === 'black' && (
+             {selectedColor !== 'transparent' && (
                  <TextField 
                     size="small" 
-                    placeholder="Title for Black" 
-                    value={customTitle} 
-                    onChange={(e) => setCustomTitle(e.target.value)}
+                    placeholder="Title" 
+                    value={colorTitles[selectedColor] || ''} 
+                    onChange={(e) => setColorTitles(prev => ({...prev, [selectedColor]: e.target.value}))}
                  />
              )}
         </Box>
@@ -559,15 +573,7 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
             ))}
         </Box>
 
-        {/* Palette Modal - Always render with defaults if needed */}
-         <Box sx={{ position: 'absolute', zIndex: 1400 }}>
-             <PaletteEditModal 
-                 open={paletteModalOpen} 
-                 onClose={() => setPaletteModalOpen(false)}
-                 currentPalette={paletteSettings}
-                 onUpdate={fetchPalette}
-             />
-         </Box>
+
     </Box>
     </Dialog>
   );

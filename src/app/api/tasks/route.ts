@@ -73,7 +73,6 @@ export async function POST(request: Request) {
       data: {
         title: json.title,
         memo: json.memo,
-        color: json.color,
         // Default startDate to now if not provided, or specific date
         startDate: json.startDate ? new Date(json.startDate) : new Date(new Date().setHours(0,0,0,0)),
         deadline: json.deadline ? new Date(json.deadline) : new Date(new Date().setHours(23,59,59,999)),
