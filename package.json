@@ -21,10 +21,15 @@
     "date-fns": "latest",
     "framer-motion": "^12.23.25",
     "googleapis": "^168.0.0",
+    "katex": "^0.16.27",
     "next": "latest",
     "next-auth": "beta",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",

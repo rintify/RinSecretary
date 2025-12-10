@@ -74,6 +74,15 @@ const DayColumn = ({
         // Actually, let's use dayStart for strict comparison.
         if (d < dayStart) return false;
 
+        // "Start Date after the TimeTable Day should not be displayed"
+        // If task.startDate exists and is strictly after the end of this day, hide it.
+        if (task.startDate) {
+            const s = new Date(task.startDate);
+            // dayEnd is 24 hours after dayStart (so start of next day)
+            // If start date is >= dayEnd, it is in the future relative to this view.
+            if (s >= dayEnd) return false;
+        }
+
         return true;
     });
 
@@ -119,6 +128,7 @@ const DayColumn = ({
                         <TaskItem 
                             key={task.id} 
                             task={task} 
+                            viewDate={date}
                             onClick={(t) => (onEditTask) ? onEditTask(task) : null}
                         />
                     ))}

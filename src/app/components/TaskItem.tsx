@@ -1,7 +1,10 @@
 import React from 'react';
-import { format, differenceInCalendarDays } from 'date-fns';
+import { format, differenceInCalendarDays, differenceInHours, differenceInMinutes } from 'date-fns';
 import { Card, CardContent, Typography, Box, CardActionArea, LinearProgress, Chip, keyframes } from '@mui/material';
 import { AccessTime as ClockIcon, Event as CalendarIcon } from '@mui/icons-material';
+import { isSameDay } from 'date-fns'; // Using library isSameDay to be cleaner or just use the local one? Local one is defined below. I'll stick to local or import. Actually I should check if isSameDay is imported. It is not. I'll insert it or use local.
+// Let's rely on the local definition or Date comparison. Wait, "isSameDay" is defined inside locally at line 54. I should lift it or use date-fns.
+// I will just use the local logic for now or modify the code to check "Today".
 
 const blinkAnimation = keyframes`
   0% { box-shadow: 0 0 5px 0px rgba(244, 67, 54, 0.3); }
@@ -48,14 +51,43 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
   // Warning: <= 3 days
   const isWarning = daysUntilDeadline !== null && daysUntilDeadline <= 3 && daysUntilDeadline >= 0 && !isDone;
   
-  // Urgent: <= 1 day
-  const isUrgent = daysUntilDeadline !== null && daysUntilDeadline <= 1 && daysUntilDeadline >= 0 && !isDone;
+  // Urgent: 0 days (Today)
+  const isUrgent = daysUntilDeadline !== null && daysUntilDeadline === 0 && !isDone;
 
-  const isSameDay = (d1: Date, d2: Date) => {
+  // Chip Label Logic
+  let chipLabel = '';
+  if (daysUntilDeadline !== null) {
+      if (daysUntilDeadline === 0 && task.deadline) {
+          const now = new Date();
+          const d = new Date(task.deadline);
+          const diffHours = differenceInHours(d, now);
+          if (diffHours > 0) {
+              chipLabel = `${diffHours}時間前`;
+          } else {
+              const diffMinutes = differenceInMinutes(d, now);
+              if (diffMinutes > 0) {
+                   chipLabel = `${diffMinutes}分前`;
+              } else {
+                   chipLabel = '期限切れ'; 
+              }
+          }
+      } else {
+          chipLabel = `${daysUntilDeadline}日前`;
+      }
+  }
+
+  const isSameDayFn = (d1: Date, d2: Date) => {
       return d1.getFullYear() === d2.getFullYear() && 
              d1.getMonth() === d2.getMonth() && 
              d1.getDate() === d2.getDate();
   };
+  
+  const isViewToday = viewDate ? isSameDayFn(viewDate, new Date()) : true; // Default to true if no viewDate provided (e.g. list view)? Or false? Usually TimeTable provides it.
+  
+  // Warning only if view is Today
+  const showWarning = isWarning && isViewToday;
+  // Urgent only if view is Today
+  const showUrgent = isUrgent && isViewToday;
 
   const getDayTimeDisplay = () => {
       if (!task.startTime || !task.endTime) return null;
@@ -66,8 +98,8 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
       const start = new Date(task.startTime);
       const end = new Date(task.endTime);
 
-      const isStart = isSameDay(viewDate, start);
-      const isEnd = isSameDay(viewDate, end);
+      const isStart = isSameDayFn(viewDate, start);
+      const isEnd = isSameDayFn(viewDate, end);
 
       if (isStart && isEnd) {
           return `${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}`;
@@ -86,14 +118,14 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
   }
 
   // Colors
-  const borderColor = isDone ? '#9e9e9e' : '#9acd32'; // Yellow-green
+  const borderColor = isDone ? '#9e9e9e' : (daysUntilDeadline === 0 ? '#f44336' : '#9acd32'); // Red if today, else Yellow-green
   const warningColor = '#ffb74d'; // Orange-yellow chip
   
   return (
-    <Box sx={{ position: 'relative', mb: 1 }}>
-        {isWarning && (
+    <Box sx={{ position: 'relative', mb: 1.5 }}>
+        {showWarning && (
             <Chip 
-                label={`${daysUntilDeadline}日前`} 
+                label={chipLabel} 
                 size="small"
                 sx={{ 
                     position: 'absolute', 
@@ -118,7 +150,7 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
             boxShadow: 'none',
             opacity: isDone ? 0.6 : 1,
             transition: 'all 0.3s ease',
-            animation: isUrgent ? `${blinkAnimation} 1s infinite ease-in-out` : 'none',
+            animation: showUrgent ? `${blinkAnimation} 1s infinite ease-in-out` : 'none',
             ...style 
           }}
         >
@@ -128,30 +160,31 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
                 {task.title}
               </Typography>
               
-              {task.memo && (
-                <Typography variant="caption" sx={{ opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {task.memo}
-                </Typography>
-              )}
-
+              {/* Time Row */}
               {isEvent && task.startTime && task.endTime && (
-                 <Box display="flex" alignItems="center" gap={0.5} sx={{ opacity: 0.9 }}>
+                  <Box display="flex" alignItems="center" gap={0.5} sx={{ opacity: 0.9 }}>
                     <ClockIcon sx={{ fontSize: 12 }} />
                     <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
                         {getDayTimeDisplay()}
                     </Typography>
-                 </Box>
+                  </Box>
               )}
+
+              {/* Deadline Row */}
+              {isTask && task.deadline && (
+                  <Box display="flex" alignItems="center" gap={0.5} sx={{ opacity: 0.9 }}>
+                    <CalendarIcon sx={{ fontSize: 12 }} />
+                    <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
+                        Limit: {getDeadlineDisplay()}
+                    </Typography>
+                  </Box>
+              )}
+
+
 
               {isTask && task.deadline && (
                   <Box mt={0.5}>
-                    <Box display="flex" alignItems="center" gap={0.5} sx={{ opacity: 0.9, mb: 0.2 }}>
-                        <CalendarIcon sx={{ fontSize: 12 }} />
-                        <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
-                            Limit: {getDeadlineDisplay()}
-                        </Typography>
-                    </Box>
-                    <LinearProgress 
+                    <LinearProgress  
                         variant="determinate" 
                         value={Math.min(100, ((task.progress || 0) / (task.maxProgress || 100)) * 100)} 
                         sx={{ 

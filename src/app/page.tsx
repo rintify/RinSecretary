@@ -2,18 +2,18 @@
 
 import { useState, useRef } from 'react';
 import TimeTable from './components/TimeTable';
-import ChatInterface from './components/ChatInterface';
-import { Add as AddIcon, Chat as ChatIcon, CalendarMonth as CalendarIcon, Logout as LogoutIcon, ArrowBackIosNew, ArrowForwardIos, Edit as EditIcon, Event as EventIcon, TaskAlt as TaskIcon } from '@mui/icons-material';
+import { Add as AddIcon, CalendarMonth as CalendarIcon, Logout as LogoutIcon, ArrowBackIosNew, ArrowForwardIos, Edit as EditIcon, Event as EventIcon, TaskAlt as TaskIcon } from '@mui/icons-material';
 import { logout } from '@/lib/actions';
 import { format, addDays, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import TaskForm from './components/TaskForm';
 import EventForm from './components/EventForm';
+import TaskDetailModal from './components/TaskDetailModal';
+import EventDetailModal from './components/EventDetailModal';
 import { Suspense } from 'react';
 import { AppBar, Toolbar, Typography, IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Stack, Tooltip } from '@mui/material';
 
 export default function Home() {
-  const [showChat, setShowChat] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const dateInputRef = useRef<HTMLInputElement>(null);
 
@@ -27,7 +27,7 @@ export default function Home() {
   const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1));
 
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT'>('NONE');
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT'>('NONE');
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
   const handleNewTask = () => {
@@ -40,13 +40,21 @@ export default function Home() {
     setActiveModal('NEW_EVENT');
   };
 
-  const handleEditTask = (task: any) => {
-      setModalData({ id: task.id, initialValues: task });
-      // Identify type from props or task object
+  const handleTaskClick = (task: any) => {
+      setModalData(task);
       if (task.deadline) {
-        setActiveModal('EDIT_TASK');
+        setActiveModal('DETAIL_TASK');
       } else {
-        setActiveModal('EDIT_EVENT');
+        setActiveModal('DETAIL_EVENT');
+      }
+  };
+
+  const handleEditFromDetail = () => {
+      // modalData is the task
+      if (modalData?.deadline) {
+          setActiveModal('EDIT_TASK');
+      } else {
+          setActiveModal('EDIT_EVENT');
       }
   };
 
@@ -99,8 +107,8 @@ export default function Home() {
       <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
           <TimeTable 
               date={currentDate} 
-              onNewTask={(time) => handleNewEvent(time)} // Clicking on timetable creates EVENT usually
-              onEditTask={handleEditTask}
+              onNewTask={(time) => handleNewEvent(time)} 
+              onEditTask={handleTaskClick}
               refreshTrigger={refreshTrigger}
           />
           
@@ -116,25 +124,10 @@ export default function Home() {
                     <EventIcon />
                 </Fab>
              </Tooltip>
-             <Fab color="secondary" aria-label="chat" onClick={() => setShowChat(!showChat)} size="medium" sx={{ bgcolor: 'info.main' }}>
-                <ChatIcon />
-             </Fab>
           </Box>
       </Box>
 
-      {/* Chat Drawer / Overlay */}
-      {showChat && (
-          <Box 
-            sx={{ 
-                position: 'fixed', 
-                top: 0, left: 0, right: 0, bottom: 0, 
-                zIndex: theme.zIndex.drawer, 
-                bgcolor: 'background.paper' 
-            }}
-          >
-             <ChatInterface onClose={() => setShowChat(false)} />
-          </Box>
-      )}
+
       
       {/* Dialog */}
       <Dialog
@@ -154,7 +147,7 @@ export default function Home() {
                 {activeModal === 'EDIT_TASK' && (
                     <TaskForm 
                         taskId={modalData?.id} 
-                        initialValues={modalData?.initialValues}
+                        initialValues={modalData}
                         onSuccess={handleCloseModal} 
                         isModal
                     />
@@ -169,9 +162,24 @@ export default function Home() {
                 {activeModal === 'EDIT_EVENT' && (
                     <EventForm 
                         eventId={modalData?.id}
-                        initialValues={modalData?.initialValues}
+                        initialValues={modalData}
                         onSuccess={handleCloseModal} 
                         isModal
+                    />
+                )}
+                {activeModal === 'DETAIL_TASK' && (
+                    <TaskDetailModal
+                        task={modalData}
+                        onClose={handleCloseModal}
+                        onEdit={handleEditFromDetail}
+                        onUpdate={() => setRefreshTrigger(prev => prev + 1)}
+                    />
+                )}
+                {activeModal === 'DETAIL_EVENT' && (
+                    <EventDetailModal
+                        event={modalData}
+                        onClose={handleCloseModal}
+                        onEdit={handleEditFromDetail}
                     />
                 )}
             </Suspense>
