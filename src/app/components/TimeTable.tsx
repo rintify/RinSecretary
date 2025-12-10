@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { addHours, startOfDay, format, addDays, subDays } from 'date-fns'; // removed unused imports
+import { addHours, startOfDay, format, addDays, subDays, isSameDay, isBefore } from 'date-fns';
 import TaskItem from './TaskItem';
 import { fetchGoogleEvents } from '@/lib/calendar-actions';
-import { Box, Typography, IconButton, Paper, Container } from '@mui/material';
-import { ArrowBackIosNew, ArrowForwardIos } from '@mui/icons-material';
+import { getAlarms } from '@/lib/alarm-actions';
+import { Box, Typography, IconButton, Paper, Container, Badge } from '@mui/material';
+import { ArrowBackIosNew, ArrowForwardIos, History as HistoryIcon, ReportProblem as WarningIcon } from '@mui/icons-material';
+import { AnimatePresence, motion } from 'framer-motion';
 
 export interface TaskLocal {
   id: string;
@@ -28,11 +30,13 @@ export interface TaskLocal {
 const DayColumn = ({ 
     date, 
     tasks, 
-    onEditTask
+    onEditTask,
+    isHeaderVisible
 }: { 
     date: Date, 
     tasks: TaskLocal[], 
-    onEditTask?: (task: TaskLocal) => void
+    onEditTask?: (task: TaskLocal) => void;
+    isHeaderVisible?: boolean;
 }) => {
     
     // Filter Tasks for this day
@@ -109,34 +113,58 @@ const DayColumn = ({
     }
 
     return (
-        <Box sx={{ p: 2, height: '100%', overflowY: 'auto' }}>
-            {dayTasks.map(task => (
-                <TaskItem 
-                    key={task.id} 
-                    task={task} 
-                    viewDate={date}
-                    onClick={(t) => (onEditTask) ? onEditTask(task) : null}
-                />
-            ))}
-            
-            {deadlineTasks.length > 0 && (
-                <Box sx={{ mt: 3, pt: 2, borderTop: 2, borderColor: 'divider' }}>
-                    <Typography variant="subtitle2" color="error" sx={{ mb: 1, fontWeight: 'bold' }}>
-                        Tasks
-                    </Typography>
-                    {deadlineTasks.map(task => (
+        <Box sx={{ px: 2, pb: 2, pt: isHeaderVisible ? 0.2 : 2, height: '100%', overflowY: 'auto' }}>
+            <AnimatePresence mode='popLayout'>
+                {dayTasks.map(task => (
+                    <motion.div
+                        key={task.id}
+                        layout
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.2 }}
+                    >
                         <TaskItem 
-                            key={task.id} 
                             task={task} 
                             viewDate={date}
                             onClick={(t) => (onEditTask) ? onEditTask(task) : null}
                         />
-                    ))}
+                    </motion.div>
+                ))}
+            </AnimatePresence>
+            
+            {deadlineTasks.length > 0 && (
+                <Box sx={{ mt: 3, pt: 2, borderTop: 2, borderColor: 'divider' }}>
+                    <AnimatePresence mode='popLayout'>
+                        {deadlineTasks.map(task => (
+                            <motion.div
+                                key={task.id}
+                                layout
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                transition={{ duration: 0.2 }}
+                            >
+                                <TaskItem 
+                                    task={task} 
+                                    viewDate={date}
+                                    onClick={(t) => (onEditTask) ? onEditTask(task) : null}
+                                />
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
                 </Box>
             )}
         </Box>
     );
 };
+
+// Update props to include onEditAlarm
+// Though onEditTask handles generic tasks/events, we should ensure it passes the type correctly.
+// Actually, TaskLocal has 'type', so generic handler is fine?
+// Let's see how page.tsx handles it. page.tsx handles `handleTaskClick`.
+// If task has deadline -> DETAIL_TASK, else DETAIL_EVENT.
+// We need to differentiate ALARM.
 
 export default function TimeTable({ 
     date,
@@ -155,10 +183,18 @@ export default function TimeTable({
   const allTasks = [...tasks, ...googleEvents];
   
   const [isClient, setIsClient] = useState(false);
+  const [now, setNow] = useState(new Date());
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
+    setNow(new Date());
+    
+    // Update 'now' every minute to keep UI fresh
+    const timer = setInterval(() => setNow(new Date()), 60000);
+    
     fetchTasks();
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -179,14 +215,18 @@ export default function TimeTable({
   };
 
   const loadGoogleEvents = async () => {
-      // Load events around the current date
+      // Load events and alarms around the current date
       const start = subDays(date, 7);
       const end = addDays(date, 7);
       try {
-          const events = await fetchGoogleEvents(start, end);
-          setGoogleEvents(events as TaskLocal[]);
+          const eventsPromise = fetchGoogleEvents(start, end);
+          const alarmsPromise = getAlarms(start, end); // Fetch alarms
+
+          const [events, alarms] = await Promise.all([eventsPromise, alarmsPromise]);
+          
+          setGoogleEvents([...(events as TaskLocal[]), ...(alarms as TaskLocal[])]); // Merge arrays
       } catch (e) {
-          console.error("Failed to load google events", e);
+          console.error("Failed to load events/alarms", e);
       }
   };
 
@@ -196,18 +236,130 @@ export default function TimeTable({
       }
   }, [date, isClient]);
 
+  // --- Logic for History & Sub-Header ---
+  const isToday = isSameDay(date, now);
+  
+  // Identify "History" items: Alarms/Events where end time < now.
+  const dayStart = startOfDay(date);
+  const dayEnd = addHours(dayStart, 24);
+  
+  const eventsForToday = allTasks.filter(task => {
+      const tStart = task.startTime ? new Date(task.startTime) : null;
+      if (!tStart) return false;
+      
+      const tEnd = task.endTime ? new Date(task.endTime) : null;
+      if (tEnd && (tEnd <= dayStart || tStart >= dayEnd)) return false;
+      if (!tEnd && (tStart < dayStart || tStart >= dayEnd)) return false;
+      return true;
+  });
+
+  const historyItems = eventsForToday.filter(task => {
+      // Is it past?
+      const tEnd = task.endTime ? new Date(task.endTime) : (task.startTime ? new Date(task.startTime) : null);
+      if (!tEnd) return false;
+      return tEnd < now;
+  });
+
+  // Count hidden items (if we are strictly hiding them, these are the ones that WOULd be hidden if toggle is off)
+  // The badge should show how many are hidden.
+  // If showHistory is true, none are hidden -> 0?
+  // User: "何件の非表示カードがあるか" -> "How many hidden cards there are".
+  // So if showHistory is true, items are visible, so 0 hidden?
+  // But maybe user wants "How many past items there are" regardless?
+  // Usually "Hidden count" implies current state.
+  // I will show `historyItems.length` if `!showHistory`. If `showHistory`, I'll show 0 or hide badge.
+  const hiddenCount = (!showHistory) ? historyItems.length : 0;
+  
+  // Warning logic: "24時間以内締切のタスクがある場合"
+  // Exclude completed tasks (progress >= maxProgress)
+  // Only show on "Today"
+  // Warning logic: "24時間以内締切のタスクがある場合"
+  // Exclude completed tasks (progress >= maxProgress)
+  // Only show on "Today"
+  let triggerTaskName = "";
+  let triggerDebug = "";
+
+  const hasDeadlineWarning = isToday && tasks.some(task => {
+      if (!task.deadline) return false;
+      
+      const p = typeof task.progress === 'number' ? task.progress : Number(task.progress || 0);
+      const max = typeof task.maxProgress === 'number' ? task.maxProgress : Number(task.maxProgress || 100);
+      
+      // Float safe comparison (epsilon 0.01)
+      const isDone = p >= (max - 0.01);
+
+      if (isDone) return false;
+
+      const d = new Date(task.deadline);
+      const limit = addHours(now, 24);
+      
+      const inRange = d >= now && d <= limit;
+      if (inRange) {
+          triggerTaskName = task.title;
+          triggerDebug = `P:${p}/${max}`;
+          console.log(`[Warning Trigger] Task: ${task.title}, Deadline: ${d.toLocaleString()}, Progress: ${p}/${max}`);
+      }
+      return inRange; 
+  });
+
+  // Filter tasks passed to DayColumn
+  const visibleTasks = isToday && !showHistory 
+    ? allTasks.filter(task => {
+        // Exclude history items
+        if (historyItems.includes(task)) return false; 
+        return true;
+    })
+    : allTasks;
+
   if (!isClient) return <div style={{ padding: 20 }}>Loading...</div>;
 
   return (
     <Box sx={{ height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
+        {/* Header Bar - only render if needed to avoid whitespace */}
+        {/* Header Bar - only render if needed to avoid whitespace */}
+        {(hasDeadlineWarning || (isToday && historyItems.length > 0)) && (
+        <Box sx={{ 
+            px: 2, 
+            py: 0.5, 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            minHeight: 44
+        }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                {hasDeadlineWarning && (
+                     <>
+                        <WarningIcon color="error" sx={{ mr: 1 }} />
+                        <Typography variant="body2" color="error" sx={{ fontWeight: 'bold' }}>
+                            今日までのタスクがあります
+                        </Typography>
+                     </>
+                )}
+            </Box>
+
+            {/* History Toggle - Only show on Today and if there are history items */}
+            {isToday && historyItems.length > 0 && (
+                <IconButton 
+                    onClick={() => setShowHistory(!showHistory)} 
+                    color={showHistory ? 'primary' : 'default'}
+                    sx={{ p: 0.5 }}
+                >
+                    <Badge badgeContent={hiddenCount} sx={{ '& .MuiBadge-badge': { bgcolor: '#9acd32', color: 'white', transform: 'scale(0.8) translate(50%, -50%)', transformOrigin: '100% 0%' } }}>
+                        <HistoryIcon />
+                    </Badge>
+                </IconButton>
+            )}
+        </Box>
+        )}
+
         <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
              <DayColumn 
                 date={date} 
-                tasks={allTasks} 
+                tasks={visibleTasks} 
                 onEditTask={onEditTask} 
+                isHeaderVisible={!!(hasDeadlineWarning || (isToday && historyItems.length > 0))}
              />
         </Box>
     </Box>
   );
 }
-

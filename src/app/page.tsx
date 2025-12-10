@@ -10,8 +10,12 @@ import TaskForm from './components/TaskForm';
 import EventForm from './components/EventForm';
 import TaskDetailModal from './components/TaskDetailModal';
 import EventDetailModal from './components/EventDetailModal';
+import AlarmForm from './components/AlarmForm';
+import AlarmDetailModal from './components/AlarmDetailModal';
+import SettingsModal from './components/SettingsModal';
 import { Suspense } from 'react';
 import { AppBar, Toolbar, Typography, IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Stack, Tooltip } from '@mui/material';
+import { Settings as SettingsIcon, Notifications as AlarmIcon } from '@mui/icons-material';
 
 export default function Home() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -27,7 +31,7 @@ export default function Home() {
   const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1));
 
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT'>('NONE');
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS'>('NONE');
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
   const handleNewTask = () => {
@@ -40,10 +44,17 @@ export default function Home() {
     setActiveModal('NEW_EVENT');
   };
 
+  const handleNewAlarm = () => {
+      setModalData(null);
+      setActiveModal('NEW_ALARM');
+  };
+
   const handleTaskClick = (task: any) => {
       setModalData(task);
       if (task.deadline) {
         setActiveModal('DETAIL_TASK');
+      } else if (task.type === 'ALARM') {
+        setActiveModal('DETAIL_ALARM');
       } else {
         setActiveModal('DETAIL_EVENT');
       }
@@ -53,6 +64,8 @@ export default function Home() {
       // modalData is the task
       if (modalData?.deadline) {
           setActiveModal('EDIT_TASK');
+      } else if (modalData?.type === 'ALARM') {
+          setActiveModal('EDIT_ALARM');
       } else {
           setActiveModal('EDIT_EVENT');
       }
@@ -92,8 +105,8 @@ export default function Home() {
                     <CalendarIcon />
                 </IconButton>
                 
-                <IconButton onClick={() => logout()}>
-                    <LogoutIcon />
+                <IconButton onClick={() => setActiveModal('SETTINGS')}>
+                    <SettingsIcon />
                 </IconButton>
 
                 <IconButton onClick={handleNextDay}>
@@ -122,6 +135,11 @@ export default function Home() {
              <Tooltip title="New Event" placement="left">
                 <Fab color="primary" aria-label="add event" onClick={() => handleNewEvent()} size="medium" sx={{ bgcolor: 'secondary.main' }}>
                     <EventIcon />
+                </Fab>
+             </Tooltip>
+             <Tooltip title="New Alarm" placement="left">
+                <Fab color="primary" aria-label="add alarm" onClick={handleNewAlarm} size="medium" sx={{ bgcolor: '#FF4500' }}>
+                    <AlarmIcon />
                 </Fab>
              </Tooltip>
           </Box>
@@ -180,6 +198,32 @@ export default function Home() {
                         event={modalData}
                         onClose={handleCloseModal}
                         onEdit={handleEditFromDetail}
+                    />
+                )}
+                {activeModal === 'NEW_ALARM' && (
+                    <AlarmForm
+                        onSuccess={handleCloseModal}
+                        isModal
+                    />
+                )}
+                {activeModal === 'EDIT_ALARM' && (
+                    <AlarmForm
+                        alarmId={modalData?.id}
+                        initialValues={modalData}
+                        onSuccess={handleCloseModal}
+                        isModal
+                    />
+                )}
+                {activeModal === 'DETAIL_ALARM' && (
+                    <AlarmDetailModal
+                        alarm={modalData}
+                        onClose={handleCloseModal}
+                        onEdit={handleEditFromDetail}
+                    />
+                )}
+                {activeModal === 'SETTINGS' && (
+                    <SettingsModal
+                        onClose={handleCloseModal}
                     />
                 )}
             </Suspense>

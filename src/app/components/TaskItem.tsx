@@ -38,6 +38,8 @@ interface TaskItemProps {
 
 export default function TaskItem({ task, style, onClick, viewDate }: TaskItemProps) {
   const isEvent = !!task.startTime;
+  const isAlarm = task.type === 'ALARM';
+  // If generic "Task" or DB Task - check deadline
   const isTask = !!task.deadline;
 
   const isDone = isTask && (task.progress || 0) >= (task.maxProgress || 100);
@@ -80,7 +82,7 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
              d1.getDate() === d2.getDate();
   };
   
-  const isViewToday = viewDate ? isSameDayFn(viewDate, new Date()) : true; // Default to true if no viewDate provided (e.g. list view)? Or false? Usually TimeTable provides it.
+  const isViewToday = viewDate ? isSameDayFn(viewDate, new Date()) : true; 
   
   // Warning only if view is Today
   const showWarning = isWarning && isViewToday;
@@ -88,6 +90,11 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
   const showUrgent = isUrgent && isViewToday;
 
   const getDayTimeDisplay = () => {
+      // Logic for Event (range) or Alarm (point)
+      if (isAlarm && task.startTime) {
+          return format(new Date(task.startTime), 'HH:mm');
+      }
+
       if (!task.startTime || !task.endTime) return null;
       if (!viewDate) {
            return `${format(new Date(task.startTime), 'HH:mm')} - ${format(new Date(task.endTime), 'HH:mm')}`;
@@ -116,7 +123,20 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
   }
 
   // Colors
-  const borderColor = isDone ? '#9e9e9e' : (isUrgent ? '#f44336' : '#9acd32'); // Red if urgent, else Yellow-green
+  // Alarm -> Light Blue (#29b6f6 or info.light)
+  // Task -> Yellow (#ffeb3b or yellow[500] but border should be visible)
+  
+  let borderColor = '#e0e0e0'; // default
+  if (isTask) {
+      if (isDone) borderColor = '#9e9e9e';
+      else if (isUrgent) borderColor = '#f44336';
+      else borderColor = '#fdd835'; // Yellow 600
+  } else if (isAlarm) {
+      borderColor = '#29b6f6'; // Light Blue 400
+  } else if (isEvent) {
+      borderColor = '#9acd32'; // Yellow Green (default event)
+  }
+
   const warningColor = '#ffb74d'; // Orange-yellow chip
   
   return (
@@ -158,8 +178,8 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
                 {task.title}
               </Typography>
               
-              {/* Time Row */}
-              {isEvent && task.startTime && task.endTime && (
+              {/* Time Row (Event or Alarm) */}
+              {(isEvent || isAlarm) && task.startTime && (
                   <Box display="flex" alignItems="center" gap={0.5} sx={{ opacity: 0.9 }}>
                     <ClockIcon sx={{ fontSize: 12 }} />
                     <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
@@ -178,8 +198,6 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
                   </Box>
               )}
 
-
-
               {isTask && task.deadline && (
                   <Box mt={0.5}>
                     <LinearProgress  
@@ -190,7 +208,7 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
                             borderRadius: 2, 
                             bgcolor: 'rgba(0,0,0,0.1)',
                             '& .MuiLinearProgress-bar': {
-                                bgcolor: isDone ? '#9e9e9e' : '#9acd32'
+                                bgcolor: isDone ? '#9e9e9e' : '#fdd835'
                             }
                         }}
                     />
