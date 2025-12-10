@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeft as ChevronLeftIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container } from '@mui/material';
 import { format } from 'date-fns';
+import BulkEventCreator from './BulkEventCreator';
 
 interface EventFormProps {
     eventId?: string;
@@ -150,6 +151,22 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
         }
     };
 
+    const [isBulkMode, setIsBulkMode] = useState(false);
+    
+    // ... existing useEffect ...
+
+    // Dynamic import to avoid SSR issues if complex, but here standard import is fine usually.
+    // However, for cleaner code structure inside component:
+    
+    if (isBulkMode) {
+        return (
+            <BulkEventCreator 
+                onBack={() => setIsBulkMode(false)}
+                onSuccess={() => onSuccess ? onSuccess() : router.back()}
+            />
+        );
+    }
+
     const content = (
         <Box component="form" onSubmit={handleSubmit} sx={{ p: isModal ? 2 : 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
             {!isModal && (
@@ -161,9 +178,21 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                 </Box>
             )}
 
-            <Typography variant="h6" fontWeight="bold" align="center" sx={{ mb: -1 }}>
-                {eventId ? 'Edit Event' : 'New Event'}
-            </Typography>
+            <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: -1 }}>
+                <Typography variant="h6" fontWeight="bold">
+                    {eventId ? 'Edit Event' : 'New Event'}
+                </Typography>
+                {!eventId && (
+                    <Button 
+                        size="small" 
+                        variant="outlined" 
+                        onClick={() => setIsBulkMode(true)}
+                        sx={{ position: 'absolute', right: 0 }}
+                    >
+                        Bulk Create
+                    </Button>
+                )}
+            </Box>
             
             <TextField 
                 label="Title" 
@@ -236,6 +265,8 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
         </Box>
     );
 
+    // If Modal, just return content (which might be BulkCreator returned early above)
+    // Note: The early return for isBulkMode handles the view switching.
     if (isModal) return content;
 
     return (
