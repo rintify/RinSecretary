@@ -86,8 +86,9 @@ jobs:
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # 5. Deploy using the committed configuration files
-            # Ensure data directories exist
+            # Ensure data directories exist and have correct permissions
             mkdir -p data/uploads
+            chmod -R 777 data
 
             # Pull latest image and restart
             docker compose -f deploy/docker-compose.yml --env-file .env pull
