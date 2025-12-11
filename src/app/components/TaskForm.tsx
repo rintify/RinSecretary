@@ -312,11 +312,6 @@ export default function TaskForm(props: TaskFormProps) {
                 onClose={() => setPickerConfig(null)}
                 value={pickerConfig?.target === 'start' ? (startDate ? new Date(startDate) : new Date()) : (deadline ? new Date(deadline) : new Date())}
                 onChange={handleTimeSelect}
-                onDateClick={() => {
-                    if (pickerConfig) {
-                        setPickerConfig({ type: 'date', target: pickerConfig.target });
-                    }
-                }}
             />
             
             <TextField

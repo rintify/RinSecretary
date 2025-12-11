@@ -233,9 +233,6 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
                 onClose={() => setPickerConfig(null)}
                 value={time ? new Date(time) : new Date()}
                 onChange={handleTimeSelect}
-                onDateClick={() => {
-                    setPickerConfig({ type: 'date' });
-                }}
             />
             
             <TextField

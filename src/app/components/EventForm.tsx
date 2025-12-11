@@ -313,11 +313,6 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                     onClose={() => setPickerConfig(null)}
                     value={pickerConfig?.target === 'start' ? (startTime ? new Date(startTime) : new Date()) : (endTime ? new Date(endTime) : new Date())}
                     onChange={handleTimeSelect}
-                    onDateClick={() => {
-                        if (pickerConfig) {
-                            setPickerConfig({ type: 'date', target: pickerConfig.target });
-                        }
-                    }}
                 />
                 
                 {(() => {

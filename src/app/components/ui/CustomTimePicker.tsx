@@ -10,22 +10,34 @@ import {
 } from '@mui/material';
 import { format, addDays, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import CustomDatePicker from './CustomDatePicker';
 
 interface CustomTimePickerProps {
     open: boolean;
     onClose: () => void;
     value: Date;
     onChange: (date: Date) => void;
-    onDateClick?: () => void;
     showDate?: boolean;
 }
 
-export default function CustomTimePicker({ open, onClose, value, onChange, onDateClick, showDate = true }: CustomTimePickerProps) {
+export default function CustomTimePicker({ open, onClose, value, onChange, showDate = true }: CustomTimePickerProps) {
     const [currentDate, setCurrentDate] = useState(value);
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const isDragging = useRef(false);
     const lastAngle = useRef<number | null>(null);
     const theme = useTheme();
+
+    // Handle date selection from internal DatePicker
+    const handleDateSelect = (newDate: Date) => {
+        setCurrentDate(prev => {
+            const updated = new Date(newDate);
+            updated.setHours(prev.getHours());
+            updated.setMinutes(prev.getMinutes());
+            return updated;
+        });
+        setShowDatePicker(false);
+    };
 
     useEffect(() => {
         if (open) {
@@ -222,7 +234,7 @@ export default function CustomTimePicker({ open, onClose, value, onChange, onDat
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
                             e.stopPropagation();
-                            if (showDate && onDateClick) onDateClick();
+                            if (showDate) setShowDatePicker(true);
                         }}
                         sx={{
                             position: 'absolute',
@@ -230,13 +242,13 @@ export default function CustomTimePicker({ open, onClose, value, onChange, onDat
                             left: '50%',
                             transform: 'translate(-50%, -50%)',
                             textAlign: 'center',
-                            cursor: (showDate && onDateClick) ? 'pointer' : 'default',
-                            pointerEvents: 'auto', // Re-enable pointer events for click
+                            cursor: showDate ? 'pointer' : 'default',
+                            pointerEvents: 'auto',
                             userSelect: 'none',
                             p: 2,
                             borderRadius: '50%',
                             '&:hover': {
-                                bgcolor: (showDate && onDateClick) ? 'action.hover' : 'transparent'
+                                bgcolor: showDate ? 'action.hover' : 'transparent'
                             }
                         }}
                     >
@@ -254,6 +266,14 @@ export default function CustomTimePicker({ open, onClose, value, onChange, onDat
                 <Typography variant="caption" color="text.disabled" sx={{ mt: 3 }}>
                     スライダーを回して時刻を変更
                 </Typography>
+
+                {/* Internal DatePicker */}
+                <CustomDatePicker
+                    open={showDatePicker}
+                    onClose={() => setShowDatePicker(false)}
+                    value={currentDate}
+                    onChange={handleDateSelect}
+                />
             </DialogContent>
         </Dialog>
     );
