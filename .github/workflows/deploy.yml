@@ -58,6 +58,8 @@ jobs:
 
             # 1. Clone or Update Repository
             if [ ! -d .git ]; then
+              # カレントディレクトリの中身を全て削除（隠しファイル含む）してクリーンにする
+              find . -mindepth 1 -delete
               git clone https://github.com/rintify/RinSecretary.git .
             else
               git fetch origin main
