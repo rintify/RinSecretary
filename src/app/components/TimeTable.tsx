@@ -5,7 +5,7 @@ import { addHours, startOfDay, format, addDays, subDays, isSameDay, isBefore } f
 import TaskItem from './TaskItem';
 import { fetchGoogleEvents } from '@/lib/calendar-actions';
 import { getAlarms } from '@/lib/alarm-actions';
-import { Box, Typography, IconButton, Paper, Container, Badge } from '@mui/material';
+import { Box, Typography, IconButton, Paper, Container, Badge, CircularProgress } from '@mui/material';
 import { ArrowBackIosNew, ArrowForwardIos, History as HistoryIcon, ReportProblem as WarningIcon } from '@mui/icons-material';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -31,12 +31,14 @@ const DayColumn = ({
     date, 
     tasks, 
     onEditTask,
-    isHeaderVisible
+    isHeaderVisible,
+    isLoading
 }: { 
     date: Date, 
     tasks: TaskLocal[], 
     onEditTask?: (task: TaskLocal) => void;
     isHeaderVisible?: boolean;
+    isLoading?: boolean;
 }) => {
     
     // Filter Tasks for this day
@@ -105,6 +107,13 @@ const DayColumn = ({
     });
 
     if (dayTasks.length === 0 && deadlineTasks.length === 0) {
+        if (isLoading) {
+            return (
+                <Box sx={{ p: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', height: 200 }}>
+                    <CircularProgress />
+                </Box>
+            );
+        }
         return (
             <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
                 <Typography variant="body1">No tasks for today.</Typography>
@@ -179,6 +188,7 @@ export default function TimeTable({
 }) {
   const [tasks, setTasks] = useState<TaskLocal[]>([]);
   const [googleEvents, setGoogleEvents] = useState<TaskLocal[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   
   const allTasks = [...tasks, ...googleEvents];
   
@@ -215,6 +225,7 @@ export default function TimeTable({
   };
 
   const loadGoogleEvents = async () => {
+      setIsLoading(true);
       // Load events and alarms around the current date
       const start = subDays(date, 7);
       const end = addDays(date, 7);
@@ -227,6 +238,8 @@ export default function TimeTable({
           setGoogleEvents([...(events as TaskLocal[]), ...(alarms as TaskLocal[])]); // Merge arrays
       } catch (e) {
           console.error("Failed to load events/alarms", e);
+      } finally {
+          setIsLoading(false);
       }
   };
 
@@ -358,6 +371,7 @@ export default function TimeTable({
                 tasks={visibleTasks} 
                 onEditTask={onEditTask} 
                 isHeaderVisible={!!(hasDeadlineWarning || (isToday && historyItems.length > 0))}
+                isLoading={isLoading}
              />
         </Box>
     </Box>
