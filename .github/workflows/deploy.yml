@@ -18,8 +18,8 @@ jobs:
           port: ${{ secrets.VPS_PORT }}
           script: |
             set -e
-            mkdir -p /srv/website
-            cd /srv/website
+            mkdir -p /srv/rin-secretary
+            cd /srv/rin-secretary
 
             # Clone or update the repository
             if [ ! -d app/.git ]; then
