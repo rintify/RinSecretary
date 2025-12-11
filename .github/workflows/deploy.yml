@@ -6,8 +6,37 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-on-vps:
+  build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
     steps:
       - name: SSH into VPS and deploy
         uses: appleboy/ssh-action@v1.0.3
@@ -22,18 +51,21 @@ jobs:
             mkdir -p ~/rin-secretary
             cd ~/rin-secretary
 
-            # Clone or update the repository
-            if [ ! -d app/.git ]; then
-              rm -rf app
-              git clone https://github.com/rintify/RinSecretary.git app
-            fi
-
+            # Create data directories
             mkdir -p data/uploads
 
-            # Normalize Domain (remove protocol if present)
+            # Normalize Domain and Image Name
             RAW_URL="${{ secrets.NEXTAUTH_URL }}"
             DOMAIN=$(echo "$RAW_URL" | sed -E 's/^\s*.*:\/\///g')
-            echo "Deploying to domain: $DOMAIN"
+            
+            # Convert repository name to lowercase for Docker image
+            REPO_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+            IMAGE_NAME="ghcr.io/$REPO_NAME:latest"
+
+            echo "Deploying $IMAGE_NAME to domain: $DOMAIN"
+
+            # Log in to GHCR on VPS
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # Create Caddyfile
             cat > Caddyfile <<EOF
@@ -47,20 +79,16 @@ jobs:
             cat > docker-compose.yml <<EOF
             services:
               web:
-                build:
-                  context: ./app
-                  dockerfile: Dockerfile
+                image: $IMAGE_NAME
                 restart: unless-stopped
                 environment:
                   - NODE_ENV=production
                   - PORT=3000
                   - HOSTNAME=0.0.0.0
                   - DATABASE_URL=file:/data/sqlite.db
-                  # Ensure https:// prefix
                   - NEXTAUTH_URL=https://$DOMAIN
                   - NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
                   - UPLOADS_DIR=/data/uploads
-                  # Pass any other env vars needed
                   - GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
                   - GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
                 volumes:
@@ -68,7 +96,6 @@ jobs:
                   - ./data/uploads:/data/uploads
                 command: >
                   sh -c "
-                    # Check for migrations and run initial migration if needed
                     if [ ! -d ./prisma/migrations ] || [ -z \"\$(ls -A ./prisma/migrations)\" ]; then
                       echo 'First run or no migrations detected, running migrate dev...';
                       npx prisma migrate dev --name init;
@@ -79,7 +106,6 @@ jobs:
                     echo 'Starting Next.js Server...' &&
                     node server.js
                   "
-
                 networks: [webnet]
 
               caddy:
@@ -102,11 +128,6 @@ jobs:
             EOF
 
             # Deploy
-            cd app
-            git fetch --depth=1 origin main
-            git checkout -f main
-            git reset --hard origin/main
-            cd ..
-            docker compose build --pull web
+            docker compose pull web
             docker compose up -d --remove-orphans
             docker image prune -f
