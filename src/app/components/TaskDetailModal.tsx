@@ -1,5 +1,10 @@
-import React, { useState } from 'react';
-import { Box, Typography, IconButton, Slider, Chip, Stack, Button } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import { Box, Typography, IconButton, Slider, Chip, Stack, Button, Checkbox } from '@mui/material';
+import { TASK_COLOR } from '../utils/colors';
+
+// ... (existing imports, interfaces)
+
+
 import { Edit as EditIcon, Close as CloseIcon, CalendarMonth as CalendarIcon } from '@mui/icons-material';
 import { format } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
@@ -7,7 +12,6 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 
 interface Task {
     id: string;
@@ -17,7 +21,12 @@ interface Task {
     deadline?: string | Date;
     progress?: number;
     maxProgress?: number;
+    checklist?: string;
+}
 
+interface ChecklistItem {
+    text: string;
+    checked: boolean;
 }
 
 interface TaskDetailModalProps {
@@ -30,6 +39,21 @@ interface TaskDetailModalProps {
 export default function TaskDetailModal({ task, onClose, onEdit, onUpdate }: TaskDetailModalProps) {
     const [progress, setProgress] = useState(task.progress || 0);
     const maxProgress = task.maxProgress || 100;
+    
+    const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+
+    useEffect(() => {
+        if (task.checklist) {
+            try {
+                setChecklistItems(JSON.parse(task.checklist));
+            } catch (e) {
+                setChecklistItems([]);
+            }
+        } else {
+            setChecklistItems([]);
+        }
+        setProgress(task.progress || 0);
+    }, [task]);
 
     const handleProgressChange = (event: Event, newValue: number | number[]) => {
         setProgress(newValue as number);
@@ -43,9 +67,39 @@ export default function TaskDetailModal({ task, onClose, onEdit, onUpdate }: Tas
                 body: JSON.stringify({ progress: newValue })
             });
             if (onUpdate) onUpdate();
-            onClose(); // Auto close
+            // Do NOT close on progress interaction? User might want to adjust more.
+            // keeping existing behavior: onClose() called in original code.
+            // User requested: "チェック状態が更新されると進捗が自動更新される"
+            // If I slide progress (legacy), original code closed modal. 
+            // If I check item, I probably want to stay in modal.
+            if (checklistItems.length === 0) onClose(); 
         } catch (error) {
             console.error('Failed to update progress:', error);
+        }
+    };
+
+    const handleChecklistToggle = async (index: number) => {
+        const newItems = [...checklistItems];
+        newItems[index].checked = !newItems[index].checked;
+        setChecklistItems(newItems);
+
+        const checkedCount = newItems.filter(i => i.checked).length;
+        const newProgress = (checkedCount / newItems.length) * 100;
+        setProgress(newProgress);
+
+        try {
+            await fetch(`/api/tasks/${task.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    checklist: newItems,
+                    progress: newProgress
+                })
+            });
+            if (onUpdate) onUpdate();
+        } catch (error) {
+            console.error('Failed to update checklist:', error);
+            // Revert? For now just log error.
         }
     };
 
@@ -88,30 +142,66 @@ export default function TaskDetailModal({ task, onClose, onEdit, onUpdate }: Tas
                  </Box>
              )}
 
-             <Box mb={2}>
-                 <Box display="flex" justifyContent="space-between" mb={1}>
-                     <Typography variant="subtitle2" fontWeight="bold">Progress</Typography>
-                     <Typography variant="subtitle2">{Math.round(progress)} / {maxProgress}</Typography>
+             {/* Checklist Section */}
+             {checklistItems.length > 0 && (
+                 <Box mb={3}>
+                     <Typography variant="subtitle2" fontWeight="bold" mb={1}>Checklist</Typography>
+                     <Stack spacing={0.5}>
+                         {checklistItems.map((item, index) => (
+                             <Box key={index} display="flex" alignItems="center" gap={1}>
+                                 <Checkbox 
+                                     checked={item.checked} 
+                                     onChange={() => handleChecklistToggle(index)}
+                                     size="small"
+                                     sx={{ 
+                                         p: 0.5,
+                                         color: TASK_COLOR,
+                                         '&.Mui-checked': {
+                                             color: TASK_COLOR,
+                                         },
+                                     }}
+                                 />
+                                 <Typography 
+                                    variant="body2" 
+                                    sx={{ 
+                                        textDecoration: item.checked ? 'line-through' : 'none',
+                                        color: item.checked ? 'text.secondary' : 'text.primary'
+                                    }}
+                                 >
+                                     {item.text}
+                                 </Typography>
+                             </Box>
+                         ))}
+                     </Stack>
                  </Box>
-                 <Slider
-                     value={progress}
-                     min={0}
-                     max={maxProgress}
-                     step={1.0}
-                     onChange={handleProgressChange}
-                     onChangeCommitted={handleProgressCommitted}
-                     valueLabelDisplay="auto"
-                     sx={{ 
-                         color: 'primary.main',
-                         '& .MuiSlider-thumb': {
-                             transition: 'width 0.2s, height 0.2s',
-                             '&:hover, &.Mui-focusVisible': {
-                                 boxShadow: `0px 0px 0px 8px rgba(25, 118, 210, 0.16)`,
-                             },
-                         }
-                     }}
-                 />
-             </Box>
+             )}
+
+             {checklistItems.length === 0 && (
+                 <Box mb={2}>
+                     <Box display="flex" justifyContent="space-between" mb={1}>
+                         <Typography variant="subtitle2" fontWeight="bold">Progress</Typography>
+                         <Typography variant="subtitle2">{Math.round(progress)} / {maxProgress}</Typography>
+                     </Box>
+                     <Slider
+                         value={progress}
+                         min={0}
+                         max={maxProgress}
+                         step={1.0}
+                         onChange={handleProgressChange}
+                         onChangeCommitted={handleProgressCommitted}
+                         valueLabelDisplay="auto"
+                         sx={{ 
+                             color: 'primary.main',
+                             '& .MuiSlider-thumb': {
+                                 transition: 'width 0.2s, height 0.2s',
+                                 '&:hover, &.Mui-focusVisible': {
+                                     boxShadow: `0px 0px 0px 8px rgba(25, 118, 210, 0.16)`,
+                                 },
+                             }
+                         }}
+                     />
+                 </Box>
+             )}
         </Box>
     );
 }

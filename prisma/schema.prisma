@@ -71,8 +71,12 @@ model Task {
   startDate DateTime @default(now()) // "Start Day" 00:00 default handled in app or here
   deadline  DateTime @default(now()) // "Deadline" 23:59 default handled in app or here
   
+
   progress    Float   @default(0)
   maxProgress Float   @default(100)
+
+  // JSON string of { text: string, checked: boolean }[]
+  checklist   String  @default("[]")
 
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)

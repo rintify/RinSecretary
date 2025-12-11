@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft as ChevronLeftIcon, Delete as DeleteIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
-import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container } from '@mui/material';
+import { ChevronLeft as ChevronLeftIcon, Delete as DeleteIcon, AccessTime as AccessTimeIcon, Add as AddIcon, Close as RemoveIcon } from '@mui/icons-material';
+import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container, Checkbox } from '@mui/material';
 import { format, subDays, addHours, startOfDay, endOfDay, isBefore } from 'date-fns';
 import { TASK_COLOR } from '../utils/colors';
 import { ja } from 'date-fns/locale';
@@ -20,6 +20,11 @@ interface TaskFormProps {
     initialDate?: Date;
 }
 
+interface ChecklistItem {
+    text: string;
+    checked: boolean;
+}
+
 export default function TaskForm(props: TaskFormProps) {
     const { taskId, onSuccess, isModal = false, initialDate } = props;
     const router = useRouter();
@@ -33,6 +38,7 @@ export default function TaskForm(props: TaskFormProps) {
     const [progress, setProgress] = useState(0);
     const [maxProgress, setMaxProgress] = useState(100);
     const [memo, setMemo] = useState('');
+    const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
 
     const { updateStartTime: updateStartDate, updateEndTime: updateDeadline } = useTimeRange({
         startTime: startDate,
@@ -58,6 +64,13 @@ export default function TaskForm(props: TaskFormProps) {
              }
              if (task.progress !== undefined) setProgress(task.progress);
              if (task.maxProgress !== undefined) setMaxProgress(task.maxProgress);
+             if (task.checklist) {
+                 try {
+                     setChecklist(JSON.parse(task.checklist));
+                 } catch (e) {
+                     setChecklist([]);
+                 }
+             }
              setFetching(false);
         } else if (taskId) {
             // Edit Mode: Fetch existing
@@ -73,6 +86,13 @@ export default function TaskForm(props: TaskFormProps) {
                     if (task.deadline) setDeadline(format(new Date(task.deadline), "yyyy-MM-dd'T'HH:mm"));
                     if (task.progress !== undefined) setProgress(task.progress);
                     if (task.maxProgress !== undefined) setMaxProgress(task.maxProgress);
+                    if (task.checklist) {
+                        try {
+                            setChecklist(JSON.parse(task.checklist));
+                        } catch (e) {
+                            setChecklist([]);
+                        }
+                    }
                 })
                 .catch(e => {
                     console.error(e);
@@ -153,6 +173,32 @@ export default function TaskForm(props: TaskFormProps) {
         setPickerConfig(null); 
     };
 
+    const handleAddChecklistItem = () => {
+        setChecklist([...checklist, { text: '', checked: false }]);
+    };
+
+    const handleRemoveChecklistItem = (index: number) => {
+        const newChecklist = [...checklist];
+        newChecklist.splice(index, 1);
+        setChecklist(newChecklist);
+        
+        // Recalculate progress if items > 0 (actually items will be newChecklist.length)
+        // Ref logic: If items become 0, progress remains as is (user can edit).
+        // If items > 0, we can auto-update progress.
+        if (newChecklist.length > 0) {
+            const checkedCount = newChecklist.filter(i => i.checked).length;
+            const newProgress = (checkedCount / newChecklist.length) * 100;
+            setProgress(newProgress);
+            setMaxProgress(100);
+        }
+    };
+
+    const handleChecklistItemChange = (index: number, text: string) => {
+        const newChecklist = [...checklist];
+        newChecklist[index].text = text;
+        setChecklist(newChecklist);
+    };
+
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setLoading(true);
@@ -161,13 +207,26 @@ export default function TaskForm(props: TaskFormProps) {
             const url = taskId ? `/api/tasks/${taskId}` : '/api/tasks';
             const method = taskId ? 'PUT' : 'POST';
             
+            // Prepare payload
+            // If checklist exists, enforce progress calculation logic before saving
+            // (Just to be sure, although states should be in sync)
+            let finalProgress = progress;
+            let finalMaxProgress = maxProgress;
+
+            if (checklist.length > 0) {
+                 const checkedCount = checklist.filter(c => c.checked).length;
+                 finalProgress = (checkedCount / checklist.length) * 100;
+                 finalMaxProgress = 100;
+            }
+
             const taskPayload = {
                 title,
                 memo,
                 startDate,
                 deadline,
-                progress,
-                maxProgress
+                progress: finalProgress,
+                maxProgress: finalMaxProgress,
+                checklist
             };
 
             const res = await fetch(url, {
@@ -287,6 +346,8 @@ export default function TaskForm(props: TaskFormProps) {
                         onChange={e => setProgress(Number(e.target.value))}
                         fullWidth
                         size="small"
+                        disabled={checklist.length > 0}
+                        helperText={checklist.length > 0 ? "Calculated from checklist" : ""}
                     />
                     <TextField
                         label="Max Progress"
@@ -297,9 +358,52 @@ export default function TaskForm(props: TaskFormProps) {
                         onChange={e => setMaxProgress(Number(e.target.value))}
                         fullWidth
                         size="small"
+                        disabled={checklist.length > 0}
+                        helperText={checklist.length > 0 ? "Fixed to 100%" : ""}
                     />
                 </Stack>
             </Stack>
+
+            {/* Checklist Section */}
+            <Box>
+                <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+                    <Typography variant="caption" color="text.secondary">Checklist</Typography>
+                    <IconButton size="small" onClick={handleAddChecklistItem} color="primary">
+                        <AddIcon fontSize="small" />
+                    </IconButton>
+                </Box>
+                <Stack spacing={1}>
+                    {checklist.map((item, index) => (
+                        <Box key={index} display="flex" alignItems="center" gap={1}>
+                            <Checkbox 
+                                checked={item.checked} 
+                                disabled 
+                                size="small" 
+                                sx={{ p: 0.5 }}
+                            />
+                            <TextField
+                                value={item.text}
+                                onChange={(e) => handleChecklistItemChange(index, e.target.value)}
+                                placeholder="Item name"
+                                fullWidth
+                                size="small"
+                                variant="standard"
+                            />
+                            <IconButton 
+                                size="small" 
+                                onClick={() => handleRemoveChecklistItem(index)}
+                            >
+                                <RemoveIcon fontSize="small" />
+                            </IconButton>
+                        </Box>
+                    ))}
+                    {checklist.length === 0 && (
+                         <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', fontSize: '0.8rem' }}>
+                             No items
+                         </Typography>
+                    )}
+                </Stack>
+            </Box>
             
             <CustomDatePicker
                 open={pickerConfig?.type === 'date'}

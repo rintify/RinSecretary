@@ -67,6 +67,7 @@ export async function PUT(
               deadline: updateData.deadline ? new Date(updateData.deadline) : undefined,
               progress: updateData.progress !== undefined ? Number(updateData.progress) : undefined,
               maxProgress: updateData.maxProgress !== undefined ? Number(updateData.maxProgress) : undefined,
+              checklist: updateData.checklist ? JSON.stringify(updateData.checklist) : undefined,
           }
       });
 

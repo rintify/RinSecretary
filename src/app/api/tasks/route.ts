@@ -79,6 +79,7 @@ export async function POST(request: Request) {
         progress: json.progress || 0,
         maxProgress: json.maxProgress || 100,
         userId: user.id,
+        checklist: json.checklist ? JSON.stringify(json.checklist) : '[]',
       },
     });
 
