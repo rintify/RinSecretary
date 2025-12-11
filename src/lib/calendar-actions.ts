@@ -1,6 +1,6 @@
 'use server';
 
-import { auth } from '@/auth';
+import { devAuth as auth } from '@/lib/dev-auth';
 import { getGoogleCalendarEvents } from './google';
 import { subDays, addDays } from 'date-fns';
 

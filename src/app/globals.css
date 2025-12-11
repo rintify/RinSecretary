@@ -1,3 +1,26 @@
-/* Global CSS has been replaced by Material-UI ThemeRegistry */
-/* Keep this file empty or minimal */
+/* Global CSS - Aggressive User Select Reset */
 
+/* Apply to ALL elements */
+*, *::before, *::after {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+}
+
+/* Exceptions: Inputs and Textareas */
+input, textarea, [contenteditable] {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
+/* Exceptions: Specifically marked selectable areas (and their children) */
+.selectable-text, .selectable-text * {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  cursor: text;
+}

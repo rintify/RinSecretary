@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 
@@ -50,9 +51,9 @@ export default function EventDetailModal({ event, onClose, onEdit }: EventDetail
              )}
 
              {event.memo && (
-                 <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 2, mb: 1, '& p': { m: 0 } }}>
+                 <Box className="selectable-text" sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 2, mb: 1, '& p': { m: 0 } }}>
                      <ReactMarkdown
-                        remarkPlugins={[remarkMath, remarkGfm]}
+                        remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
                         rehypePlugins={[rehypeKatex]}
                         components={{
                             a: ({node, ...props}) => <a {...props} style={{ color: '#1976d2', textDecoration: 'underline' }} target="_blank" rel="noopener noreferrer" />

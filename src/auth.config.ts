@@ -6,7 +6,14 @@ export const authConfig = {
   },
   providers: [],
   callbacks: {
-    authorized({ auth, request: { nextUrl } }) {
+    authorized({ auth, request: { nextUrl, cookies } }) {
+      // 開発モード認証スキップ (Cookieベース)
+      const isDevSkip = process.env.NODE_ENV === 'development' && 
+                        cookies.get('dev-auth-skip')?.value === 'true';
+      if (isDevSkip) {
+        return true; // 開発モードスキップが有効なら常にアクセス許可
+      }
+
       const isLoggedIn = !!auth?.user;
       const isOnDashboard = nextUrl.pathname.startsWith('/'); // Main page is protected
       const isOnLogin = nextUrl.pathname.startsWith('/login');

@@ -4,6 +4,7 @@ import * as React from 'react';
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v14-appRouter';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import GlobalStyles from '@mui/material/GlobalStyles';
 import { createTheme } from '@mui/material/styles';
 import { Roboto } from 'next/font/google';
 
@@ -58,13 +59,38 @@ const theme = createTheme({
   }
 });
 
+// Global styles for user-select
+const globalUserSelectStyles = {
+  '*, *::before, *::after': {
+    WebkitUserSelect: 'none !important',
+    MozUserSelect: 'none !important',
+    msUserSelect: 'none !important',
+    userSelect: 'none !important',
+  },
+  'input, textarea, [contenteditable="true"]': {
+    WebkitUserSelect: 'text !important',
+    MozUserSelect: 'text !important',
+    msUserSelect: 'text !important',
+    userSelect: 'text !important',
+  },
+  '.selectable-text, .selectable-text *': {
+    WebkitUserSelect: 'text !important',
+    MozUserSelect: 'text !important',
+    msUserSelect: 'text !important',
+    userSelect: 'text !important',
+    cursor: 'text',
+  },
+};
+
 export default function ThemeRegistry({ children }: { children: React.ReactNode }) {
   return (
     <AppRouterCacheProvider>
       <ThemeProvider theme={theme}>
         <CssBaseline />
+        <GlobalStyles styles={globalUserSelectStyles} />
         {children}
       </ThemeProvider>
     </AppRouterCacheProvider>
   );
 }
+

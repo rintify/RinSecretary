@@ -1,6 +1,6 @@
 'use server';
 
-import { auth } from '@/auth';
+import { devAuth as auth } from '@/lib/dev-auth';
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 

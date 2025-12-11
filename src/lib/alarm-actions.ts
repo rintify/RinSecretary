@@ -1,6 +1,6 @@
 'use server';
 
-import { auth } from '@/auth';
+import { devAuth as auth } from '@/lib/dev-auth';
 import { prisma } from '@/lib/prisma'; // Assuming prisma instance is exported from here, need to verify
 import { revalidatePath } from 'next/cache';
 

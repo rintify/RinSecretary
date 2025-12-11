@@ -1,3 +1,4 @@
+import './globals.css';
 import ThemeRegistry from './ThemeRegistry';
 import type { Metadata } from 'next';
 
@@ -23,8 +24,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ja">
-      <body>
+    <html lang="ja" style={{ WebkitUserSelect: 'none', userSelect: 'none' } as React.CSSProperties}>
+      <body style={{ WebkitUserSelect: 'none', userSelect: 'none' } as React.CSSProperties}>
         <ThemeRegistry>
           {children}
         </ThemeRegistry>

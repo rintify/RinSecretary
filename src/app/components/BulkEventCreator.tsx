@@ -3,9 +3,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  Box, Button, Typography, IconButton, Paper, 
-  ToggleButton, ToggleButtonGroup, Slider, TextField,
-  Select, MenuItem, FormControl, InputLabel, Tooltip, Stack
+  Box, Button, Typography, IconButton, TextField
 } from '@mui/material';
 import { 
   ChevronLeft as ChevronLeftIcon,
@@ -14,12 +12,13 @@ import {
   Close as CloseIcon
 } from '@mui/icons-material';
 import { format, addDays, startOfDay, addMinutes, setHours, setMinutes, subDays } from 'date-fns';
+import { ja } from 'date-fns/locale';
 import { Dialog, Slide } from '@mui/material';
 import { TransitionProps } from '@mui/material/transitions';
 import React, {  // Add React here
   forwardRef
 } from 'react';
-import { createGoogleEvent } from '@/lib/calendar-actions';
+import { createGoogleEvent, fetchGoogleEvents } from '@/lib/calendar-actions';
 import { getPalette, updatePalette } from '@/app/actions/palette';
 
 interface BulkEventCreatorProps {
@@ -76,6 +75,9 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // Existing events slots: Key = 'yyyy-MM-dd', Value = Map of slot index to event count
+  const [existingEventsSlots, setExistingEventsSlots] = useState<Record<string, Map<number, number>>>({});
+
   // Fetch Palette on Mount
   useEffect(() => {
       const loadPalette = async () => {
@@ -107,6 +109,64 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
       d.push(addDays(start, i));
     }
     return d;
+  }, [startWeekDate]);
+
+  // Fetch existing Google Calendar events for the week
+  useEffect(() => {
+    const loadExistingEvents = async () => {
+      const weekStart = startOfDay(startWeekDate);
+      const weekEnd = addDays(weekStart, 7);
+      
+      try {
+        const events = await fetchGoogleEvents(weekStart, weekEnd);
+        const slotsMap: Record<string, Map<number, number>> = {};
+        
+        events.forEach((event: any) => {
+          if (!event.startTime || !event.endTime) return;
+          
+          const start = new Date(event.startTime);
+          const end = new Date(event.endTime);
+          
+          // Process each day the event spans
+          let currentDay = startOfDay(start);
+          while (currentDay < end) {
+            const dayKey = format(currentDay, 'yyyy-MM-dd');
+            if (!slotsMap[dayKey]) slotsMap[dayKey] = new Map();
+            
+            // Calculate slot indices for this day
+            // Base time: 4:00 AM of this day
+            const baseTime = new Date(currentDay);
+            baseTime.setHours(HOURS_START, 0, 0, 0);
+            
+            // Start slot: floor(minutes from base / 5)
+            let startMinutes = Math.max(0, (start.getTime() - baseTime.getTime()) / 60000);
+            let startSlot = Math.floor(startMinutes / 5); // 切り下げ
+            
+            // End slot: ceil(minutes from base / 5)
+            const nextDay = addDays(currentDay, 1);
+            const effectiveEnd = end < nextDay ? end : nextDay;
+            let endMinutes = (effectiveEnd.getTime() - baseTime.getTime()) / 60000;
+            let endSlot = Math.ceil(endMinutes / 5); // 切り上げ
+            
+            // Clamp to valid range [0, SLOTS_5_MIN)
+            startSlot = Math.max(0, Math.min(startSlot, SLOTS_5_MIN - 1));
+            endSlot = Math.max(0, Math.min(endSlot, SLOTS_5_MIN));
+            
+            for (let i = startSlot; i < endSlot; i++) {
+              slotsMap[dayKey].set(i, (slotsMap[dayKey].get(i) || 0) + 1);
+            }
+            
+            currentDay = nextDay;
+          }
+        });
+        
+        setExistingEventsSlots(slotsMap);
+      } catch (e) {
+        console.error('Failed to load existing events:', e);
+      }
+    };
+    
+    loadExistingEvents();
   }, [startWeekDate]);
 
   const handleSlotClick = (dayIndex: number, slotIndex: number) => {
@@ -323,194 +383,184 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
     >
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.paper' }} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
         {/* Header with Week Navigation */}
-        <Box sx={{ p: 1, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1, bgcolor: 'background.paper', zIndex: 20 }}>
-          <IconButton onClick={onBack}><CloseIcon /></IconButton>
-          <Typography variant="h6" sx={{ ml: 1, mr: 2 }}>Bulk Create</Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', mr: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+        <Box sx={{ 
+          p: 1, 
+          borderBottom: 1, 
+          borderColor: 'divider', 
+          display: 'flex', 
+          flexDirection: { xs: 'column', sm: 'row' },
+          alignItems: { xs: 'stretch', sm: 'center' }, 
+          gap: 1, 
+          bgcolor: 'background.paper', 
+          zIndex: 20 
+        }}>
+          {/* Top row: Close button, title, OK button */}
+          <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+            <IconButton onClick={onBack}><CloseIcon /></IconButton>
+            <Typography variant="h6" sx={{ ml: 1, flexGrow: 1 }}>一括作成</Typography>
+            <Button variant="contained" onClick={handleSave} disabled={isSaving} size="small">
+                {isSaving ? '保存中...' : 'OK'}
+            </Button>
+          </Box>
+          
+          {/* Week selector - centered on mobile */}
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            border: 1, 
+            borderColor: 'divider', 
+            borderRadius: 1,
+            alignSelf: { xs: 'center', sm: 'auto' },
+            minWidth: 'fit-content'
+          }}>
             <IconButton size="small" onClick={() => handleWeekChange(-1)}><ChevronLeftIcon /></IconButton>
-            <Typography variant="body2" sx={{ mx: 1, fontWeight: 'bold' }}>
-              {format(startWeekDate, 'MMM d')} - {format(addDays(startWeekDate, 6), 'MMM d')}
+            <Typography variant="body2" sx={{ mx: 1, fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+              {format(startWeekDate, 'M/d', { locale: ja })} 〜 {format(addDays(startWeekDate, 6), 'M/d', { locale: ja })}
             </Typography>
             <IconButton size="small" onClick={() => handleWeekChange(1)}><ChevronRightIcon /></IconButton>
           </Box>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: 'auto' }}>
-              <Button variant="contained" onClick={handleSave} disabled={isSaving}>
-                  {isSaving ? 'Saving...' : 'OK'}
-              </Button>
-          </Stack>
         </Box>
 
-        {/* Controls (Sticky) */}
-        <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider', display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', bgcolor: 'background.paper', zIndex: 20 }}>
-            {/* Granularity Selector */}
-            <FormControl size="small" sx={{ width: 120 }}>
-                <InputLabel>Granularity</InputLabel>
-                <Select
-                    value={granularity}
-                    label="Granularity"
-                    onChange={(e) => setGranularity(Number(e.target.value))}
-                >
-                    <MenuItem value={5}>5 min</MenuItem>
-                    <MenuItem value={10}>10 min</MenuItem>
-                    <MenuItem value={15}>15 min</MenuItem>
-                    <MenuItem value={30}>30 min</MenuItem>
-                </Select>
-            </FormControl>
-            
-            {/* Palette */}
-            <Stack direction="row" spacing={1} alignItems="center">
-                {COLORS.map((c) => (
-                    <Box
-                        key={c.key}
-                        onClick={() => setSelectedColor(c.key)}
-                        sx={{
-                            width: 32, height: 32, bgcolor: c.hex, borderRadius: 1,
-                            cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            position: 'relative',
-                            // "No X mark for transparent"
-                            ...(c.key === 'transparent' && {
-                                borderStyle: 'dashed',
-                                borderColor: selectedColor === 'transparent' ? 'text.primary' : 'divider',
-                                borderWidth: 1
-                            }),
-                            border: selectedColor === c.key && c.key !== 'transparent' ? '2px solid black' : undefined,
-                            boxShadow: selectedColor === c.key ? 3 : 0
-                        }}
-                    >
-                         {selectedColor === c.key && c.key !== 'transparent' && (
-                             <CheckIcon sx={{ color: c.contrast, fontSize: 20 }} />
-                         )}
-                         {selectedColor === c.key && c.key === 'transparent' && (
-                             <CheckIcon sx={{ color: 'text.primary', fontSize: 20 }} />
-                         )}
-                    </Box>
-                ))}
-            </Stack>
-             
-             {/* Custom Title Input */}
-             {selectedColor !== 'transparent' && (
-                 <TextField 
-                    size="small" 
-                    placeholder="Title" 
-                    value={colorTitles[selectedColor] || ''} 
-                    onChange={(e) => setColorTitles(prev => ({...prev, [selectedColor]: e.target.value}))}
-                 />
-             )}
-        </Box>
-
-        {/* Grid Container - Unified Scroll View for Perfect Alignment */}
+        {/* Grid Container - CSS Grid for Perfect Alignment */}
         <Box 
             ref={scrollContainerRef}
-            sx={{ flexGrow: 1, overflow: 'auto', display: 'flex', flexDirection: 'row' }}
+            sx={{ 
+                flexGrow: 1, 
+                overflow: 'auto', 
+                overscrollBehavior: 'none',
+                WebkitOverflowScrolling: 'touch',
+                pb: 12, // Bottom padding for palette overlay
+                pr: 8   // Right padding for granularity slider overlay
+            }}
         >
-            {/* Time Labels Column (Sticky Left) */}
-            <Box sx={{ 
-                width: 50, 
-                flexShrink: 0, 
-                position: 'sticky', 
-                left: 0, 
-                zIndex: 30, 
-                bgcolor: 'background.default',
-                borderRight: 1, 
-                borderColor: 'divider',
-                display: 'flex',
-                flexDirection: 'column',
-                minHeight: 'max-content' // Ensure background/border stretches full length
+            {/* CSS Grid Layout - Unified coordinate system */}
+            <Box sx={{
+                display: 'grid',
+                gridTemplateColumns: '50px repeat(7, minmax(60px, 1fr)) 60px',
+                gridTemplateRows: `50px repeat(${HOURS_END - HOURS_START}, ${hourHeight}px) 80px`,
+                minWidth: 'fit-content'
             }}>
-                {/* Corner Cell (Sticky Top) */}
+                {/* Corner Cell (row 1, col 1) - Sticky */}
                 <Box sx={{ 
-                    height: 50, // Match header height
+                    gridRow: 1,
+                    gridColumn: 1,
                     position: 'sticky', 
-                    top: 0, 
+                    top: 0,
+                    left: 0,
                     zIndex: 40,
                     bgcolor: 'background.default',
+                    borderRight: 1,
                     borderBottom: 1,
                     borderColor: 'divider'
                 }} />
 
-                {/* Labels Container - Explicit Height to match Grid exactly */}
-                <Box sx={{ 
-                    position: 'relative', 
-                    height: hourHeight * (HOURS_END - HOURS_START), // FORCE HEIGHT
-                    flexGrow: 1 
-                }}>
-                     {Array.from({ length: HOURS_END - HOURS_START + 1 }).map((_, i) => (
-                        <Typography 
-                            key={i} 
-                            variant="caption" 
-                            sx={{ 
-                                position: 'absolute',
-                                top: i * hourHeight,
-                                left: 0,
-                                right: 0,
-                                textAlign: 'center', 
-                                transform: 'translateY(-50%)', 
-                                color: 'text.secondary',
-                                height: 'auto'
-                            }}
-                        >
-                            {HOURS_START + i}:00
-                        </Typography>
-                    ))}
-                </Box>
-            </Box>
-            
-            {/* Day Columns */}
-            {days.map((day, dIdx) => (
-                <Box key={dIdx} sx={{ 
-                    flex: '1 0 auto', // Force auto basis to respect content height
-                    minWidth: 60, 
-                    minHeight: 'max-content', // Ensure it grows with content
-                    borderRight: 1, 
-                    borderColor: 'divider',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    position: 'relative' // For sticky children context
-                }}>
-                    {/* Date Header (Sticky Top) */}
-                    <Box sx={{ 
-                        position: 'sticky', 
-                        top: 0, 
-                        zIndex: 20, 
-                        bgcolor: 'background.paper', 
-                        borderBottom: 1, 
-                        borderColor: 'divider', 
-                        p: 1, 
-                        textAlign: 'center',
-                        height: 50,
-                        boxSizing: 'border-box',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                    }}>
+                {/* Day Headers (row 1, cols 2-8) - Sticky top */}
+                {days.map((day, dIdx) => (
+                    <Box 
+                        key={`header-${dIdx}`}
+                        sx={{ 
+                            gridRow: 1,
+                            gridColumn: dIdx + 2,
+                            position: 'sticky', 
+                            top: 0, 
+                            zIndex: 20, 
+                            bgcolor: 'background.paper', 
+                            borderBottom: 1, 
+                            borderRight: 1,
+                            borderColor: 'divider', 
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}
+                    >
                         <Typography variant="body2" fontWeight="bold">
                            {format(day, 'MM/dd')} ({['日', '月', '火', '水', '木', '金', '土'][day.getDay()]})
                         </Typography>
                     </Box>
+                ))}
 
-                    {/* Slots Container */}
-                    <Box sx={{ position: 'relative', height: hourHeight * (HOURS_END - HOURS_START), flexShrink: 0 }}> 
-                        {/* Background Lines (Using borderTop for precision) */}
-                         {Array.from({ length: HOURS_END - HOURS_START }).map((_, i) => (
+                {/* Time Labels (col 1, rows 2+) - Sticky left */}
+                {Array.from({ length: HOURS_END - HOURS_START }).map((_, i) => (
+                    <Box 
+                        key={`time-${i}`}
+                        sx={{ 
+                            gridRow: i + 2,
+                            gridColumn: 1,
+                            position: 'sticky', 
+                            left: 0, 
+                            zIndex: 30, 
+                            bgcolor: 'background.default',
+                            borderRight: 1, 
+                            borderColor: 'divider',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            justifyContent: 'center'
+                        }}
+                    >
+                        <Typography 
+                            variant="caption" 
+                            sx={{ 
+                                color: 'text.secondary',
+                                transform: 'translateY(-50%)'
+                            }}
+                        >
+                            {HOURS_START + i}:00
+                        </Typography>
+                    </Box>
+                ))}
+                {/* Final time label at bottom */}
+                <Box 
+                    sx={{ 
+                        gridRow: HOURS_END - HOURS_START + 2,
+                        gridColumn: 1,
+                        position: 'sticky', 
+                        left: 0, 
+                        zIndex: 30, 
+                        bgcolor: 'background.default',
+                        borderRight: 1, 
+                        borderColor: 'divider',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'center',
+                        height: 40 // Extra row for label visibility
+                    }}
+                >
+                    <Typography 
+                        variant="caption" 
+                        sx={{ 
+                            color: 'text.secondary',
+                            transform: 'translateY(-50%)'
+                        }}
+                    >
+                        {HOURS_END}:00
+                    </Typography>
+                </Box>
+
+                {/* Day Columns with Slots (cols 2-8, rows 2+) */}
+                {days.map((day, dIdx) => (
+                    <React.Fragment key={`day-${dIdx}`}>
+                        {Array.from({ length: HOURS_END - HOURS_START }).map((_, hourIdx) => (
                             <Box 
-                                key={`bg-${i}`} 
+                                key={`cell-${dIdx}-${hourIdx}`}
                                 sx={{ 
-                                    height: hourHeight, 
-                                    borderTop: 1, // Change to Top, aligns with 4:00 label at 0
-                                    borderColor: 'divider', 
-                                    boxSizing: 'border-box',
+                                    gridRow: hourIdx + 2,
+                                    gridColumn: dIdx + 2,
+                                    borderRight: 1,
+                                    borderTop: 1,
+                                    borderColor: 'divider',
                                     position: 'relative'
-                                }} 
+                                }}
                             >
-                                {/* 30 min line (Halfway) */}
+                                {/* 30 min line */}
                                 <Box sx={{ 
                                     position: 'absolute', 
-                                    top: '50%', left: 0, right: 0, 
+                                    top: '50%', 
+                                    left: 0, 
+                                    right: 0, 
                                     borderTop: 1, 
                                     borderColor: 'divider', 
-                                    opacity: 0.3, // Lighter than main hour line
-                                    borderStyle: 'solid'
+                                    opacity: 0.3
                                 }} />
                                 
                                 {/* 15/45 min lines (only if granularity is 5) */}
@@ -520,59 +570,181 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
                                         <Box sx={{ position: 'absolute', top: '75%', left: 0, right: 0, borderTop: 1, borderColor: 'divider', opacity: 0.15 }} />
                                     </>
                                 )}
+                                
+                                {/* Interactive slots for this hour (12 x 5min slots) */}
+                                {Array.from({ length: 12 }).map((_, slotInHour) => {
+                                    const sIdx = hourIdx * 12 + slotInHour;
+                                    const dayKey = format(day, 'yyyy-MM-dd');
+                                    const colorKey = paintedData[dayKey]?.[sIdx] || 'transparent';
+                                    const colorHex = COLORS.find(c => c.key === colorKey)?.hex || 'transparent';
+                                    const eventCount = existingEventsSlots[dayKey]?.get(sIdx) || 0;
+                                    // 濃さ: 1イベント=0.1, 2=0.2, 3+=0.3 (最大)
+                                    const existingOpacity = Math.min(0.1 * eventCount, 0.4);
+                                    
+                                    return (
+                                        <Box 
+                                            key={sIdx}
+                                            onMouseDown={() => {
+                                                recordInteraction(sIdx);
+                                                handleMouseDown(dIdx, sIdx);
+                                            }}
+                                            onMouseEnter={() => {
+                                                if (isDragging) recordInteraction(sIdx);
+                                                handleMouseEnter(dIdx, sIdx);
+                                            }}
+                                            sx={{ 
+                                                position: 'absolute',
+                                                top: `${(slotInHour / 12) * 100}%`,
+                                                left: 0,
+                                                right: 0,
+                                                height: `${(1 / 12) * 100}%`,
+                                                bgcolor: colorKey !== 'transparent' 
+                                                    ? colorHex 
+                                                    : eventCount > 0 
+                                                        ? `rgba(0,0,0,${existingOpacity})` 
+                                                        : 'transparent',
+                                                opacity: colorKey === 'transparent' ? (eventCount > 0 ? 1 : 0) : 0.8,
+                                                cursor: 'pointer',
+                                                '&:hover': {
+                                                    bgcolor: colorKey === 'transparent' 
+                                                        ? (eventCount > 0 ? `rgba(0,0,0,${existingOpacity + 0.05})` : 'rgba(0,0,0,0.05)') 
+                                                        : colorHex,
+                                                    opacity: 1
+                                                }
+                                            }}
+                                        />
+                                    );
+                                })}
                             </Box>
                         ))}
-                        {/* Final closing border */}
-                         <Box sx={{ borderTop: 1, borderColor: 'divider' }} />
-                        
-                        {/* Interactive Grid Overlay */}
-                        <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-                             {Array.from({ length: 288 }).map((_, sIdx) => {
-                                 // Lookup from paintedData
-                                 const dayKey = format(day, 'yyyy-MM-dd');
-                                 const colorKey = paintedData[dayKey]?.[sIdx] || 'transparent';
-                                 
-                                 const colorHex = COLORS.find(c => c.key === colorKey)?.hex || 'transparent';
-                                 
-                                 return (
-                                     <Box 
-                                         key={sIdx}
-                                         onMouseDown={() => {
-                                             recordInteraction(sIdx);
-                                             handleMouseDown(dIdx, sIdx);
-                                         }}
-                                         onMouseEnter={() => {
-                                             if (isDragging) recordInteraction(sIdx);
-                                             handleMouseEnter(dIdx, sIdx);
-                                         }}
-                                         sx={{ 
-                                             position: 'absolute',
-                                             top: sIdx * slotHeight,
-                                             left: 0,
-                                             right: 0,
-                                             height: slotHeight,
-                                             
-                                             bgcolor: colorHex,
-                                             opacity: colorKey === 'transparent' ? 0 : 0.8,
-                                             cursor: 'pointer',
-                                             '&:hover': {
-                                                 bgcolor: colorKey === 'transparent' ? 'rgba(0,0,0,0.05)' : colorHex
-                                             },
-                                             ...(colorKey === 'transparent' && { // Apply dashed border to transparent slots
-                                                 borderStyle: 'dashed',
-                                                 borderColor: 'divider',
-                                                 borderWidth: '0 0 1px 0' 
-                                             })
-                                         }}
-                                     />
-                                 );
-                             })}
-                        </Box>
-                    </Box>
+                    </React.Fragment>
+                ))}
+                
+                {/* Bottom row for padding and final border */}
+                <Box sx={{ 
+                    gridRow: HOURS_END - HOURS_START + 2,
+                    gridColumn: '2 / -1',
+                    height: 40,
+                    borderTop: 1,
+                    borderColor: 'divider'
+                }} />
+            </Box>
+        </Box>
+
+
+        {/* Right Side Palette - Vertical */}
+        <Box sx={{
+            position: 'fixed',
+            right: 8,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 1,
+            zIndex: 100
+        }}>
+            {COLORS.map((c) => (
+                <Box
+                    key={c.key}
+                    onClick={() => setSelectedColor(c.key)}
+                    sx={{
+                        width: 36,
+                        height: 36,
+                        bgcolor: c.hex, 
+                        borderRadius: '50%',
+                        cursor: 'pointer',
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        transition: 'transform 0.15s, box-shadow 0.15s',
+                        boxShadow: 2,
+                        ...(c.key === 'transparent' && {
+                            border: '2px dashed',
+                            borderColor: selectedColor === 'transparent' ? 'text.primary' : 'divider',
+                            bgcolor: 'rgba(255,255,255,0.8)'
+                        }),
+                        ...(selectedColor === c.key && {
+                            transform: 'scale(1.2)',
+                            boxShadow: 4,
+                            border: c.key !== 'transparent' ? '3px solid white' : undefined,
+                            outline: c.key !== 'transparent' ? '2px solid #333' : undefined
+                        })
+                    }}
+                >
+                     {selectedColor === c.key && (
+                         <CheckIcon sx={{ color: c.contrast, fontSize: 16 }} />
+                     )}
                 </Box>
             ))}
         </Box>
 
+        {/* Bottom Center Granularity - Horizontal */}
+        <Box sx={{
+            position: 'fixed',
+            bottom: 60,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            zIndex: 100
+        }}>
+            {[5, 10, 15, 30].map((val) => (
+                <Box
+                    key={val}
+                    onClick={() => setGranularity(val)}
+                    sx={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        bgcolor: granularity === val ? 'primary.main' : 'rgba(255,255,255,0.9)',
+                        color: granularity === val ? 'primary.contrastText' : 'text.secondary',
+                        fontWeight: 'bold',
+                        fontSize: '0.75rem',
+                        boxShadow: granularity === val ? 3 : 1,
+                        transition: 'all 0.15s',
+                        '&:hover': {
+                            bgcolor: granularity === val ? 'primary.dark' : 'action.hover',
+                            transform: 'scale(1.1)'
+                        }
+                    }}
+                >
+                    {val}
+                </Box>
+            ))}
+        </Box>
+
+        {/* Bottom Center Title Input - Below Granularity */}
+        <Box sx={{
+            position: 'fixed',
+            bottom: 12,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 'calc(100% - 32px)',
+            maxWidth: 300,
+            zIndex: 100
+        }}>
+            <TextField 
+                size="small" 
+                fullWidth
+                disabled={selectedColor === 'transparent'}
+                placeholder={selectedColor === 'transparent' ? '' : 'タイトルを入力...'} 
+                value={selectedColor === 'transparent' ? '' : (colorTitles[selectedColor] || '')} 
+                onChange={(e) => setColorTitles(prev => ({...prev, [selectedColor]: e.target.value}))}
+                sx={{ 
+                    '& .MuiOutlinedInput-root': { 
+                        bgcolor: 'rgba(255,255,255,0.95)',
+                        backdropFilter: 'blur(8px)',
+                        boxShadow: 2
+                    }
+                }}
+            />
+        </Box>
 
     </Box>
     </Dialog>
