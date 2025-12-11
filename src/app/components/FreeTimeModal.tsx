@@ -12,10 +12,12 @@ import {
     differenceInMinutes
 } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { Close as CloseIcon, ContentCopy as CopyIcon } from '@mui/icons-material';
+import { Close as CloseIcon, ContentCopy as CopyIcon, CalendarMonth as CalendarMonthIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
 import { ToggleButton, ToggleButtonGroup } from '@mui/material'; // ensure imports
 import { fetchGoogleEvents } from '@/lib/calendar-actions';
 import { getAlarms } from '@/lib/alarm-actions';
+import CustomDatePicker from './ui/CustomDatePicker';
+import CustomTimePicker from './ui/CustomTimePicker';
 
 interface FreeTimeModalProps {
     onClose: () => void;
@@ -33,9 +35,53 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
     const [margin, setMargin] = useState(30); // minutes
     const [minDuration, setMinDuration] = useState(60); // minutes
     
-    // const [outputFormat, setOutputFormat] = useState("M月d日(E) H:mm 〜 H:mm"); // Removed per user request
+    // Picker State
+    const [pickerConfig, setPickerConfig] = useState<{ type: 'date' | 'time', target: 'start' | 'end' | 'startTime' | 'endTime' } | null>(null);
 
     const [loading, setLoading] = useState(false);
+
+    // Helpers
+    const getDisplayDate = (isoString: string) => {
+        if (!isoString) return new Date();
+        return new Date(isoString);
+    };
+
+    const getDisplayTimeStr = (timeStr: string) => {
+        return timeStr;
+    };
+
+    // Update Handlers
+    const handleDateSelect = (newDate: Date) => {
+        if (!pickerConfig) return;
+        const target = pickerConfig.target;
+        
+        const formatLocal = (date: Date) => {
+             const pad = (n: number) => n < 10 ? '0'+n : n;
+             return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
+        };
+        const newStr = formatLocal(newDate);
+
+        if (target === 'start') setStartDate(newStr);
+        else if (target === 'end') setEndDate(newStr);
+
+        setPickerConfig(null);
+    };
+
+    const handleTimeSelect = (newDate: Date) => {
+        if (!pickerConfig) return;
+        const target = pickerConfig.target;
+        
+        const formatLocalTime = (date: Date) => {
+             const pad = (n: number) => n < 10 ? '0'+n : n;
+             return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        };
+        const newStr = formatLocalTime(newDate);
+        
+        if (target === 'startTime') setStartTime(newStr);
+        else if (target === 'endTime') setEndTime(newStr);
+
+        setPickerConfig(null); 
+    };
 
     const handleCopy = async () => {
         setLoading(true);
@@ -169,19 +215,6 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
 
                 freeSlots.forEach(slot => {
                     // Simplified Standard Format: M/d(E) HH:mm 〜 HH:mm
-                    // Restore Custom Format Logic
-                    // User Default: M月d日(E) H:mm 〜 H:mm
-                    // Logic: Format Start Date with provided format.
-                    // Detection of "End Time" slot: 
-                    // We assume the user wants [Date Part] [Start Time] [End Time].
-                    // If the user uses the default style, it produces: "3月4日(土) 4:04 〜 4:04"
-                    // We replace the LAST occurrence of the time string.
-                    
-                    // Determine time token roughly by what is in the string? 
-                    // Or just use 'H:mm' as default time token to search/replace if not specified?
-                    // The example "4:04" implies H:mm (single digit hour). "23:29" implies H:mm.
-                    
-                    // Simplified Standard Format: M/d(E) HH:mm 〜 HH:mm
                     const dateStr = format(slot.start, 'M/d(E)', { locale: ja });
                     const startStr = format(slot.start, 'HH:mm');
                     const endStr = format(slot.end, 'HH:mm');
@@ -205,56 +238,88 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
     };
 
     return (
-        <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+        <Dialog open onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: { m: 2, width: '92%', maxWidth: 'sm', borderRadius: 2 } }}>
             <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 空き時間の抽出
                 <IconButton onClick={onClose} size="small"><CloseIcon /></IconButton>
             </DialogTitle>
-            <DialogContent dividers>
-                <Stack spacing={3} sx={{ py: 1 }}>
+            <DialogContent dividers sx={{ p: 2 }}>
+                <Stack spacing={2} sx={{ py: 0 }}>
                     <Box>
-                        <Typography variant="subtitle2" gutterBottom>期間</Typography>
-                        <Stack spacing={2} alignItems="stretch">
-                            <TextField 
-                                type="date" 
-                                value={startDate} 
-                                onChange={(e) => setStartDate(e.target.value)} 
-                                size="small" 
-                                fullWidth
-                            />
-                            <Box sx={{ textAlign: 'center', py: 0.5 }}>
-                                <Typography>〜</Typography>
+                        <Typography variant="subtitle2" gutterBottom color="text.secondary">期間</Typography>
+                        <Stack spacing={1}>
+                            {/* Start Date */}
+                            <Box>
+                                <Typography variant="caption" color="text.secondary">開始</Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <Typography variant="body1" sx={{ mr: 1, fontWeight: 'bold' }}>
+                                        {format(getDisplayDate(startDate), 'yyyy/MM/dd (E)', { locale: ja })}
+                                    </Typography>
+                                    <IconButton 
+                                        onClick={() => setPickerConfig({ type: 'date', target: 'start' })}
+                                        size="small"
+                                        sx={{ color: 'primary.main' }}
+                                    >
+                                        <CalendarMonthIcon />
+                                    </IconButton>
+                                </Box>
                             </Box>
-                            <TextField 
-                                type="date" 
-                                value={endDate} 
-                                onChange={(e) => setEndDate(e.target.value)} 
-                                size="small" 
-                                fullWidth
-                            />
+                            
+                            {/* End Date */}
+                            <Box>
+                                <Typography variant="caption" color="text.secondary">終了</Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <Typography variant="body1" sx={{ mr: 1, fontWeight: 'bold' }}>
+                                        {format(getDisplayDate(endDate), 'yyyy/MM/dd (E)', { locale: ja })}
+                                    </Typography>
+                                    <IconButton 
+                                        onClick={() => setPickerConfig({ type: 'date', target: 'end' })}
+                                        size="small"
+                                        sx={{ color: 'primary.main' }}
+                                    >
+                                        <CalendarMonthIcon />
+                                    </IconButton>
+                                </Box>
+                            </Box>
                         </Stack>
                     </Box>
 
                     <Box>
-                        <Typography variant="subtitle2" gutterBottom>時間帯</Typography>
-                        <Stack spacing={2} alignItems="stretch">
-                            <TextField 
-                                type="time" 
-                                value={startTime} 
-                                onChange={(e) => setStartTime(e.target.value)} 
-                                size="small" 
-                                fullWidth
-                            />
-                            <Box sx={{ textAlign: 'center', py: 0.5 }}>
-                                <Typography>〜</Typography>
+                        <Typography variant="subtitle2" gutterBottom color="text.secondary">時間帯</Typography>
+                        <Stack spacing={1}>
+                            {/* Start Time */}
+                            <Box>
+                                <Typography variant="caption" color="text.secondary">開始</Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <Typography variant="body1" sx={{ mr: 1, fontWeight: 'bold' }}>
+                                        {getDisplayTimeStr(startTime)}
+                                    </Typography>
+                                    <IconButton 
+                                        onClick={() => setPickerConfig({ type: 'time', target: 'startTime' })}
+                                        size="small"
+                                        sx={{ color: 'primary.main' }}
+                                    >
+                                        <AccessTimeIcon />
+                                    </IconButton>
+                                </Box>
                             </Box>
-                            <TextField 
-                                type="time" 
-                                value={endTime} 
-                                onChange={(e) => setEndTime(e.target.value)} 
-                                size="small" 
-                                fullWidth
-                            />
+
+                            {/* End Time */}
+                            <Box>
+                                <Typography variant="caption" color="text.secondary">終了</Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <Typography variant="body1" sx={{ mr: 1, fontWeight: 'bold' }}>
+                                        {getDisplayTimeStr(endTime)}
+                                    </Typography>
+                                    <IconButton 
+                                        onClick={() => setPickerConfig({ type: 'time', target: 'endTime' })}
+                                        size="small"
+                                        sx={{ color: 'primary.main' }}
+                                    >
+                                        <AccessTimeIcon />
+                                    </IconButton>
+                                </Box>
+                            </Box>
                         </Stack>
                     </Box>
 
@@ -278,7 +343,7 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                         </Box>
                     </Box>
 
-                    <Stack spacing={2}>
+                    <Stack spacing={2} direction="row">
                         <Box sx={{ flex: 1 }}>
                             <TextField 
                                 label="マージン (分)"
@@ -303,11 +368,30 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                         </Box>
                     </Stack>
 
-
-                    </Stack>
-
-
+                </Stack>
             </DialogContent>
+            
+            <CustomDatePicker
+                open={pickerConfig?.type === 'date'}
+                onClose={() => setPickerConfig(null)}
+                value={getDisplayDate(pickerConfig?.target === 'start' ? startDate : endDate)}
+                onChange={handleDateSelect}
+            />
+            
+            <CustomTimePicker
+                open={pickerConfig?.type === 'time'}
+                onClose={() => setPickerConfig(null)}
+                value={(() => {
+                    const t = pickerConfig?.target === 'startTime' ? startTime : endTime;
+                    const d = new Date();
+                    const [h, m] = t.split(':').map(Number);
+                    d.setHours(h, m);
+                    return d;
+                })()}
+                onChange={handleTimeSelect}
+                showDate={false}
+            />
+
             <DialogActions>
                 <Button onClick={handleCopy} variant="contained" disabled={loading} startIcon={<CopyIcon />}>
                     {loading ? "収集中..." : "抽出してコピー"}

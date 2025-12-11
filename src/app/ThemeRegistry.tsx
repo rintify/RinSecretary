@@ -14,6 +14,7 @@ const roboto = Roboto({
 });
 
 const theme = createTheme({
+  spacing: 6.4, // Scaled down from 8px (0.8x)
   typography: {
     fontFamily: roboto.style.fontFamily,
   },
@@ -32,6 +33,13 @@ const theme = createTheme({
     },
   },
   components: {
+     MuiCssBaseline: {
+       styleOverrides: {
+         html: {
+           fontSize: '80%', // Scaled down from default (~100% or 16px) to ~12.8px (0.8x) to affect rem values
+         },
+       },
+     },
      MuiAppBar: {
       styleOverrides: {
         root: {

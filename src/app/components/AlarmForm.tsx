@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Delete as DeleteIcon, ChevronLeft as ChevronLeftIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, ChevronLeft as ChevronLeftIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
 import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container } from '@mui/material';
 import { format, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -180,7 +180,7 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
     };
 
     const content = (
-        <Box component="form" onSubmit={handleSubmit} sx={{ p: isModal ? 2 : 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <Box component="form" onSubmit={handleSubmit} sx={{ p: isModal ? 2 : 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
             {!isModal && (
                 <Box sx={{ pb: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center' }}>
                     <IconButton onClick={() => onSuccess ? onSuccess() : router.push('/')}>
@@ -190,7 +190,7 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
                 </Box>
             )}
 
-            <Typography variant="h6" fontWeight="bold" align="center">
+            <Typography variant="h6" fontWeight="bold" align="left">
                 {alarmId ? 'Edit Alarm' : 'New Alarm'}
             </Typography>
             
@@ -202,27 +202,23 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
                 variant="outlined" 
                 value={title}
                 onChange={e => setTitle(e.target.value)}
+                size="small"
             />
 
             <Box>
                  <Typography variant="caption" color="text.secondary">Time</Typography>
-                 <Stack direction="row" spacing={1} alignItems="center">
-                    <Button 
-                        variant="outlined" 
-                        onClick={() => setPickerConfig({ type: 'date' })}
-                        fullWidth
-                        sx={{ justifyContent: 'flex-start', color: 'text.primary', borderColor: 'divider' }}
-                    >
-                        {format(getDisplayDate(time), 'yyyy/MM/dd (E)', { locale: ja })}
-                    </Button>
-                    <Button 
-                        variant="outlined" 
+                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Typography variant="body1" sx={{ mr: 1 }}>
+                        {`${format(getDisplayDate(time), 'yyyy/MM/dd (E)', { locale: ja })} ${getDisplayTimeStr(time)}`}
+                    </Typography>
+                     <IconButton 
                         onClick={() => setPickerConfig({ type: 'time' })}
-                        sx={{ minWidth: '80px', color: 'text.primary', borderColor: 'divider' }}
-                    >
-                        {getDisplayTimeStr(time)}
-                    </Button>
-                 </Stack>
+                        size="small"
+                        sx={{ color: 'primary.main' }}
+                     >
+                         <AccessTimeIcon />
+                     </IconButton>
+                 </Box>
             </Box>
 
             <CustomDatePicker
@@ -237,6 +233,9 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
                 onClose={() => setPickerConfig(null)}
                 value={time ? new Date(time) : new Date()}
                 onChange={handleTimeSelect}
+                onDateClick={() => {
+                    setPickerConfig({ type: 'date' });
+                }}
             />
             
             <TextField
@@ -247,32 +246,29 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
                 fullWidth
                 value={comment}
                 onChange={e => setComment(e.target.value)}
+                size="small"
             />
 
-            <Stack direction="column" spacing={2} mt={2}>
+            <Stack direction="row" spacing={1} mt={1} justifyContent="flex-end" alignItems="center">
+                {alarmId && (
+                    <IconButton 
+                        color="error"
+                        onClick={handleDelete}
+                        disabled={loading}
+                        sx={{ mr: 'auto' }}
+                    >
+                        <DeleteIcon />
+                    </IconButton>
+                )}
+                
                 <Button 
                     type="submit" 
                     variant="contained" 
                     disabled={loading}
-                    size="large"
-                    sx={{ py: 1.5, fontWeight: 'bold', bgcolor: '#FF4500', '&:hover': { bgcolor: '#CC3700' } }}
+                    sx={{ bgcolor: '#FF4500', '&:hover': { bgcolor: '#CC3700' } }}
                 >
-                    {alarmId ? (loading ? 'Updating...' : 'Update Alarm') : (loading ? 'Creating...' : 'Create Alarm')}
+                    OK
                 </Button>
-                
-                {alarmId && (
-                    <Button 
-                        type="button" 
-                        variant="outlined" 
-                        color="error"
-                        onClick={handleDelete}
-                        disabled={loading}
-                        startIcon={<DeleteIcon />}
-                        sx={{ py: 1.5, fontWeight: 'bold' }}
-                    >
-                        Delete Alarm
-                    </Button>
-                )}
             </Stack>
         </Box>
     );

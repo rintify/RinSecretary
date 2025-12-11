@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft as ChevronLeftIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { ChevronLeft as ChevronLeftIcon, Delete as DeleteIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
 import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container } from '@mui/material';
 import { format, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import CustomDatePicker from './ui/CustomDatePicker';
 import CustomTimePicker from './ui/CustomTimePicker';
+
+import { useTimeRange } from '../hooks/useTimeRange';
 
 interface TaskFormProps {
     taskId?: string;
@@ -30,6 +32,14 @@ export default function TaskForm(props: TaskFormProps) {
     const [progress, setProgress] = useState(0);
     const [maxProgress, setMaxProgress] = useState(100);
     const [memo, setMemo] = useState('');
+
+    const { updateStartTime: updateStartDate, updateEndTime: updateDeadline } = useTimeRange({
+        startTime: startDate,
+        endTime: deadline,
+        setStartTime: setStartDate,
+        setEndTime: setDeadline,
+        initialDuration: 24 * 60 * 60 * 1000 // Default to 1 day if undefined
+    });
 
     // Picker State
     const [pickerConfig, setPickerConfig] = useState<{ type: 'date' | 'time', target: 'start' | 'deadline' } | null>(null);
@@ -89,11 +99,7 @@ export default function TaskForm(props: TaskFormProps) {
     // Helpers
     const getDisplayDate = (isoString: string) => {
         if (!isoString) return new Date();
-        const d = new Date(isoString);
-        if (d.getHours() < 4) {
-            return subDays(d, 1);
-        }
-        return d;
+        return new Date(isoString);
     };
 
     const getDisplayTimeStr = (isoString: string) => {
@@ -101,13 +107,8 @@ export default function TaskForm(props: TaskFormProps) {
         const d = new Date(isoString);
         let h = d.getHours();
         const m = d.getMinutes();
-        if (h < 4) h += 24;
         return `${h}:${m.toString().padStart(2, '0')}`;
     };
-
-    // Update Handlers
-    const updateStartDate = (val: string) => setStartDate(val);
-    const updateDeadline = (val: string) => setDeadline(val);
 
     const handleDateSelect = (newDate: Date) => {
         if (!pickerConfig) return;
@@ -117,7 +118,6 @@ export default function TaskForm(props: TaskFormProps) {
         const d = currentIso ? new Date(currentIso) : new Date();
         let h = d.getHours();
         const m = d.getMinutes();
-        if (h < 4) h += 24;
         const totalMinutes = h * 60 + m;
 
         const base = new Date(newDate);
@@ -216,7 +216,7 @@ export default function TaskForm(props: TaskFormProps) {
     if (fetching) return <Box p={4} textAlign="center">Loading...</Box>;
 
     const content = (
-        <Box component="form" onSubmit={handleSubmit} sx={{ p: isModal ? 2 : 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <Box component="form" onSubmit={handleSubmit} sx={{ p: isModal ? 2 : 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
             {!isModal && (
                 <Box sx={{ pb: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center' }}>
                     <IconButton onClick={() => onSuccess ? onSuccess() : router.push('/')}>
@@ -226,7 +226,7 @@ export default function TaskForm(props: TaskFormProps) {
                 </Box>
             )}
 
-            <Typography variant="h6" fontWeight="bold" align="center" sx={{ mb: -1 }}>
+            <Typography variant="h6" fontWeight="bold" align="left" sx={{ mb: -1 }}>
                 {taskId ? 'Edit Task' : 'New Task'}
             </Typography>
             
@@ -238,54 +238,45 @@ export default function TaskForm(props: TaskFormProps) {
                 variant="outlined" 
                 value={title}
                 onChange={e => setTitle(e.target.value)}
+                size="small"
             />
 
             <Stack spacing={2}>
                 {/* Start Date */}
                 <Box>
-                    <Typography variant="caption" color="text.secondary">Start Date</Typography>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                        <Button 
-                            variant="outlined" 
-                            onClick={() => setPickerConfig({ type: 'date', target: 'start' })}
-                            fullWidth
-                            sx={{ justifyContent: 'flex-start', color: 'text.primary', borderColor: 'divider' }}
-                        >
-                            {format(getDisplayDate(startDate), 'yyyy/MM/dd (E)', { locale: ja })}
-                        </Button>
-                        <Button 
-                            variant="outlined" 
+                     <Typography variant="caption" color="text.secondary">Start Date</Typography>
+                     <Box sx={{ display: 'flex', alignItems: 'center', mt: 0 }}>
+                        <Typography variant="body1" sx={{ mr: 1 }}>
+                            {`${format(getDisplayDate(startDate), 'yyyy/MM/dd (E)', { locale: ja })} ${getDisplayTimeStr(startDate)}`}
+                        </Typography>
+                         <IconButton 
                             onClick={() => setPickerConfig({ type: 'time', target: 'start' })}
-                            sx={{ minWidth: '80px', color: 'text.primary', borderColor: 'divider' }}
-                        >
-                            {getDisplayTimeStr(startDate)}
-                        </Button>
-                    </Stack>
+                            size="small"
+                            sx={{ color: 'primary.main' }}
+                         >
+                            <AccessTimeIcon />
+                         </IconButton>
+                     </Box>
                 </Box>
 
                 {/* Deadline */}
                 <Box>
-                    <Typography variant="caption" color="text.secondary">Deadline</Typography>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                        <Button 
-                            variant="outlined" 
-                            onClick={() => setPickerConfig({ type: 'date', target: 'deadline' })}
-                            fullWidth
-                            sx={{ justifyContent: 'flex-start', color: 'text.primary', borderColor: 'divider' }}
-                        >
-                            {format(getDisplayDate(deadline), 'yyyy/MM/dd (E)', { locale: ja })}
-                        </Button>
-                        <Button 
-                            variant="outlined" 
+                     <Typography variant="caption" color="text.secondary">Deadline</Typography>
+                     <Box sx={{ display: 'flex', alignItems: 'center', mt: 0 }}>
+                        <Typography variant="body1" sx={{ mr: 1 }}>
+                            {`${format(getDisplayDate(deadline), 'yyyy/MM/dd (E)', { locale: ja })} ${getDisplayTimeStr(deadline)}`}
+                        </Typography>
+                         <IconButton 
                             onClick={() => setPickerConfig({ type: 'time', target: 'deadline' })}
-                            sx={{ minWidth: '80px', color: 'text.primary', borderColor: 'divider' }}
-                        >
-                            {getDisplayTimeStr(deadline)}
-                        </Button>
-                    </Stack>
+                            size="small"
+                            sx={{ color: 'primary.main' }}
+                         >
+                                 <AccessTimeIcon />
+                         </IconButton>
+                     </Box>
                 </Box>
 
-                <Stack direction="row" spacing={2}>
+                <Stack direction="row" spacing={1}>
                     <TextField
                         label="Current Progress"
                         name="progress"
@@ -294,6 +285,7 @@ export default function TaskForm(props: TaskFormProps) {
                         value={progress}
                         onChange={e => setProgress(Number(e.target.value))}
                         fullWidth
+                        size="small"
                     />
                     <TextField
                         label="Max Progress"
@@ -303,6 +295,7 @@ export default function TaskForm(props: TaskFormProps) {
                         value={maxProgress}
                         onChange={e => setMaxProgress(Number(e.target.value))}
                         fullWidth
+                        size="small"
                     />
                 </Stack>
             </Stack>
@@ -319,6 +312,11 @@ export default function TaskForm(props: TaskFormProps) {
                 onClose={() => setPickerConfig(null)}
                 value={pickerConfig?.target === 'start' ? (startDate ? new Date(startDate) : new Date()) : (deadline ? new Date(deadline) : new Date())}
                 onChange={handleTimeSelect}
+                onDateClick={() => {
+                    if (pickerConfig) {
+                        setPickerConfig({ type: 'date', target: pickerConfig.target });
+                    }
+                }}
             />
             
             <TextField
@@ -329,32 +327,28 @@ export default function TaskForm(props: TaskFormProps) {
                 fullWidth
                 value={memo}
                 onChange={e => setMemo(e.target.value)}
+                size="small"
             />
 
-            <Stack direction="column" spacing={2} mt={2}>
+            <Stack direction="row" spacing={1} mt={1} justifyContent="flex-end" alignItems="center">
+                {taskId && (
+                    <IconButton 
+                        color="error"
+                        onClick={handleDelete}
+                        disabled={loading}
+                        sx={{ mr: 'auto' }}
+                    >
+                        <DeleteIcon />
+                    </IconButton>
+                )}
+
                 <Button 
                     type="submit" 
                     variant="contained" 
                     disabled={loading}
-                    size="large"
-                    sx={{ py: 1.5, fontWeight: 'bold' }}
                 >
-                    {taskId ? (loading ? 'Updating...' : 'Update Task') : (loading ? 'Creating...' : 'Create Task')}
+                    OK
                 </Button>
-                
-                {taskId && (
-                    <Button 
-                        type="button" 
-                        variant="outlined" 
-                        color="error"
-                        onClick={handleDelete}
-                        disabled={loading}
-                        startIcon={<DeleteIcon />}
-                        sx={{ py: 1.5, fontWeight: 'bold' }}
-                    >
-                        Delete Task
-                    </Button>
-                )}
             </Stack>
         </Box>
     );

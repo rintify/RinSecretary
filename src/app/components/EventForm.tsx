@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft as ChevronLeftIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { ChevronLeft as ChevronLeftIcon, Delete as DeleteIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
 import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container } from '@mui/material';
 import { format, addDays, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import BulkEventCreator from './BulkEventCreator';
 import CustomDatePicker from './ui/CustomDatePicker';
 import CustomTimePicker from './ui/CustomTimePicker';
+import { useTimeRange } from '../hooks/useTimeRange';
 
 interface EventFormProps {
     eventId?: string;
@@ -28,7 +29,14 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
     const [startTime, setStartTime] = useState('');
     const [endTime, setEndTime] = useState('');
     const [memo, setMemo] = useState('');
-    const [initialDuration, setInitialDuration] = useState<number | null>(null);
+
+    const { updateStartTime, updateEndTime } = useTimeRange({
+        startTime,
+        endTime,
+        setStartTime,
+        setEndTime,
+        initialDuration: 60 * 60 * 1000
+    });
 
     // Picker State
     const [pickerConfig, setPickerConfig] = useState<{ type: 'date' | 'time', target: 'start' | 'end' } | null>(null);
@@ -54,7 +62,6 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                    setStartTime(formatLocal(d));
                    const endD = new Date(d.getTime() + 60 * 60 * 1000); // 1 hour default
                    setEndTime(formatLocal(endD));
-                   setInitialDuration(60 * 60 * 1000);
             }
         } else {
             // Default logic
@@ -85,18 +92,13 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
             };
             setStartTime(formatLocal(startD));
             setEndTime(formatLocal(endD));
-            setInitialDuration(60 * 60 * 1000); 
         }
     }, [initialValues, initialStartTime, initialDate]);
 
     // Helpers
     const getDisplayDate = (isoString: string) => {
         if (!isoString) return new Date();
-        const d = new Date(isoString);
-        if (d.getHours() < 4) {
-            return subDays(d, 1);
-        }
-        return d;
+        return new Date(isoString);
     };
 
     const getDisplayTimeStr = (isoString: string) => {
@@ -104,38 +106,11 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
         const d = new Date(isoString);
         let h = d.getHours();
         const m = d.getMinutes();
-        if (h < 4) h += 24;
+        // Removed 24h logic as requested
         return `${h}:${m.toString().padStart(2, '0')}`;
     };
 
     // Handlers
-    const handleStartTimeChange = (valOrE: any) => {
-        const val = typeof valOrE === 'string' ? valOrE : valOrE.target.value;
-        setStartTime(val);
-        
-        if (startTime && endTime && typeof valOrE === 'string') {
-             const currentStart = new Date(startTime);
-             const currentEnd = new Date(endTime);
-             const newStartDate = new Date(val);
-             if (!isNaN(currentStart.getTime()) && !isNaN(currentEnd.getTime()) && !isNaN(newStartDate.getTime())) {
-                 if (newStartDate.getTime() > currentEnd.getTime()) {
-                      const duration = initialDuration ?? (currentEnd.getTime() - currentStart.getTime());
-                      const newEndDate = new Date(newStartDate.getTime() + duration);
-                      const formatLocal = (date: Date) => {
-                            const pad = (n: number) => n < 10 ? '0'+n : n;
-                            return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-                      };
-                      setEndTime(formatLocal(newEndDate));
-                 }
-             }
-        }
-    };
-
-    const handleEndTimeChange = (valOrE: any) => {
-         const val = typeof valOrE === 'string' ? valOrE : valOrE.target.value;
-         setEndTime(val);
-    };
-
     const handleDateSelect = (newDate: Date) => {
         if (!pickerConfig) return;
         const target = pickerConfig.target;
@@ -144,7 +119,6 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
         const d = currentIso ? new Date(currentIso) : new Date();
         let h = d.getHours();
         const m = d.getMinutes();
-        if (h < 4) h += 24;
         const totalMinutes = h * 60 + m;
 
         const base = new Date(newDate);
@@ -158,9 +132,9 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
         const newStr = formatLocal(finalText);
 
         if (target === 'start') {
-            handleStartTimeChange(newStr);
+            updateStartTime(newStr);
         } else {
-            handleEndTimeChange(newStr);
+            updateEndTime(newStr);
         }
         setPickerConfig(null);
     };
@@ -176,9 +150,9 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
         const newStr = formatLocal(newDate);
         
         if (target === 'start') {
-            handleStartTimeChange(newStr);
+            updateStartTime(newStr);
         } else {
-            handleEndTimeChange(newStr);
+            updateEndTime(newStr);
         }
         setPickerConfig(null); 
     };
@@ -253,7 +227,7 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
     }
 
     const content = (
-        <Box component="form" onSubmit={handleSubmit} sx={{ p: isModal ? 2 : 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <Box component="form" onSubmit={handleSubmit} sx={{ p: isModal ? 2 : 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
             {!isModal && (
                 <Box sx={{ pb: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center' }}>
                     <IconButton onClick={() => onSuccess ? onSuccess() : router.push('/')}>
@@ -263,7 +237,7 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                 </Box>
             )}
 
-            <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: -1 }}>
+            <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', mb: -1 }}>
                 <Typography variant="h6" fontWeight="bold">
                     {eventId ? 'Edit Event' : 'New Event'}
                 </Typography>
@@ -272,7 +246,7 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                         size="small" 
                         variant="outlined" 
                         onClick={() => setIsBulkMode(true)}
-                        sx={{ position: 'absolute', right: 0 }}
+                        sx={{ ml: 'auto' }}
                     >
                         Bulk Create
                     </Button>
@@ -287,50 +261,43 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                 variant="outlined" 
                 value={title}
                 onChange={e => setTitle(e.target.value)}
+                size="small"
             />
 
             <Box>
                 <Stack spacing={2} direction="column">
+                   {/* Start Time */}
                    <Box>
-                     <Typography variant="caption" color="text.secondary">Start Time</Typography>
-                     <Stack direction="row" spacing={1} alignItems="center">
-                        <Button 
-                            variant="outlined" 
-                            onClick={() => setPickerConfig({ type: 'date', target: 'start' })}
-                            fullWidth
-                            sx={{ justifyContent: 'flex-start', color: 'text.primary', borderColor: 'divider' }}
-                        >
-                            {format(getDisplayDate(startTime), 'yyyy/MM/dd (E)', { locale: ja })}
-                        </Button>
-                        <Button 
-                            variant="outlined" 
-                            onClick={() => setPickerConfig({ type: 'time', target: 'start' })}
-                            sx={{ minWidth: '80px', color: 'text.primary', borderColor: 'divider' }}
-                        >
-                            {getDisplayTimeStr(startTime)}
-                        </Button>
-                     </Stack>
+                        <Typography variant="caption" color="text.secondary">Start Time</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 0 }}>
+                            <Typography variant="body1" sx={{ mr: 1 }}>
+                                {`${format(getDisplayDate(startTime), 'yyyy/MM/dd (E)', { locale: ja })} ${getDisplayTimeStr(startTime)}`}
+                            </Typography>
+                             <IconButton 
+                                onClick={() => setPickerConfig({ type: 'time', target: 'start' })}
+                                size="small"
+                                sx={{ color: 'primary.main' }}
+                             >
+                                <AccessTimeIcon />
+                             </IconButton>
+                        </Box>
                    </Box>
 
+                   {/* End Time */}
                    <Box>
-                     <Typography variant="caption" color="text.secondary">End Time</Typography>
-                     <Stack direction="row" spacing={1} alignItems="center">
-                        <Button 
-                            variant="outlined" 
-                            onClick={() => setPickerConfig({ type: 'date', target: 'end' })}
-                            fullWidth
-                            sx={{ justifyContent: 'flex-start', color: 'text.primary', borderColor: 'divider' }}
-                        >
-                            {format(getDisplayDate(endTime), 'yyyy/MM/dd (E)', { locale: ja })}
-                        </Button>
-                        <Button 
-                            variant="outlined" 
-                            onClick={() => setPickerConfig({ type: 'time', target: 'end' })}
-                            sx={{ minWidth: '80px', color: 'text.primary', borderColor: 'divider' }}
-                        >
-                            {getDisplayTimeStr(endTime)}
-                        </Button>
-                     </Stack>
+                        <Typography variant="caption" color="text.secondary">End Time</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 0 }}>
+                            <Typography variant="body1" sx={{ mr: 1 }}>
+                                {`${format(getDisplayDate(endTime), 'yyyy/MM/dd (E)', { locale: ja })} ${getDisplayTimeStr(endTime)}`}
+                            </Typography>
+                             <IconButton 
+                                onClick={() => setPickerConfig({ type: 'time', target: 'end' })}
+                                size="small"
+                                sx={{ color: 'primary.main' }}
+                             >
+                                 <AccessTimeIcon />
+                             </IconButton>
+                        </Box>
                    </Box>
                 </Stack>
                 
@@ -346,6 +313,11 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                     onClose={() => setPickerConfig(null)}
                     value={pickerConfig?.target === 'start' ? (startTime ? new Date(startTime) : new Date()) : (endTime ? new Date(endTime) : new Date())}
                     onChange={handleTimeSelect}
+                    onDateClick={() => {
+                        if (pickerConfig) {
+                            setPickerConfig({ type: 'date', target: pickerConfig.target });
+                        }
+                    }}
                 />
                 
                 {(() => {
@@ -377,7 +349,7 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                     const timeStr = `${start.getHours()}:${start.getMinutes().toString().padStart(2, '0')}`;
                     
                     return (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
                             {`${dayStr} ${timeStr} から ${durationStr}`}
                         </Typography>
                     );
@@ -392,32 +364,28 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                 fullWidth
                 value={memo}
                 onChange={e => setMemo(e.target.value)}
+                size="small"
             />
 
-            <Stack direction="column" spacing={2} mt={2}>
+            <Stack direction="row" spacing={1} mt={1} justifyContent="flex-end" alignItems="center">
+                {eventId && (
+                    <IconButton 
+                        color="error"
+                        onClick={handleDelete}
+                        disabled={loading}
+                        sx={{ mr: 'auto' }}
+                    >
+                        <DeleteIcon />
+                    </IconButton>
+                )}
+
                 <Button 
                     type="submit" 
                     variant="contained" 
                     disabled={loading}
-                    size="large"
-                    sx={{ py: 1.5, fontWeight: 'bold' }}
                 >
-                    {eventId ? (loading ? 'Updating...' : 'Update Event') : (loading ? 'Creating...' : 'Create Event')}
+                    OK
                 </Button>
-                
-                {eventId && (
-                    <Button 
-                        type="button" 
-                        variant="outlined" 
-                        color="error"
-                        onClick={handleDelete}
-                        disabled={loading}
-                        startIcon={<DeleteIcon />}
-                        sx={{ py: 1.5, fontWeight: 'bold' }}
-                    >
-                        Delete Event
-                    </Button>
-                )}
             </Stack>
         </Box>
     );

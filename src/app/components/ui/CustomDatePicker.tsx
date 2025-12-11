@@ -141,7 +141,10 @@ export default function CustomDatePicker({ open, onClose, value, onChange }: Cus
                         key={day.toString()}
                         onClick={() => handleDateClick(cloneDay)}
                         sx={{
-                            height: 40,
+                            width: '100%',
+                            maxWidth: '40px',
+                            aspectRatio: '1/1',
+                            margin: 'auto',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -178,7 +181,20 @@ export default function CustomDatePicker({ open, onClose, value, onChange }: Cus
     };
 
     return (
-        <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3, p: 1 } }}>
+        <Dialog 
+            open={open} 
+            onClose={onClose} 
+            maxWidth={false} 
+            PaperProps={{ 
+                sx: { 
+                    width: '95%', 
+                    maxWidth: '400px', 
+                    borderRadius: 3, 
+                    p: 1,
+                    m: 'auto' 
+                } 
+            }}
+        >
             <DialogContent>
                 {renderHeader()}
                 {renderDays()}

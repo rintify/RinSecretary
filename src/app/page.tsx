@@ -185,8 +185,15 @@ export default function Home() {
       <Dialog
         open={activeModal !== 'NONE'}
         onClose={handleCloseModal}
-        maxWidth="sm"
-        fullWidth
+        maxWidth={false}
+        PaperProps={{
+            sx: {
+                width: '92%', // 4% margin x 2
+                maxWidth: '600px', // Reasonable max-width for desktop
+                m: 'auto',
+                borderRadius: 3
+            }
+        }}
       >
         <DialogContent sx={{ p: 0 }}>
              <Suspense fallback={<Box p={4}>Loading...</Box>}>
