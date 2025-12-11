@@ -38,6 +38,10 @@ const theme = createTheme({
          html: {
            fontSize: '80%', // Scaled down from default (~100% or 16px) to ~12.8px (0.8x) to affect rem values
          },
+         // NEW: Force inputs to 16px to prevent iOS zoom
+         'input, textarea, select': {
+           fontSize: '16px !important', 
+         },
        },
      },
      MuiAppBar: {
