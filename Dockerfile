@@ -42,7 +42,7 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Install prisma globally for migrations (needed for the startup command)
-RUN npm install -g prisma
+RUN npm install -g prisma@5.22.0
 
 # Set the correct permission for prerender cache
 # Set the correct permission for prerender cache
