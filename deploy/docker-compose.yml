@@ -1,0 +1,48 @@
+services:
+  web:
+    image: ${IMAGE_NAME}
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - DATABASE_URL=file:/data/sqlite.db
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - UPLOADS_DIR=/data/uploads
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+    volumes:
+      - ./data:/data
+      - ./data/uploads:/data/uploads
+    command: >
+      sh -c "
+        if [ ! -d ./prisma/migrations ] || [ -z \"\$(ls -A ./prisma/migrations)\" ]; then
+          echo 'First run or no migrations detected, running migrate dev...';
+          npx prisma migrate dev --name init;
+        fi &&
+        npx prisma migrate deploy &&
+        echo 'Starting Scheduler...' &&
+        node scripts/scheduler.js &
+        echo 'Starting Next.js Server...' &&
+        node server.js
+      "
+    networks: [webnet]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80","443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [web]
+    networks: [webnet]
+
+networks:
+  webnet:
+
+volumes:
+  caddy-data:
+  caddy-config:
