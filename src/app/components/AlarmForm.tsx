@@ -12,9 +12,10 @@ interface AlarmFormProps {
     initialTime?: string;
     onSuccess?: () => void;
     isModal?: boolean;
+    initialDate?: Date;
 }
 
-export default function AlarmForm({ alarmId, initialValues, initialTime, onSuccess, isModal = false }: AlarmFormProps) {
+export default function AlarmForm({ alarmId, initialValues, initialTime, onSuccess, isModal = false, initialDate }: AlarmFormProps) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
 
@@ -42,16 +43,31 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
                    setTime(formatLocal(d));
             }
         } else {
-             // Default next hour
-            const now = new Date();
-            const nextHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1, 0, 0, 0);
-            const formatLocal = (d: Date) => {
-                const pad = (n: number) => n < 10 ? '0'+n : n;
-                return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-            };
-            setTime(formatLocal(nextHour));
+             // Default logic
+             const now = new Date();
+             const targetDate = initialDate || now;
+             
+             const isToday = targetDate.getDate() === now.getDate() && 
+                             targetDate.getMonth() === now.getMonth() && 
+                             targetDate.getFullYear() === now.getFullYear();
+ 
+             let defaultTime: Date;
+ 
+             if (isToday) {
+                  // Next hour from NOW
+                  defaultTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1, 0, 0, 0);
+             } else {
+                  // 00:00 of targetDate
+                  defaultTime = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
+             }
+ 
+             const formatLocal = (d: Date) => {
+                 const pad = (n: number) => n < 10 ? '0'+n : n;
+                 return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+             };
+             setTime(formatLocal(defaultTime));
         }
-    }, [initialValues, initialTime]);
+    }, [initialValues, initialTime, initialDate]);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();

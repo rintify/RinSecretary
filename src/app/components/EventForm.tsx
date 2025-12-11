@@ -13,9 +13,10 @@ interface EventFormProps {
     initialStartTime?: string;
     onSuccess?: () => void;
     isModal?: boolean;
+    initialDate?: Date;
 }
 
-export default function EventForm({ eventId, initialValues, initialStartTime, onSuccess, isModal = false }: EventFormProps) {
+export default function EventForm({ eventId, initialValues, initialStartTime, onSuccess, isModal = false, initialDate }: EventFormProps) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
 
@@ -50,19 +51,38 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                    setInitialDuration(60 * 60 * 1000);
             }
         } else {
-            // Default next hour
+            // Default logic
+            // Check if initialDate is "today"
             const now = new Date();
-            const nextHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1, 0, 0, 0);
-            const nextHourPlusOne = new Date(nextHour.getTime() + 60 * 60 * 1000);
+            const targetDate = initialDate || now;
+            
+            const isToday = targetDate.getDate() === now.getDate() && 
+                            targetDate.getMonth() === now.getMonth() && 
+                            targetDate.getFullYear() === now.getFullYear();
+
+            let startD: Date;
+            let endD: Date;
+
+            if (isToday) {
+                 // Next hour from NOW
+                 const nextHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1, 0, 0, 0);
+                 startD = nextHour;
+                 endD = new Date(nextHour.getTime() + 60 * 60 * 1000);
+            } else {
+                 // 00:00 - 01:00 of targetDate
+                 startD = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
+                 endD = new Date(startD.getTime() + 60 * 60 * 1000);
+            }
+
             const formatLocal = (d: Date) => {
                 const pad = (n: number) => n < 10 ? '0'+n : n;
                 return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
             };
-            setStartTime(formatLocal(nextHour));
-            setEndTime(formatLocal(nextHourPlusOne));
+            setStartTime(formatLocal(startD));
+            setEndTime(formatLocal(endD));
             setInitialDuration(60 * 60 * 1000); 
         }
-    }, [initialValues, initialStartTime]);
+    }, [initialValues, initialStartTime, initialDate]);
 
     const handleStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newStart = e.target.value;
@@ -204,28 +224,66 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                 onChange={e => setTitle(e.target.value)}
             />
 
-            <Stack spacing={2} direction="row">
-                <TextField
-                    label="Start Time"
-                    name="startTime"
-                    type="datetime-local"
-                    required
-                    value={startTime}
-                    onChange={handleStartTimeChange}
-                    fullWidth
-                    InputLabelProps={{ shrink: true }}
-                />
-                <TextField
-                    label="End Time"
-                    name="endTime"
-                    type="datetime-local"
-                    required
-                    value={endTime}
-                    onChange={handleEndTimeChange}
-                    fullWidth
-                    InputLabelProps={{ shrink: true }}
-                />
-            </Stack>
+            <Box>
+                <Stack spacing={2} direction="row">
+                    <TextField
+                        label="Start Time"
+                        name="startTime"
+                        type="datetime-local"
+                        required
+                        value={startTime}
+                        onChange={handleStartTimeChange}
+                        fullWidth
+                        InputLabelProps={{ shrink: true }}
+                    />
+                    <TextField
+                        label="End Time"
+                        name="endTime"
+                        type="datetime-local"
+                        required
+                        value={endTime}
+                        onChange={handleEndTimeChange}
+                        fullWidth
+                        InputLabelProps={{ shrink: true }}
+                    />
+                </Stack>
+                
+                {(() => {
+                    if (!startTime || !endTime) return null;
+                    const start = new Date(startTime);
+                    const end = new Date(endTime);
+                    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return null;
+
+                    const diffMs = end.getTime() - start.getTime();
+                    const diffMins = Math.floor(diffMs / (1000 * 60));
+                    
+                    let durationStr = '';
+                    if (diffMins < 60) {
+                        durationStr = `${diffMins}分`;
+                    } else if (diffMins < 24 * 60) {
+                        const h = Math.floor(diffMins / 60);
+                        const m = diffMins % 60;
+                        durationStr = m > 0 ? `${h}時間${m}分` : `${h}時間`;
+                    } else {
+                        const d = Math.floor(diffMins / (24 * 60));
+                        const rem = diffMins % (24 * 60);
+                        const h = Math.floor(rem / 60);
+                        const m = rem % 60;
+                        durationStr = `${d}日${h}時間${m}分`;
+                    }
+                    
+                    // Format start time as M月d日(ddd) H:mm
+                const days = ['日', '月', '火', '水', '木', '金', '土'];
+                const dayStr = `${start.getMonth() + 1}月${start.getDate()}日(${days[start.getDay()]})`;
+                const timeStr = `${start.getHours()}:${start.getMinutes().toString().padStart(2, '0')}`;
+                
+                return (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        {`${dayStr} ${timeStr} から ${durationStr}`}
+                    </Typography>
+                );
+                })()}
+            </Box>
             
             <TextField
                 label="Memo"

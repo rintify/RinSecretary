@@ -13,8 +13,9 @@ import EventDetailModal from './components/EventDetailModal';
 import AlarmForm from './components/AlarmForm';
 import AlarmDetailModal from './components/AlarmDetailModal';
 import SettingsModal from './components/SettingsModal';
+import FreeTimeModal from './components/FreeTimeModal';
 import { Suspense } from 'react';
-import { AppBar, Toolbar, Typography, IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Stack, Tooltip } from '@mui/material';
+import { AppBar, Toolbar, Typography, IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Stack, Tooltip, Button } from '@mui/material';
 import { Settings as SettingsIcon, Notifications as AlarmIcon } from '@mui/icons-material';
 
 export default function Home() {
@@ -31,7 +32,7 @@ export default function Home() {
   const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1));
 
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS'>('NONE');
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME'>('NONE');
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
   const handleNewTask = () => {
@@ -91,9 +92,18 @@ export default function Home() {
                     <ArrowBackIosNew />
                 </IconButton>
                 
-                <Typography variant="h6" sx={{ fontWeight: 'bold', minWidth: 120, textAlign: 'center', mx: 2 }}>
+                <Button 
+                    onClick={() => dateInputRef.current?.showPicker()}
+                    sx={{ 
+                        color: 'inherit',
+                        textTransform: 'none',
+                        fontSize: '1.25rem',
+                        fontWeight: 'bold',
+                        mx: 1
+                    }}
+                >
                     {format(currentDate, 'MM/dd (E)', { locale: ja })}
-                </Typography>
+                </Button>
                 
                 <input 
                   type="date" 
@@ -101,9 +111,15 @@ export default function Home() {
                   style={{ visibility: 'hidden', position: 'absolute', top: 0, left: 0 }}
                   onChange={handleDateChange} 
                 />
-                <IconButton onClick={() => dateInputRef.current?.showPicker()}>
-                    <CalendarIcon />
-                </IconButton>
+
+                <Button 
+                    variant="outlined" 
+                    size="small" 
+                    onClick={() => setActiveModal('FREE_TIME')}
+                    sx={{ ml: 1, borderRadius: 2 }}
+                >
+                    空き時間
+                </Button>
                 
                 <IconButton onClick={() => setActiveModal('SETTINGS')}>
                     <SettingsIcon />
@@ -160,6 +176,7 @@ export default function Home() {
                     <TaskForm 
                         onSuccess={handleCloseModal} 
                         isModal
+                        initialDate={currentDate}
                     />
                 )}
                 {activeModal === 'EDIT_TASK' && (
@@ -175,6 +192,7 @@ export default function Home() {
                         initialStartTime={modalData?.startTime}
                         onSuccess={handleCloseModal}
                         isModal
+                        initialDate={currentDate}
                      />
                 )}
                 {activeModal === 'EDIT_EVENT' && (
@@ -204,6 +222,7 @@ export default function Home() {
                     <AlarmForm
                         onSuccess={handleCloseModal}
                         isModal
+                        initialDate={currentDate}
                     />
                 )}
                 {activeModal === 'EDIT_ALARM' && (
@@ -223,6 +242,11 @@ export default function Home() {
                 )}
                 {activeModal === 'SETTINGS' && (
                     <SettingsModal
+                        onClose={handleCloseModal}
+                    />
+                )}
+                {activeModal === 'FREE_TIME' && (
+                    <FreeTimeModal
                         onClose={handleCloseModal}
                     />
                 )}

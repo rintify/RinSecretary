@@ -1,0 +1,104 @@
+name: Deploy
+
+on:
+  push:
+    branches: ['main']
+
+jobs:
+  build-on-vps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH into VPS and deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            mkdir -p /srv/website
+            cd /srv/website
+
+            # Clone or update the repository
+            if [ ! -d app/.git ]; then
+              rm -rf app
+              git clone https://github.com/rintify/RinSecretary.git app
+            fi
+
+            mkdir -p data/uploads
+
+            # Create Caddyfile
+            cat > Caddyfile <<EOF
+            ${{ secrets.NEXTAUTH_URL }}, www.${{ secrets.NEXTAUTH_URL }} {
+              encode gzip
+              reverse_proxy web:3000
+            }
+            EOF
+
+            # Create docker-compose.yml
+            cat > docker-compose.yml <<EOF
+            services:
+              web:
+                build:
+                  context: ./app
+                  dockerfile: Dockerfile
+                restart: unless-stopped
+                environment:
+                  - NODE_ENV=production
+                  - PORT=3000
+                  - HOSTNAME=0.0.0.0
+                  - DATABASE_URL=file:/data/sqlite.db
+                  - NEXTAUTH_URL=https://${{ secrets.NEXTAUTH_URL }}
+                  - NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+                  - UPLOADS_DIR=/data/uploads
+                  # Pass any other env vars needed
+                  - GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+                  - GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+                volumes:
+                  - ./data:/data
+                  - ./data/uploads:/data/uploads
+                command: >
+                  sh -c "
+                    # Check for migrations and run initial migration if needed
+                    if [ ! -d ./prisma/migrations ] || [ -z \"\$(ls -A ./prisma/migrations)\" ]; then
+                      echo 'First run or no migrations detected, running migrate dev...';
+                      npx prisma migrate dev --name init;
+                    fi &&
+                    npx prisma migrate deploy &&
+                    echo 'Starting Scheduler...' &&
+                    node scripts/scheduler.js &
+                    echo 'Starting Next.js Server...' &&
+                    node server.js
+                  "
+
+                networks: [webnet]
+
+              caddy:
+                image: caddy:2
+                restart: unless-stopped
+                ports: ["80:80","443:443"]
+                volumes:
+                  - ./Caddyfile:/etc/caddy/Caddyfile:ro
+                  - caddy-data:/data
+                  - caddy-config:/config
+                depends_on: [web]
+                networks: [webnet]
+
+            networks:
+              webnet:
+
+            volumes:
+              caddy-data:
+              caddy-config:
+            EOF
+
+            # Deploy
+            cd app
+            git fetch --depth=1 origin main
+            git checkout -f main
+            git reset --hard origin/main
+            cd ..
+            docker compose build --pull web
+            docker compose up -d --remove-orphans
+            docker image prune -f

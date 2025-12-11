@@ -11,10 +11,11 @@ interface TaskFormProps {
     onSuccess?: () => void;
     isModal?: boolean;
     initialValues?: any;
+    initialDate?: Date;
 }
 
 export default function TaskForm(props: TaskFormProps) {
-    const { taskId, onSuccess, isModal = false } = props;
+    const { taskId, onSuccess, isModal = false, initialDate } = props;
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [fetching, setFetching] = useState(!!taskId);
@@ -63,17 +64,21 @@ export default function TaskForm(props: TaskFormProps) {
         } else {
             // Create Mode: Initialize defaults
             setFetching(false);
-            const now = new Date();
+            const baseDate = initialDate || new Date();
             const formatLocal = (d: Date) => {
                 const pad = (n: number) => n < 10 ? '0'+n : n;
                 return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
             };
-            setStartDate(formatLocal(now));
             
-            const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 0, 0);
-            setDeadline(formatLocal(todayEnd));
+            // Start of the day (00:00)
+            const startOfDay = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), 0, 0, 0, 0);
+            setStartDate(formatLocal(startOfDay));
+            
+            // End of the day (23:59)
+            const endOfDay = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), 23, 59, 0, 0);
+            setDeadline(formatLocal(endOfDay));
         }
-    }, [taskId, onSuccess, router, props.initialValues]);
+    }, [taskId, onSuccess, router, props.initialValues, initialDate]);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
