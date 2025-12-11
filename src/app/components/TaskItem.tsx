@@ -1,4 +1,5 @@
 import React from 'react';
+import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR } from '../utils/colors';
 import { format, differenceInCalendarDays, differenceInHours, differenceInMinutes } from 'date-fns';
 import { Card, CardContent, Typography, Box, CardActionArea, LinearProgress, Chip, keyframes } from '@mui/material';
 import { AccessTime as ClockIcon, Event as CalendarIcon } from '@mui/icons-material';
@@ -126,15 +127,16 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
   // Alarm -> Light Blue (#29b6f6 or info.light)
   // Task -> Yellow (#ffeb3b or yellow[500] but border should be visible)
   
+
   let borderColor = '#e0e0e0'; // default
   if (isTask) {
       if (isDone) borderColor = '#9e9e9e';
       else if (isUrgent) borderColor = '#f44336';
-      else borderColor = '#fdd835'; // Yellow 600
+      else borderColor = TASK_COLOR; 
   } else if (isAlarm) {
-      borderColor = '#29b6f6'; // Light Blue 400
+      borderColor = ALARM_COLOR; 
   } else if (isEvent) {
-      borderColor = '#9acd32'; // Yellow Green (default event)
+      borderColor = EVENT_COLOR; 
   }
 
   const warningColor = '#ffb74d'; // Orange-yellow chip

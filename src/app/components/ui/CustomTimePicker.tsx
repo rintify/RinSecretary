@@ -11,6 +11,7 @@ import {
 import { format, addDays, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import CustomDatePicker from './CustomDatePicker';
+import { GuideBubble } from './GuideBubble';
 
 interface CustomTimePickerProps {
     open: boolean;
@@ -18,15 +19,19 @@ interface CustomTimePickerProps {
     value: Date;
     onChange: (date: Date) => void;
     showDate?: boolean;
+    guideMessage?: string;
+    accentColor?: string;
 }
 
-export default function CustomTimePicker({ open, onClose, value, onChange, showDate = true }: CustomTimePickerProps) {
+export default function CustomTimePicker({ open, onClose, value, onChange, showDate = true, guideMessage, accentColor }: CustomTimePickerProps) {
     const [currentDate, setCurrentDate] = useState(value);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const isDragging = useRef(false);
     const lastAngle = useRef<number | null>(null);
     const theme = useTheme();
+
+    const mainColor = accentColor || theme.palette.primary.main;
 
     // Handle date selection from internal DatePicker
     const handleDateSelect = (newDate: Date) => {
@@ -165,10 +170,12 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
                     p: 2,
                     m: 'auto',
                     backgroundColor: theme.palette.background.paper,
-                    backgroundImage: 'none'
+                    backgroundImage: 'none',
+                    overflow: 'visible'
                 } 
             }}
         >
+             {guideMessage && <GuideBubble message={guideMessage} />}
             <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', overflow: 'hidden' }}>
                 <Box 
                     ref={containerRef}
@@ -222,7 +229,7 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
                             cx={knobX} 
                             cy={knobY} 
                             r="16" 
-                            fill={theme.palette.primary.main} 
+                            fill={mainColor} 
                             stroke={theme.palette.background.paper}
                             strokeWidth="4"
                             style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.2))' }}
@@ -257,7 +264,7 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
                                 {format(currentDate, 'M/d(E)', { locale: ja })}
                             </Typography>
                         )}
-                        <Typography variant="h3" fontWeight="bold" color="primary">
+                        <Typography variant="h3" fontWeight="bold" sx={{ color: mainColor }}>
                             {format(currentDate, 'HH:mm')}
                         </Typography>
                     </Box>
@@ -273,6 +280,7 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
                     onClose={() => setShowDatePicker(false)}
                     value={currentDate}
                     onChange={handleDateSelect}
+                    accentColor={accentColor}
                 />
             </DialogContent>
         </Dialog>

@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft as ChevronLeftIcon, Delete as DeleteIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
 import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container } from '@mui/material';
-import { format, subDays } from 'date-fns';
+import { format, subDays, addHours, startOfDay, endOfDay, isBefore } from 'date-fns';
+import { TASK_COLOR } from '../utils/colors';
 import { ja } from 'date-fns/locale';
 import CustomDatePicker from './ui/CustomDatePicker';
 import CustomTimePicker from './ui/CustomTimePicker';
@@ -305,6 +306,7 @@ export default function TaskForm(props: TaskFormProps) {
                 onClose={() => setPickerConfig(null)}
                 value={getDisplayDate(pickerConfig?.target === 'start' ? startDate : deadline)}
                 onChange={handleDateSelect}
+                accentColor={TASK_COLOR}
             />
             
             <CustomTimePicker
@@ -312,6 +314,7 @@ export default function TaskForm(props: TaskFormProps) {
                 onClose={() => setPickerConfig(null)}
                 value={pickerConfig?.target === 'start' ? (startDate ? new Date(startDate) : new Date()) : (deadline ? new Date(deadline) : new Date())}
                 onChange={handleTimeSelect}
+                accentColor={TASK_COLOR}
             />
             
             <TextField

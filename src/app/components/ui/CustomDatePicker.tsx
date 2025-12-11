@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect } from 'react';
 import { 
     Dialog, 
@@ -36,11 +34,15 @@ interface CustomDatePickerProps {
     onClose: () => void;
     value: Date;
     onChange: (date: Date) => void;
+    accentColor?: string;
 }
 
-export default function CustomDatePicker({ open, onClose, value, onChange }: CustomDatePickerProps) {
+export default function CustomDatePicker({ open, onClose, value, onChange, accentColor }: CustomDatePickerProps) {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const theme = useTheme();
+
+    // Use passed accentColor or fallback to theme primary
+    const mainColor = accentColor || theme.palette.primary.main;
 
     useEffect(() => {
         if (open && value) {
@@ -53,21 +55,11 @@ export default function CustomDatePicker({ open, onClose, value, onChange }: Cus
     const handleJumpToToday = () => {
         const today = new Date();
         setCurrentMonth(today);
-        // Optional: Select today immediately? Or just jump view? 
-        // Let's just jump view for now, or maybe select it if requested.
-        // User usually expects "Today" button to select today.
         onChange(today);
         onClose();
     };
 
     const handleDateClick = (day: Date) => {
-        // Create a new date from the original value to preserve time if needed, 
-        // OR just return the date at 00:00. 
-        // Since we split Date and Time pickers, usually Date Picker just sets the date part.
-        // But to be safe, let's just set YMD and keep existing HMS of 'value' if it exists,
-        // or just return the day at current time?
-        // Let's preserve the TIME of the `value` passed in, but update the DATE.
-        
         const newDate = new Date(value);
         newDate.setFullYear(day.getFullYear());
         newDate.setMonth(day.getMonth());
@@ -87,7 +79,7 @@ export default function CustomDatePicker({ open, onClose, value, onChange }: Cus
                     {format(currentMonth, 'yyyy年 M月', { locale: ja })}
                 </Typography>
                 <Box>
-                    <IconButton onClick={handleJumpToToday} sx={{ mr: 1 }}>
+                    <IconButton onClick={handleJumpToToday} sx={{ mr: 1, color: mainColor }}>
                         <Today />
                     </IconButton>
                     <IconButton onClick={handleNextMonth}>
@@ -150,18 +142,19 @@ export default function CustomDatePicker({ open, onClose, value, onChange }: Cus
                             justifyContent: 'center',
                             cursor: 'pointer',
                             borderRadius: '50%',
-                            bgcolor: isSelected ? 'primary.main' : 'transparent',
+                            bgcolor: isSelected ? mainColor : 'transparent',
                             color: isSelected 
-                                ? 'primary.contrastText' 
+                                ? '#fff' // Contrast text should be white usually for dark accents. If yellow, maybe black? But white is safer for general accents here.
                                 : !isCurrentMonth 
                                     ? 'text.disabled' 
                                     : isDayToday 
-                                        ? 'primary.main' 
+                                        ? mainColor 
                                         : 'text.primary',
                             fontWeight: isSelected || isDayToday ? 'bold' : 'normal',
-                            border: isDayToday && !isSelected ? `1px solid ${theme.palette.primary.main}` : 'none',
+                            border: isDayToday && !isSelected ? `1px solid ${mainColor}` : 'none',
                             '&:hover': {
-                                bgcolor: isSelected ? 'primary.dark' : 'action.hover',
+                                bgcolor: isSelected ? mainColor : 'action.hover', // No dark variant accessible easily if custom hex. Just keep mainColor or use opacity
+                                opacity: isSelected ? 0.9 : 1
                             }
                         }}
                     >

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Delete as DeleteIcon, ChevronLeft as ChevronLeftIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
 import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container } from '@mui/material';
 import { format, subDays } from 'date-fns';
+import { ALARM_COLOR } from '../utils/colors';
 import { ja } from 'date-fns/locale';
 import CustomDatePicker from './ui/CustomDatePicker';
 import CustomTimePicker from './ui/CustomTimePicker';
@@ -226,6 +227,7 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
                 onClose={() => setPickerConfig(null)}
                 value={getDisplayDate(time)}
                 onChange={handleDateSelect}
+                accentColor={ALARM_COLOR}
             />
             
             <CustomTimePicker
@@ -233,6 +235,7 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
                 onClose={() => setPickerConfig(null)}
                 value={time ? new Date(time) : new Date()}
                 onChange={handleTimeSelect}
+                accentColor={ALARM_COLOR}
             />
             
             <TextField

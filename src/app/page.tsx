@@ -17,13 +17,22 @@ import { IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, T
 import { Settings as SettingsIcon, Notifications as AlarmIcon, Menu as MenuIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
 import TimeTableSwiper from './components/TimeTableSwiper';
 import CustomDatePicker from './components/ui/CustomDatePicker';
+import { AppRegistration as BulkIcon } from '@mui/icons-material';
+import BulkEventCreator from './components/BulkEventCreator';
+import ImmediateTaskFlow from './components/immediate/ImmediateTaskFlow';
+import ImmediateEventFlow from './components/immediate/ImmediateEventFlow';
+import ImmediateAlarmFlow from './components/immediate/ImmediateAlarmFlow';
+import LongPressFab from './components/ui/LongPressFab';
+
+import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR } from './utils/colors';
 
 export default function Home() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME'>('NONE');
+  // Modal State
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM'>('NONE');
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
   const handleNewTask = () => {
@@ -141,6 +150,12 @@ export default function Home() {
                       </ListItemIcon>
                       <ListItemText>空き時間</ListItemText>
                   </MenuItem>
+                  <MenuItem onClick={() => { handleMenuClose(); setActiveModal('BULK_CREATE'); }}>
+                      <ListItemIcon>
+                          <BulkIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText>一括作成</ListItemText>
+                  </MenuItem>
                   <MenuItem onClick={() => { handleMenuClose(); setActiveModal('SETTINGS'); }}>
                       <ListItemIcon>
                           <SettingsIcon fontSize="small" />
@@ -164,26 +179,50 @@ export default function Home() {
           {/* FABs */}
           <Box sx={{ position: 'absolute', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center', zIndex: 100 }}>
              <Tooltip title="New Task" placement="left">
-                <Fab color="primary" aria-label="add task" onClick={handleNewTask} size="medium">
+                <Box>
+                <LongPressFab 
+                    aria-label="add task" 
+                    onClick={() => { setModalData(null); setActiveModal('IMMEDIATE_TASK'); }}
+                    onLongPress={handleNewTask}
+                    size="medium"
+                    sx={{ bgcolor: TASK_COLOR, color: '#fff', '&:hover': { bgcolor: TASK_COLOR, opacity: 0.9 } }}
+                >
                     <TaskIcon />
-                </Fab>
+                </LongPressFab>
+                </Box>
              </Tooltip>
              <Tooltip title="New Event" placement="left">
-                <Fab color="primary" aria-label="add event" onClick={() => handleNewEvent()} size="medium" sx={{ bgcolor: 'secondary.main' }}>
+                <Box>
+                <LongPressFab 
+                    aria-label="add event" 
+                    onClick={() => { setModalData({ startTime: undefined }); setActiveModal('IMMEDIATE_EVENT'); }}
+                    onLongPress={() => handleNewEvent()} 
+                    size="medium" 
+                    sx={{ bgcolor: EVENT_COLOR, color: '#fff', '&:hover': { bgcolor: EVENT_COLOR, opacity: 0.9 } }}
+                >
                     <EventIcon />
-                </Fab>
+                </LongPressFab>
+                </Box>
              </Tooltip>
              <Tooltip title="New Alarm" placement="left">
-                <Fab color="primary" aria-label="add alarm" onClick={handleNewAlarm} size="medium" sx={{ bgcolor: '#FF4500' }}>
+                <Box>
+                <LongPressFab 
+                    aria-label="add alarm" 
+                    onClick={() => { setModalData(null); setActiveModal('IMMEDIATE_ALARM'); }}
+                    onLongPress={handleNewAlarm}
+                    size="medium" 
+                    sx={{ bgcolor: ALARM_COLOR, color: '#fff', '&:hover': { bgcolor: ALARM_COLOR, opacity: 0.9 } }}
+                >
                     <AlarmIcon />
-                </Fab>
+                </LongPressFab>
+                </Box>
              </Tooltip>
           </Box>
       </Box>
 
       {/* Dialog */}
       <Dialog
-        open={activeModal !== 'NONE'}
+        open={activeModal !== 'NONE' && !activeModal.startsWith('IMMEDIATE') && activeModal !== 'BULK_CREATE'}
         onClose={handleCloseModal}
         maxWidth={false}
         PaperProps={{
@@ -278,6 +317,39 @@ export default function Home() {
             </Suspense>
         </DialogContent>
       </Dialog>
+
+    {/* Immediate Action Flows */}
+    {activeModal === 'IMMEDIATE_TASK' && (
+        <ImmediateTaskFlow
+            onClose={handleCloseModal}
+            onSuccess={() => { handleCloseModal(); setRefreshTrigger(prev => prev + 1); }}
+            initialDate={currentDate}
+        />
+    )}
+    {activeModal === 'IMMEDIATE_EVENT' && (
+        <ImmediateEventFlow
+            onClose={handleCloseModal}
+            onSuccess={() => { handleCloseModal(); setRefreshTrigger(prev => prev + 1); }}
+            initialDate={currentDate}
+        />
+    )}
+    {activeModal === 'IMMEDIATE_ALARM' && (
+        <ImmediateAlarmFlow
+            onClose={handleCloseModal}
+            onSuccess={() => { handleCloseModal(); setRefreshTrigger(prev => prev + 1); }}
+            initialDate={currentDate}
+        />
+    )}
+
+    {/* Bulk Creator */}
+    {activeModal === 'BULK_CREATE' && (
+        <BulkEventCreator 
+            onBack={handleCloseModal}
+            onSuccess={() => { handleCloseModal(); setRefreshTrigger(prev => prev + 1); }}
+            startWeekDate={currentDate}
+        />
+    )}
+
     </Box>
   );
 }

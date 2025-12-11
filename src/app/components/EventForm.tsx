@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft as ChevronLeftIcon, Delete as DeleteIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
 import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container } from '@mui/material';
-import { format, addDays, subDays } from 'date-fns';
+import { format, addMinutes, isBefore, isAfter, setHours, setMinutes, startOfDay, endOfDay } from 'date-fns';
+import { EVENT_COLOR } from '../utils/colors';
 import { ja } from 'date-fns/locale';
 import BulkEventCreator from './BulkEventCreator';
 import CustomDatePicker from './ui/CustomDatePicker';
@@ -306,6 +307,7 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                     onClose={() => setPickerConfig(null)}
                     value={getDisplayDate(pickerConfig?.target === 'start' ? startTime : endTime)}
                     onChange={handleDateSelect}
+                    accentColor={EVENT_COLOR}
                 />
                 
                 <CustomTimePicker
@@ -313,6 +315,7 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                     onClose={() => setPickerConfig(null)}
                     value={pickerConfig?.target === 'start' ? (startTime ? new Date(startTime) : new Date()) : (endTime ? new Date(endTime) : new Date())}
                     onChange={handleTimeSelect}
+                    accentColor={EVENT_COLOR}
                 />
                 
                 {(() => {
