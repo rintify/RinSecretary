@@ -12,6 +12,9 @@ services:
       - UPLOADS_DIR=/data/uploads
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - AUTH_TRUST_HOST=${AUTH_TRUST_HOST}
+      - AUTH_SECRET=${AUTH_SECRET}
+      - AUTH_URL=${AUTH_URL}
     volumes:
       - ./data:/data
       - ./data/uploads:/data/uploads
