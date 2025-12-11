@@ -80,9 +80,28 @@ export default function DurationPickerModal({ open, onClose, onConfirm, initialD
                     />
                 </Box>
                 
-                <Typography variant="caption" color="text.disabled">
-                    スライダーを離すと決定します
-                </Typography>
+                <Box sx={{ width: '100%', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 40 }}>
+                    <Typography variant="caption" color="text.disabled">
+                        スライダーを離すと決定します
+                    </Typography>
+                    <Button 
+                        variant="text" 
+                        onClick={() => onConfirm(duration)} 
+                        size="small"
+                        sx={{
+                            color: mainColor,
+                            minWidth: 60,
+                            fontWeight: 'bold',
+                            position: 'absolute',
+                            right: 0,
+                            '&:hover': {
+                                bgcolor: accentColor ? accentColor + '10' : 'rgba(0,0,0,0.05)',
+                            }
+                        }}
+                    >
+                        OK
+                    </Button>
+                </Box>
             </DialogContent>
         </Dialog>
     );

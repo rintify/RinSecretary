@@ -56,7 +56,7 @@ export default function SimpleTextInputModal({
             onClose={onClose}
             fullWidth
             maxWidth="xs"
-            PaperProps={{ borderRadius: 3, p: 2, overflow: 'visible' }}
+            PaperProps={{ sx: { borderRadius: 3, p: 2, overflow: 'visible' } }}
         >
              {guideMessage && <GuideBubble message={guideMessage} />}
             <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
