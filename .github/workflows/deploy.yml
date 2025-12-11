@@ -3,6 +3,7 @@ name: Deploy
 on:
   push:
     branches: ['main']
+  workflow_dispatch:
 
 jobs:
   build-on-vps:
@@ -28,9 +29,14 @@ jobs:
 
             mkdir -p data/uploads
 
+            # Normalize Domain (remove protocol if present)
+            RAW_URL="${{ secrets.NEXTAUTH_URL }}"
+            DOMAIN=$(echo "$RAW_URL" | sed -E 's/^\s*.*:\/\///g')
+            echo "Deploying to domain: $DOMAIN"
+
             # Create Caddyfile
             cat > Caddyfile <<EOF
-            ${{ secrets.NEXTAUTH_URL }}, www.${{ secrets.NEXTAUTH_URL }} {
+            $DOMAIN, www.$DOMAIN {
               encode gzip
               reverse_proxy web:3000
             }
@@ -49,7 +55,8 @@ jobs:
                   - PORT=3000
                   - HOSTNAME=0.0.0.0
                   - DATABASE_URL=file:/data/sqlite.db
-                  - NEXTAUTH_URL=https://${{ secrets.NEXTAUTH_URL }}
+                  # Ensure https:// prefix
+                  - NEXTAUTH_URL=https://$DOMAIN
                   - NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
                   - UPLOADS_DIR=/data/uploads
                   # Pass any other env vars needed
