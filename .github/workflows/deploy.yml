@@ -90,6 +90,6 @@ jobs:
             mkdir -p data/uploads
 
             # Pull latest image and restart
-            docker compose -f deploy/docker-compose.yml pull
-            docker compose -f deploy/docker-compose.yml up -d --remove-orphans
+            docker compose -f deploy/docker-compose.yml --env-file .env pull
+            docker compose -f deploy/docker-compose.yml --env-file .env up -d --remove-orphans
             docker image prune -f
