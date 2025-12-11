@@ -214,7 +214,7 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                 <Stack spacing={3} sx={{ py: 1 }}>
                     <Box>
                         <Typography variant="subtitle2" gutterBottom>期間</Typography>
-                        <Stack direction="row" spacing={2} alignItems="center">
+                        <Stack spacing={2} alignItems="stretch">
                             <TextField 
                                 type="date" 
                                 value={startDate} 
@@ -222,7 +222,9 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                                 size="small" 
                                 fullWidth
                             />
-                            <Typography>〜</Typography>
+                            <Box sx={{ textAlign: 'center', py: 0.5 }}>
+                                <Typography>〜</Typography>
+                            </Box>
                             <TextField 
                                 type="date" 
                                 value={endDate} 
@@ -235,7 +237,7 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
 
                     <Box>
                         <Typography variant="subtitle2" gutterBottom>時間帯</Typography>
-                        <Stack direction="row" spacing={2} alignItems="center">
+                        <Stack spacing={2} alignItems="stretch">
                             <TextField 
                                 type="time" 
                                 value={startTime} 
@@ -243,7 +245,9 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                                 size="small" 
                                 fullWidth
                             />
-                            <Typography>〜</Typography>
+                            <Box sx={{ textAlign: 'center', py: 0.5 }}>
+                                <Typography>〜</Typography>
+                            </Box>
                             <TextField 
                                 type="time" 
                                 value={endTime} 
@@ -256,23 +260,25 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
 
                     <Box>
                         <Typography variant="subtitle2" gutterBottom>曜日</Typography>
-                        <ToggleButtonGroup
-                            value={selectedDays}
-                            onChange={(e, newDays) => setSelectedDays(newDays)}
-                            aria-label="days of week"
-                            size="small"
-                            fullWidth
-                            color="primary"
-                        >
-                            {['日', '月', '火', '水', '木', '金', '土'].map((day, index) => (
-                                <ToggleButton key={index} value={index} suppressHydrationWarning>
-                                    {day}
-                                </ToggleButton>
-                            ))}
-                        </ToggleButtonGroup>
+                        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                           <ToggleButtonGroup
+                               value={selectedDays}
+                               onChange={(e, newDays) => setSelectedDays(newDays)}
+                               aria-label="days of week"
+                               size="small"
+                               fullWidth
+                               color="primary"
+                           >
+                               {['日', '月', '火', '水', '木', '金', '土'].map((day, index) => (
+                                   <ToggleButton key={index} value={index} suppressHydrationWarning sx={{ px: 1 }}>
+                                       {day}
+                                   </ToggleButton>
+                               ))}
+                           </ToggleButtonGroup>
+                        </Box>
                     </Box>
 
-                    <Stack direction="row" spacing={2}>
+                    <Stack spacing={2}>
                         <Box sx={{ flex: 1 }}>
                             <TextField 
                                 label="マージン (分)"

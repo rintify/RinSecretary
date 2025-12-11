@@ -1,10 +1,12 @@
 'use client'; 
 
+// Clean imports
 import { useState, useRef } from 'react';
-import TimeTable from './components/TimeTable';
-import { Add as AddIcon, CalendarMonth as CalendarIcon, Logout as LogoutIcon, ArrowBackIosNew, ArrowForwardIos, Edit as EditIcon, Event as EventIcon, TaskAlt as TaskIcon } from '@mui/icons-material';
+// TimeTable is used inside Carousel? No, Carousel is imported. TimeTable is NOT used in page.tsx.
+import { Event as EventIcon, TaskAlt as TaskIcon } from '@mui/icons-material';
+// Removed: AddIcon, CalendarIcon, LogoutIcon, ArrowBackIosNew, ArrowForwardIos, EditIcon
 import { logout } from '@/lib/actions';
-import { format, addDays, subDays } from 'date-fns';
+import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import TaskForm from './components/TaskForm';
 import EventForm from './components/EventForm';
@@ -15,8 +17,9 @@ import AlarmDetailModal from './components/AlarmDetailModal';
 import SettingsModal from './components/SettingsModal';
 import FreeTimeModal from './components/FreeTimeModal';
 import { Suspense } from 'react';
-import { AppBar, Toolbar, Typography, IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Stack, Tooltip, Button } from '@mui/material';
-import { Settings as SettingsIcon, Notifications as AlarmIcon } from '@mui/icons-material';
+import { IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Tooltip, Button, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
+import { Settings as SettingsIcon, Notifications as AlarmIcon, Menu as MenuIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
+import TimeTableSwiper from './components/TimeTableSwiper';
 
 export default function Home() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -28,8 +31,7 @@ export default function Home() {
       }
   };
   
-  const handlePrevDay = () => setCurrentDate(prev => subDays(prev, 1));
-  const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1));
+  // Removed handlePrevDay, handleNextDay
 
   // Modal State
   const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME'>('NONE');
@@ -79,63 +81,88 @@ export default function Home() {
   };
   
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  
+
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => setAnchorEl(event.currentTarget);
+  const handleMenuClose = () => setAnchorEl(null);
+
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
-      <AppBar position="fixed" color="inherit" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Toolbar sx={{ justifyContent: 'center' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <IconButton onClick={handlePrevDay} edge="start">
-                    <ArrowBackIosNew />
-                </IconButton>
-                
-                <Button 
-                    onClick={() => dateInputRef.current?.showPicker()}
-                    sx={{ 
-                        color: 'inherit',
-                        textTransform: 'none',
-                        fontSize: '1.25rem',
-                        fontWeight: 'bold',
-                        mx: 1
-                    }}
-                >
-                    {format(currentDate, 'MM/dd (E)', { locale: ja })}
-                </Button>
-                
-                <input 
-                  type="date" 
-                  ref={dateInputRef}
-                  style={{ visibility: 'hidden', position: 'absolute', top: 0, left: 0 }}
-                  onChange={handleDateChange} 
-                />
+    <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+      {/* Custom Header */}
+      {/* Custom Header */}
+      <Box sx={{ 
+          height: '60px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          px: 2, 
+          borderBottom: 1, 
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          flexShrink: 0,
+          zIndex: 10
+      }}>
+          
+          {/* Main Navigation Group: Date Left Aligned */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+              <Button 
+                  onClick={() => dateInputRef.current?.showPicker()}
+                  sx={{ 
+                      color: 'text.primary',
+                      textTransform: 'none',
+                      fontSize: '1.4rem', 
+                      fontWeight: 'bold',
+                      minWidth: 'auto',
+                      whiteSpace: 'nowrap',
+                      lineHeight: 1,
+                      pl: 0, // Remove left padding to align to edge
+                      justifyContent: 'flex-start'
+                  }}
+              >
+                  {format(currentDate, 'MM/dd (E)', { locale: ja })}
+              </Button>
+              <input 
+                type="date" 
+                ref={dateInputRef}
+                style={{ visibility: 'hidden', position: 'absolute', top: 0, left: 0, width: 0, height: 0 }}
+                onChange={handleDateChange} 
+              />
+          </Box>
 
-                <Button 
-                    variant="outlined" 
-                    size="small" 
-                    onClick={() => setActiveModal('FREE_TIME')}
-                    sx={{ ml: 1, borderRadius: 2 }}
-                >
-                    空き時間
-                </Button>
-                
-                <IconButton onClick={() => setActiveModal('SETTINGS')}>
-                    <SettingsIcon />
-                </IconButton>
-
-                <IconButton onClick={handleNextDay}>
-                    <ArrowForwardIos />
-                </IconButton>
-            </Box>
-        </Toolbar>
-      </AppBar>
-      <Toolbar /> {/* Spacer */}
+          {/* Right: Menu */}
+          <Box>
+              <IconButton onClick={handleMenuOpen}>
+                  <MenuIcon />
+              </IconButton>
+              <Menu
+                  anchorEl={anchorEl}
+                  open={Boolean(anchorEl)}
+                  onClose={handleMenuClose}
+              >
+                  <MenuItem onClick={() => { handleMenuClose(); setActiveModal('FREE_TIME'); }}>
+                      <ListItemIcon>
+                          <AccessTimeIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText>空き時間</ListItemText>
+                  </MenuItem>
+                  <MenuItem onClick={() => { handleMenuClose(); setActiveModal('SETTINGS'); }}>
+                      <ListItemIcon>
+                          <SettingsIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText>設定</ListItemText>
+                  </MenuItem>
+              </Menu>
+          </Box>
+      </Box>
       
+      {/* Main Display with Swiper */}
       <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-          <TimeTable 
-              date={currentDate} 
+          <TimeTableSwiper 
+              currentDate={currentDate} 
+              onDateChange={setCurrentDate}
               onNewTask={(time) => handleNewEvent(time)} 
               onEditTask={handleTaskClick}
               refreshTrigger={refreshTrigger}

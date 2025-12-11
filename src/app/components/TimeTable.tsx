@@ -314,7 +314,7 @@ export default function TimeTable({
   if (!isClient) return <div style={{ padding: 20 }}>Loading...</div>;
 
   return (
-    <Box sx={{ height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* Header Bar - only render if needed to avoid whitespace */}
         {/* Header Bar - only render if needed to avoid whitespace */}
         {(hasDeadlineWarning || (isToday && historyItems.length > 0)) && (
@@ -326,11 +326,11 @@ export default function TimeTable({
             alignItems: 'center',
             minHeight: 44
         }}>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
                 {hasDeadlineWarning && (
                      <>
-                        <WarningIcon color="error" sx={{ mr: 1 }} />
-                        <Typography variant="body2" color="error" sx={{ fontWeight: 'bold' }}>
+                        <WarningIcon color="error" sx={{ mr: 1, flexShrink: 0 }} />
+                        <Typography variant="body2" color="error" sx={{ fontWeight: 'bold', lineHeight: 1.2 }}>
                             今日までのタスクがあります
                         </Typography>
                      </>

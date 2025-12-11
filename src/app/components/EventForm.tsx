@@ -225,7 +225,7 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
             />
 
             <Box>
-                <Stack spacing={2} direction="row">
+                <Stack spacing={2} direction="column">
                     <TextField
                         label="Start Time"
                         name="startTime"

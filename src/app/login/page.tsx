@@ -39,7 +39,7 @@ export default function LoginPage() {
       flexDirection: 'column',
       justifyContent: 'center',
       alignItems: 'center',
-      height: '100vh',
+      height: '100dvh',
       padding: '20px',
       backgroundColor: 'var(--color-bg)',
     }}>

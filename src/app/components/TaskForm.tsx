@@ -169,7 +169,7 @@ export default function TaskForm(props: TaskFormProps) {
             />
 
             <Stack spacing={2}>
-                <Stack direction="row" spacing={2}>
+                <Stack direction="column" spacing={2}>
                     <TextField
                         label="Start Date"
                         name="startDate"
