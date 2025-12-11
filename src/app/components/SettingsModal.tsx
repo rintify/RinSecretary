@@ -8,16 +8,35 @@ interface SettingsModalProps {
     onClose: () => void;
 }
 
+// Module-level cache
+let settingsCache: { pushoverUserKey: string | null; pushoverToken: string | null; } | null = null;
+
 export default function SettingsModal({ onClose }: SettingsModalProps) {
-    const [userKey, setUserKey] = useState('');
+const [userKey, setUserKey] = useState('');
     const [token, setToken] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
 
+    // Cache settings in module scope to avoid re-fetching on every open
     useEffect(() => {
+        if (settingsCache) {
+            setUserKey(settingsCache.pushoverUserKey || '');
+            setToken(settingsCache.pushoverToken || '');
+            setLoading(false);
+        }
+
         getPushoverSettings().then(settings => {
             if (settings) {
+                // If cache didn't exist or we want to ensure latest (though we prioritize instant UI)
+                // We update state only if it differs? 
+                // Actually, to avoid jumping UI if cache was stale, maybe we only set if not cached?
+                // But for settings, consistency is key. 
+                // Let's just update the cache and state (if loading was true, definitely update).
+                settingsCache = settings;
+                
+                // If we are still loading (no cache hit), update state
+                // If we already showed cache, do we want to overwrite? Yes, in case it changed elsewhere.
                 setUserKey(settings.pushoverUserKey || '');
                 setToken(settings.pushoverToken || '');
             }
@@ -31,6 +50,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         setMessage(null);
         try {
             await updatePushoverSettings(userKey, token);
+            // Update cache
+            settingsCache = { pushoverUserKey: userKey, pushoverToken: token };
+            
             setMessage({ text: 'Settings saved successfully!', type: 'success' });
             setTimeout(onClose, 1000);
         } catch (e) {

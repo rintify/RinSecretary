@@ -4,8 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft as ChevronLeftIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container } from '@mui/material';
-import { format } from 'date-fns';
+import { format, addDays, subDays } from 'date-fns';
+import { ja } from 'date-fns/locale';
 import BulkEventCreator from './BulkEventCreator';
+import CustomDatePicker from './ui/CustomDatePicker';
+import CustomTimePicker from './ui/CustomTimePicker';
 
 interface EventFormProps {
     eventId?: string;
@@ -26,6 +29,9 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
     const [endTime, setEndTime] = useState('');
     const [memo, setMemo] = useState('');
     const [initialDuration, setInitialDuration] = useState<number | null>(null);
+
+    // Picker State
+    const [pickerConfig, setPickerConfig] = useState<{ type: 'date' | 'time', target: 'start' | 'end' } | null>(null);
 
     useEffect(() => {
         if (initialValues) {
@@ -52,7 +58,6 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
             }
         } else {
             // Default logic
-            // Check if initialDate is "today"
             const now = new Date();
             const targetDate = initialDate || now;
             
@@ -84,33 +89,98 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
         }
     }, [initialValues, initialStartTime, initialDate]);
 
-    const handleStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newStart = e.target.value;
-
-        if (startTime && endTime) {
-            const currentStart = new Date(startTime);
-            const currentEnd = new Date(endTime);
-            const newStartDate = new Date(newStart);
-
-            if (!isNaN(currentStart.getTime()) && !isNaN(currentEnd.getTime()) && !isNaN(newStartDate.getTime())) {
-                if (newStartDate.getTime() > currentEnd.getTime()) {
-                    const duration = initialDuration ?? (currentEnd.getTime() - currentStart.getTime());
-                    const newEndDate = new Date(newStartDate.getTime() + duration);
-                    setEndTime(format(newEndDate, "yyyy-MM-dd'T'HH:mm"));
-                }
-            }
+    // Helpers
+    const getDisplayDate = (isoString: string) => {
+        if (!isoString) return new Date();
+        const d = new Date(isoString);
+        if (d.getHours() < 4) {
+            return subDays(d, 1);
         }
-        
-        setStartTime(newStart);
+        return d;
     };
 
-    const handleEndTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newEnd = e.target.value;
-        if (startTime && newEnd < startTime) {
-            alert("End time cannot be earlier than Start time");
-            return;
+    const getDisplayTimeStr = (isoString: string) => {
+        if (!isoString) return '00:00';
+        const d = new Date(isoString);
+        let h = d.getHours();
+        const m = d.getMinutes();
+        if (h < 4) h += 24;
+        return `${h}:${m.toString().padStart(2, '0')}`;
+    };
+
+    // Handlers
+    const handleStartTimeChange = (valOrE: any) => {
+        const val = typeof valOrE === 'string' ? valOrE : valOrE.target.value;
+        setStartTime(val);
+        
+        if (startTime && endTime && typeof valOrE === 'string') {
+             const currentStart = new Date(startTime);
+             const currentEnd = new Date(endTime);
+             const newStartDate = new Date(val);
+             if (!isNaN(currentStart.getTime()) && !isNaN(currentEnd.getTime()) && !isNaN(newStartDate.getTime())) {
+                 if (newStartDate.getTime() > currentEnd.getTime()) {
+                      const duration = initialDuration ?? (currentEnd.getTime() - currentStart.getTime());
+                      const newEndDate = new Date(newStartDate.getTime() + duration);
+                      const formatLocal = (date: Date) => {
+                            const pad = (n: number) => n < 10 ? '0'+n : n;
+                            return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+                      };
+                      setEndTime(formatLocal(newEndDate));
+                 }
+             }
         }
-        setEndTime(newEnd);
+    };
+
+    const handleEndTimeChange = (valOrE: any) => {
+         const val = typeof valOrE === 'string' ? valOrE : valOrE.target.value;
+         setEndTime(val);
+    };
+
+    const handleDateSelect = (newDate: Date) => {
+        if (!pickerConfig) return;
+        const target = pickerConfig.target;
+        const currentIso = target === 'start' ? startTime : endTime;
+        
+        const d = currentIso ? new Date(currentIso) : new Date();
+        let h = d.getHours();
+        const m = d.getMinutes();
+        if (h < 4) h += 24;
+        const totalMinutes = h * 60 + m;
+
+        const base = new Date(newDate);
+        base.setHours(0, 0, 0, 0);
+        const finalText = new Date(base.getTime() + totalMinutes * 60 * 1000);
+        
+        const formatLocal = (date: Date) => {
+             const pad = (n: number) => n < 10 ? '0'+n : n;
+             return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        };
+        const newStr = formatLocal(finalText);
+
+        if (target === 'start') {
+            handleStartTimeChange(newStr);
+        } else {
+            handleEndTimeChange(newStr);
+        }
+        setPickerConfig(null);
+    };
+
+    const handleTimeSelect = (newDate: Date) => {
+        if (!pickerConfig) return;
+        const target = pickerConfig.target;
+        
+        const formatLocal = (date: Date) => {
+             const pad = (n: number) => n < 10 ? '0'+n : n;
+             return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        };
+        const newStr = formatLocal(newDate);
+        
+        if (target === 'start') {
+            handleStartTimeChange(newStr);
+        } else {
+            handleEndTimeChange(newStr);
+        }
+        setPickerConfig(null); 
     };
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -173,11 +243,6 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
 
     const [isBulkMode, setIsBulkMode] = useState(false);
     
-    // ... existing useEffect ...
-
-    // Dynamic import to avoid SSR issues if complex, but here standard import is fine usually.
-    // However, for cleaner code structure inside component:
-    
     if (isBulkMode) {
         return (
             <BulkEventCreator 
@@ -226,27 +291,62 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
 
             <Box>
                 <Stack spacing={2} direction="column">
-                    <TextField
-                        label="Start Time"
-                        name="startTime"
-                        type="datetime-local"
-                        required
-                        value={startTime}
-                        onChange={handleStartTimeChange}
-                        fullWidth
-                        InputLabelProps={{ shrink: true }}
-                    />
-                    <TextField
-                        label="End Time"
-                        name="endTime"
-                        type="datetime-local"
-                        required
-                        value={endTime}
-                        onChange={handleEndTimeChange}
-                        fullWidth
-                        InputLabelProps={{ shrink: true }}
-                    />
+                   <Box>
+                     <Typography variant="caption" color="text.secondary">Start Time</Typography>
+                     <Stack direction="row" spacing={1} alignItems="center">
+                        <Button 
+                            variant="outlined" 
+                            onClick={() => setPickerConfig({ type: 'date', target: 'start' })}
+                            fullWidth
+                            sx={{ justifyContent: 'flex-start', color: 'text.primary', borderColor: 'divider' }}
+                        >
+                            {format(getDisplayDate(startTime), 'yyyy/MM/dd (E)', { locale: ja })}
+                        </Button>
+                        <Button 
+                            variant="outlined" 
+                            onClick={() => setPickerConfig({ type: 'time', target: 'start' })}
+                            sx={{ minWidth: '80px', color: 'text.primary', borderColor: 'divider' }}
+                        >
+                            {getDisplayTimeStr(startTime)}
+                        </Button>
+                     </Stack>
+                   </Box>
+
+                   <Box>
+                     <Typography variant="caption" color="text.secondary">End Time</Typography>
+                     <Stack direction="row" spacing={1} alignItems="center">
+                        <Button 
+                            variant="outlined" 
+                            onClick={() => setPickerConfig({ type: 'date', target: 'end' })}
+                            fullWidth
+                            sx={{ justifyContent: 'flex-start', color: 'text.primary', borderColor: 'divider' }}
+                        >
+                            {format(getDisplayDate(endTime), 'yyyy/MM/dd (E)', { locale: ja })}
+                        </Button>
+                        <Button 
+                            variant="outlined" 
+                            onClick={() => setPickerConfig({ type: 'time', target: 'end' })}
+                            sx={{ minWidth: '80px', color: 'text.primary', borderColor: 'divider' }}
+                        >
+                            {getDisplayTimeStr(endTime)}
+                        </Button>
+                     </Stack>
+                   </Box>
                 </Stack>
+                
+                <CustomDatePicker
+                    open={pickerConfig?.type === 'date'}
+                    onClose={() => setPickerConfig(null)}
+                    value={getDisplayDate(pickerConfig?.target === 'start' ? startTime : endTime)}
+                    onChange={handleDateSelect}
+                />
+                
+                <CustomTimePicker
+                    open={pickerConfig?.type === 'time'}
+                    onClose={() => setPickerConfig(null)}
+                    value={pickerConfig?.target === 'start' ? (startTime ? new Date(startTime) : new Date()) : (endTime ? new Date(endTime) : new Date())}
+                    onChange={handleTimeSelect}
+                />
                 
                 {(() => {
                     if (!startTime || !endTime) return null;
@@ -272,16 +372,15 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                         durationStr = `${d}日${h}時間${m}分`;
                     }
                     
-                    // Format start time as M月d日(ddd) H:mm
-                const days = ['日', '月', '火', '水', '木', '金', '土'];
-                const dayStr = `${start.getMonth() + 1}月${start.getDate()}日(${days[start.getDay()]})`;
-                const timeStr = `${start.getHours()}:${start.getMinutes().toString().padStart(2, '0')}`;
-                
-                return (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                        {`${dayStr} ${timeStr} から ${durationStr}`}
-                    </Typography>
-                );
+                    const days = ['日', '月', '火', '水', '木', '金', '土'];
+                    const dayStr = `${start.getMonth() + 1}月${start.getDate()}日(${days[start.getDay()]})`;
+                    const timeStr = `${start.getHours()}:${start.getMinutes().toString().padStart(2, '0')}`;
+                    
+                    return (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            {`${dayStr} ${timeStr} から ${durationStr}`}
+                        </Typography>
+                    );
                 })()}
             </Box>
             
@@ -323,8 +422,6 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
         </Box>
     );
 
-    // If Modal, just return content (which might be BulkCreator returned early above)
-    // Note: The early return for isBulkMode handles the view switching.
     if (isModal) return content;
 
     return (

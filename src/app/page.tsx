@@ -1,11 +1,7 @@
 'use client'; 
 
-// Clean imports
-import { useState, useRef } from 'react';
-// TimeTable is used inside Carousel? No, Carousel is imported. TimeTable is NOT used in page.tsx.
+import { useState } from 'react';
 import { Event as EventIcon, TaskAlt as TaskIcon } from '@mui/icons-material';
-// Removed: AddIcon, CalendarIcon, LogoutIcon, ArrowBackIosNew, ArrowForwardIos, EditIcon
-import { logout } from '@/lib/actions';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import TaskForm from './components/TaskForm';
@@ -20,18 +16,11 @@ import { Suspense } from 'react';
 import { IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Tooltip, Button, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
 import { Settings as SettingsIcon, Notifications as AlarmIcon, Menu as MenuIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
 import TimeTableSwiper from './components/TimeTableSwiper';
+import CustomDatePicker from './components/ui/CustomDatePicker';
 
 export default function Home() {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const dateInputRef = useRef<HTMLInputElement>(null);
-
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.value) {
-          setCurrentDate(new Date(e.target.value));
-      }
-  };
-  
-  // Removed handlePrevDay, handleNextDay
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Modal State
   const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME'>('NONE');
@@ -87,11 +76,15 @@ export default function Home() {
   const handleMenuClose = () => setAnchorEl(null);
 
   const theme = useTheme();
+  // Unused fullScreen var can be removed or kept? kept for safety if used later in unseen code? 
+  // Step 12 showed it used but I need to check where.
+  // Actually looking at Step 12, fullScreen is only declared, not used in JSX shown? 
+  // Wait, I see `maxWidth="sm" fullWidth` in Dialog. 
+  // Ah, let's keep it.
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
   return (
     <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
-      {/* Custom Header */}
       {/* Custom Header */}
       <Box sx={{ 
           height: '60px', 
@@ -109,7 +102,7 @@ export default function Home() {
           {/* Main Navigation Group: Date Left Aligned */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
               <Button 
-                  onClick={() => dateInputRef.current?.showPicker()}
+                  onClick={() => setShowDatePicker(true)}
                   sx={{ 
                       color: 'text.primary',
                       textTransform: 'none',
@@ -124,11 +117,11 @@ export default function Home() {
               >
                   {format(currentDate, 'MM/dd (E)', { locale: ja })}
               </Button>
-              <input 
-                type="date" 
-                ref={dateInputRef}
-                style={{ visibility: 'hidden', position: 'absolute', top: 0, left: 0, width: 0, height: 0 }}
-                onChange={handleDateChange} 
+              <CustomDatePicker 
+                  open={showDatePicker}
+                  onClose={() => setShowDatePicker(false)}
+                  value={currentDate}
+                  onChange={setCurrentDate}
               />
           </Box>
 
@@ -188,8 +181,6 @@ export default function Home() {
           </Box>
       </Box>
 
-
-      
       {/* Dialog */}
       <Dialog
         open={activeModal !== 'NONE'}

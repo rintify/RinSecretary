@@ -4,7 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft as ChevronLeftIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container } from '@mui/material';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
+import { ja } from 'date-fns/locale';
+import CustomDatePicker from './ui/CustomDatePicker';
+import CustomTimePicker from './ui/CustomTimePicker';
 
 interface TaskFormProps {
     taskId?: string;
@@ -27,6 +30,9 @@ export default function TaskForm(props: TaskFormProps) {
     const [progress, setProgress] = useState(0);
     const [maxProgress, setMaxProgress] = useState(100);
     const [memo, setMemo] = useState('');
+
+    // Picker State
+    const [pickerConfig, setPickerConfig] = useState<{ type: 'date' | 'time', target: 'start' | 'deadline' } | null>(null);
 
     useEffect(() => {
         if (taskId && props.initialValues) {
@@ -79,6 +85,72 @@ export default function TaskForm(props: TaskFormProps) {
             setDeadline(formatLocal(endOfDay));
         }
     }, [taskId, onSuccess, router, props.initialValues, initialDate]);
+
+    // Helpers
+    const getDisplayDate = (isoString: string) => {
+        if (!isoString) return new Date();
+        const d = new Date(isoString);
+        if (d.getHours() < 4) {
+            return subDays(d, 1);
+        }
+        return d;
+    };
+
+    const getDisplayTimeStr = (isoString: string) => {
+        if (!isoString) return '00:00';
+        const d = new Date(isoString);
+        let h = d.getHours();
+        const m = d.getMinutes();
+        if (h < 4) h += 24;
+        return `${h}:${m.toString().padStart(2, '0')}`;
+    };
+
+    // Update Handlers
+    const updateStartDate = (val: string) => setStartDate(val);
+    const updateDeadline = (val: string) => setDeadline(val);
+
+    const handleDateSelect = (newDate: Date) => {
+        if (!pickerConfig) return;
+        const target = pickerConfig.target;
+        const currentIso = target === 'start' ? startDate : deadline;
+        
+        const d = currentIso ? new Date(currentIso) : new Date();
+        let h = d.getHours();
+        const m = d.getMinutes();
+        if (h < 4) h += 24;
+        const totalMinutes = h * 60 + m;
+
+        const base = new Date(newDate);
+        base.setHours(0, 0, 0, 0);
+        const finalText = new Date(base.getTime() + totalMinutes * 60 * 1000);
+        
+        const formatLocal = (date: Date) => {
+             const pad = (n: number) => n < 10 ? '0'+n : n;
+             return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        };
+        const newStr = formatLocal(finalText);
+
+        if (target === 'start') updateStartDate(newStr);
+        else updateDeadline(newStr);
+
+        setPickerConfig(null);
+    };
+
+    const handleTimeSelect = (newDate: Date) => {
+        if (!pickerConfig) return;
+        const target = pickerConfig.target;
+        
+        const formatLocal = (date: Date) => {
+             const pad = (n: number) => n < 10 ? '0'+n : n;
+             return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        };
+        const newStr = formatLocal(newDate);
+        
+        if (target === 'start') updateStartDate(newStr);
+        else updateDeadline(newStr);
+
+        setPickerConfig(null); 
+    };
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -169,30 +241,50 @@ export default function TaskForm(props: TaskFormProps) {
             />
 
             <Stack spacing={2}>
-                <Stack direction="column" spacing={2}>
-                    <TextField
-                        label="Start Date"
-                        name="startDate"
-                        type="datetime-local"
-                        required
-                        value={startDate}
-                        onChange={e => setStartDate(e.target.value)}
-                        fullWidth
-                        InputLabelProps={{ shrink: true }}
-                        helperText="Starting date"
-                    />
-                    <TextField
-                        label="Deadline"
-                        name="deadline"
-                        type="datetime-local"
-                        required
-                        value={deadline}
-                        onChange={e => setDeadline(e.target.value)}
-                        fullWidth
-                        InputLabelProps={{ shrink: true }}
-                        helperText="Deadline"
-                    />
-                </Stack>
+                {/* Start Date */}
+                <Box>
+                    <Typography variant="caption" color="text.secondary">Start Date</Typography>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                        <Button 
+                            variant="outlined" 
+                            onClick={() => setPickerConfig({ type: 'date', target: 'start' })}
+                            fullWidth
+                            sx={{ justifyContent: 'flex-start', color: 'text.primary', borderColor: 'divider' }}
+                        >
+                            {format(getDisplayDate(startDate), 'yyyy/MM/dd (E)', { locale: ja })}
+                        </Button>
+                        <Button 
+                            variant="outlined" 
+                            onClick={() => setPickerConfig({ type: 'time', target: 'start' })}
+                            sx={{ minWidth: '80px', color: 'text.primary', borderColor: 'divider' }}
+                        >
+                            {getDisplayTimeStr(startDate)}
+                        </Button>
+                    </Stack>
+                </Box>
+
+                {/* Deadline */}
+                <Box>
+                    <Typography variant="caption" color="text.secondary">Deadline</Typography>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                        <Button 
+                            variant="outlined" 
+                            onClick={() => setPickerConfig({ type: 'date', target: 'deadline' })}
+                            fullWidth
+                            sx={{ justifyContent: 'flex-start', color: 'text.primary', borderColor: 'divider' }}
+                        >
+                            {format(getDisplayDate(deadline), 'yyyy/MM/dd (E)', { locale: ja })}
+                        </Button>
+                        <Button 
+                            variant="outlined" 
+                            onClick={() => setPickerConfig({ type: 'time', target: 'deadline' })}
+                            sx={{ minWidth: '80px', color: 'text.primary', borderColor: 'divider' }}
+                        >
+                            {getDisplayTimeStr(deadline)}
+                        </Button>
+                    </Stack>
+                </Box>
+
                 <Stack direction="row" spacing={2}>
                     <TextField
                         label="Current Progress"
@@ -214,6 +306,20 @@ export default function TaskForm(props: TaskFormProps) {
                     />
                 </Stack>
             </Stack>
+            
+            <CustomDatePicker
+                open={pickerConfig?.type === 'date'}
+                onClose={() => setPickerConfig(null)}
+                value={getDisplayDate(pickerConfig?.target === 'start' ? startDate : deadline)}
+                onChange={handleDateSelect}
+            />
+            
+            <CustomTimePicker
+                open={pickerConfig?.type === 'time'}
+                onClose={() => setPickerConfig(null)}
+                value={pickerConfig?.target === 'start' ? (startDate ? new Date(startDate) : new Date()) : (deadline ? new Date(deadline) : new Date())}
+                onChange={handleTimeSelect}
+            />
             
             <TextField
                 label="Memo"

@@ -4,7 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Delete as DeleteIcon, ChevronLeft as ChevronLeftIcon } from '@mui/icons-material';
 import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container } from '@mui/material';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
+import { ja } from 'date-fns/locale';
+import CustomDatePicker from './ui/CustomDatePicker';
+import CustomTimePicker from './ui/CustomTimePicker';
 
 interface AlarmFormProps {
     alarmId?: string;
@@ -24,6 +27,9 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
     const [time, setTime] = useState('');
     const [comment, setComment] = useState('');
 
+    // Picker State
+    const [pickerConfig, setPickerConfig] = useState<{ type: 'date' | 'time' } | null>(null);
+
     useEffect(() => {
         if (initialValues) {
              const alarm = initialValues;
@@ -41,7 +47,7 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
                        return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
                    };
                    setTime(formatLocal(d));
-            }
+             }
         } else {
              // Default logic
              const now = new Date();
@@ -68,6 +74,54 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
              setTime(formatLocal(defaultTime));
         }
     }, [initialValues, initialTime, initialDate]);
+
+    // Helpers
+    const getDisplayDate = (isoString: string) => {
+        if (!isoString) return new Date();
+        const d = new Date(isoString);
+        if (d.getHours() < 4) {
+            return subDays(d, 1);
+        }
+        return d;
+    };
+
+    const getDisplayTimeStr = (isoString: string) => {
+        if (!isoString) return '00:00';
+        const d = new Date(isoString);
+        let h = d.getHours();
+        const m = d.getMinutes();
+        if (h < 4) h += 24;
+        return `${h}:${m.toString().padStart(2, '0')}`;
+    };
+
+    const handleDateSelect = (newDate: Date) => {
+        // Calculate current "Display Time" minutes
+        const d = time ? new Date(time) : new Date();
+        let h = d.getHours();
+        const m = d.getMinutes();
+        if (h < 4) h += 24;
+        const totalMinutes = h * 60 + m;
+
+        const base = new Date(newDate);
+        base.setHours(0, 0, 0, 0);
+        const finalText = new Date(base.getTime() + totalMinutes * 60 * 1000);
+        
+        const formatLocal = (date: Date) => {
+             const pad = (n: number) => n < 10 ? '0'+n : n;
+             return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        };
+        setTime(formatLocal(finalText));
+        setPickerConfig(null);
+    };
+
+    const handleTimeSelect = (newDate: Date) => {
+        const formatLocal = (date: Date) => {
+             const pad = (n: number) => n < 10 ? '0'+n : n;
+             return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        };
+        setTime(formatLocal(newDate));
+        setPickerConfig(null);
+    };
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -150,15 +204,39 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
                 onChange={e => setTitle(e.target.value)}
             />
 
-            <TextField
-                label="Time"
-                name="time"
-                type="datetime-local"
-                required
-                value={time}
-                onChange={e => setTime(e.target.value)}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
+            <Box>
+                 <Typography variant="caption" color="text.secondary">Time</Typography>
+                 <Stack direction="row" spacing={1} alignItems="center">
+                    <Button 
+                        variant="outlined" 
+                        onClick={() => setPickerConfig({ type: 'date' })}
+                        fullWidth
+                        sx={{ justifyContent: 'flex-start', color: 'text.primary', borderColor: 'divider' }}
+                    >
+                        {format(getDisplayDate(time), 'yyyy/MM/dd (E)', { locale: ja })}
+                    </Button>
+                    <Button 
+                        variant="outlined" 
+                        onClick={() => setPickerConfig({ type: 'time' })}
+                        sx={{ minWidth: '80px', color: 'text.primary', borderColor: 'divider' }}
+                    >
+                        {getDisplayTimeStr(time)}
+                    </Button>
+                 </Stack>
+            </Box>
+
+            <CustomDatePicker
+                open={pickerConfig?.type === 'date'}
+                onClose={() => setPickerConfig(null)}
+                value={getDisplayDate(time)}
+                onChange={handleDateSelect}
+            />
+            
+            <CustomTimePicker
+                open={pickerConfig?.type === 'time'}
+                onClose={() => setPickerConfig(null)}
+                value={time ? new Date(time) : new Date()}
+                onChange={handleTimeSelect}
             />
             
             <TextField
