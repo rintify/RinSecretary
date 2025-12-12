@@ -7,6 +7,7 @@ import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container
 import { format, subDays, addHours, startOfDay, endOfDay, isBefore } from 'date-fns';
 import { TASK_COLOR } from '../utils/colors';
 import { ja } from 'date-fns/locale';
+import { formatLocalIsoString } from '@/lib/utils';
 import CustomDatePicker from './ui/CustomDatePicker';
 import CustomTimePicker from './ui/CustomTimePicker';
 
@@ -103,18 +104,13 @@ export default function TaskForm(props: TaskFormProps) {
             // Create Mode: Initialize defaults
             setFetching(false);
             const baseDate = initialDate || new Date();
-            const formatLocal = (d: Date) => {
-                const pad = (n: number) => n < 10 ? '0'+n : n;
-                return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-            };
-            
             // Start of the day (00:00)
             const startOfDay = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), 0, 0, 0, 0);
-            setStartDate(formatLocal(startOfDay));
+            setStartDate(formatLocalIsoString(startOfDay));
             
             // End of the day (23:59)
             const endOfDay = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), 23, 59, 0, 0);
-            setDeadline(formatLocal(endOfDay));
+            setDeadline(formatLocalIsoString(endOfDay));
         }
     }, [taskId, onSuccess, router, props.initialValues, initialDate]);
 
@@ -146,11 +142,7 @@ export default function TaskForm(props: TaskFormProps) {
         base.setHours(0, 0, 0, 0);
         const finalText = new Date(base.getTime() + totalMinutes * 60 * 1000);
         
-        const formatLocal = (date: Date) => {
-             const pad = (n: number) => n < 10 ? '0'+n : n;
-             return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-        };
-        const newStr = formatLocal(finalText);
+        const newStr = formatLocalIsoString(finalText);
 
         if (target === 'start') updateStartDate(newStr);
         else updateDeadline(newStr);
@@ -162,11 +154,7 @@ export default function TaskForm(props: TaskFormProps) {
         if (!pickerConfig) return;
         const target = pickerConfig.target;
         
-        const formatLocal = (date: Date) => {
-             const pad = (n: number) => n < 10 ? '0'+n : n;
-             return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-        };
-        const newStr = formatLocal(newDate);
+        const newStr = formatLocalIsoString(newDate);
         
         if (target === 'start') updateStartDate(newStr);
         else updateDeadline(newStr);

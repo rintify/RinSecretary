@@ -12,6 +12,7 @@ import {
     differenceInMinutes
 } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import { formatLocalIsoString } from '@/lib/utils';
 import { Close as CloseIcon, ContentCopy as CopyIcon, CalendarMonth as CalendarMonthIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
 import { ToggleButton, ToggleButtonGroup } from '@mui/material'; // ensure imports
 import { fetchGoogleEvents } from '@/lib/calendar-actions';
@@ -55,11 +56,7 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
         if (!pickerConfig) return;
         const target = pickerConfig.target;
         
-        const formatLocal = (date: Date) => {
-             const pad = (n: number) => n < 10 ? '0'+n : n;
-             return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
-        };
-        const newStr = formatLocal(newDate);
+        const newStr = formatLocalIsoString(newDate).split('T')[0];
 
         if (target === 'start') setStartDate(newStr);
         else if (target === 'end') setEndDate(newStr);

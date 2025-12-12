@@ -7,6 +7,7 @@ import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container
 import { format, addMinutes, isBefore, isAfter, setHours, setMinutes, startOfDay, endOfDay } from 'date-fns';
 import { EVENT_COLOR } from '../utils/colors';
 import { ja } from 'date-fns/locale';
+import { formatLocalIsoString } from '@/lib/utils';
 import BulkEventCreator from './BulkEventCreator';
 import CustomDatePicker from './ui/CustomDatePicker';
 import CustomTimePicker from './ui/CustomTimePicker';
@@ -56,13 +57,9 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
         } else if (initialStartTime) {
             const d = new Date(initialStartTime);
             if (!isNaN(d.getTime())) {
-                   const formatLocal = (date: Date) => {
-                       const pad = (n: number) => n < 10 ? '0'+n : n;
-                       return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-                   };
-                   setStartTime(formatLocal(d));
+                   setStartTime(formatLocalIsoString(d));
                    const endD = new Date(d.getTime() + 60 * 60 * 1000); // 1 hour default
-                   setEndTime(formatLocal(endD));
+                   setEndTime(formatLocalIsoString(endD));
             }
         } else {
             // Default logic
@@ -87,12 +84,8 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                  endD = new Date(startD.getTime() + 60 * 60 * 1000);
             }
 
-            const formatLocal = (d: Date) => {
-                const pad = (n: number) => n < 10 ? '0'+n : n;
-                return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-            };
-            setStartTime(formatLocal(startD));
-            setEndTime(formatLocal(endD));
+            setStartTime(formatLocalIsoString(startD));
+            setEndTime(formatLocalIsoString(endD));
         }
     }, [initialValues, initialStartTime, initialDate]);
 
@@ -126,11 +119,7 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
         base.setHours(0, 0, 0, 0);
         const finalText = new Date(base.getTime() + totalMinutes * 60 * 1000);
         
-        const formatLocal = (date: Date) => {
-             const pad = (n: number) => n < 10 ? '0'+n : n;
-             return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-        };
-        const newStr = formatLocal(finalText);
+        const newStr = formatLocalIsoString(finalText);
 
         if (target === 'start') {
             updateStartTime(newStr);
@@ -144,11 +133,7 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
         if (!pickerConfig) return;
         const target = pickerConfig.target;
         
-        const formatLocal = (date: Date) => {
-             const pad = (n: number) => n < 10 ? '0'+n : n;
-             return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-        };
-        const newStr = formatLocal(newDate);
+        const newStr = formatLocalIsoString(newDate);
         
         if (target === 'start') {
             updateStartTime(newStr);
