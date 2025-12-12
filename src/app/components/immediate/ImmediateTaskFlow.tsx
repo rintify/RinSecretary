@@ -9,7 +9,7 @@ import { TASK_COLOR } from '../../utils/colors';
 
 interface ImmediateTaskFlowProps {
     onClose: () => void;
-    onSuccess: () => void;
+    onSuccess: (date?: Date) => void;
     initialDate?: Date;
 }
 
@@ -45,7 +45,7 @@ export default function ImmediateTaskFlow({ onClose, onSuccess, initialDate = ne
             });
 
             if (res.ok) {
-                onSuccess();
+                onSuccess(deadline);
             } else {
                 alert('Failed to create task');
                 onClose();

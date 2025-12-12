@@ -15,7 +15,7 @@ import RegularTaskSettingsModal from './components/RegularTaskSettingsModal';
 import FreeTimeModal from './components/FreeTimeModal';
 import { Suspense } from 'react';
 import { IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Tooltip, Button, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
-import { Settings as SettingsIcon, Notifications as AlarmIcon, Menu as MenuIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
+import { Settings as SettingsIcon, Notifications as AlarmIcon, Menu as MenuIcon, AccessTime as AccessTimeIcon, MyLocation as MyLocationIcon } from '@mui/icons-material';
 import TimeTableSwiper from './components/TimeTableSwiper';
 import CustomDatePicker from './components/ui/CustomDatePicker';
 import { AppRegistration as BulkIcon } from '@mui/icons-material';
@@ -73,10 +73,13 @@ export default function Home() {
       }
   };
 
-  const handleCloseModal = () => {
+  const handleCloseModal = (arg?: any) => {
       setActiveModal('NONE');
       setModalData(null);
       setRefreshTrigger(prev => prev + 1);
+      if (arg instanceof Date) {
+          setCurrentDate(arg);
+      }
   };
   
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -127,6 +130,9 @@ export default function Home() {
               >
                   {format(currentDate, 'MM/dd (E)', { locale: ja })}
               </Button>
+              <IconButton onClick={() => setCurrentDate(new Date())} size="small" sx={{ ml: 1, color: 'text.secondary' }}>
+                  <MyLocationIcon />
+              </IconButton>
               <CustomDatePicker 
                   open={showDatePicker}
                   onClose={() => setShowDatePicker(false)}
@@ -334,21 +340,21 @@ export default function Home() {
     {activeModal === 'IMMEDIATE_TASK' && (
         <ImmediateTaskFlow
             onClose={handleCloseModal}
-            onSuccess={() => { handleCloseModal(); setRefreshTrigger(prev => prev + 1); }}
+            onSuccess={handleCloseModal}
             initialDate={currentDate}
         />
     )}
     {activeModal === 'IMMEDIATE_EVENT' && (
         <ImmediateEventFlow
             onClose={handleCloseModal}
-            onSuccess={() => { handleCloseModal(); setRefreshTrigger(prev => prev + 1); }}
+            onSuccess={handleCloseModal}
             initialDate={currentDate}
         />
     )}
     {activeModal === 'IMMEDIATE_ALARM' && (
         <ImmediateAlarmFlow
             onClose={handleCloseModal}
-            onSuccess={() => { handleCloseModal(); setRefreshTrigger(prev => prev + 1); }}
+            onSuccess={handleCloseModal}
             initialDate={currentDate}
         />
     )}

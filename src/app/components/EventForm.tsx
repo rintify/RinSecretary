@@ -16,7 +16,7 @@ interface EventFormProps {
     eventId?: string;
     initialValues?: any;
     initialStartTime?: string;
-    onSuccess?: () => void;
+    onSuccess?: (date?: Date) => void;
     isModal?: boolean;
     initialDate?: Date;
 }
@@ -181,7 +181,7 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                 });
             }
             
-            if (onSuccess) onSuccess();
+            if (onSuccess) onSuccess(getDisplayDate(startTime));
             else {
                 router.push('/');
                 router.refresh();

@@ -9,7 +9,7 @@ import { ALARM_COLOR } from '../../utils/colors';
 
 interface ImmediateAlarmFlowProps {
     onClose: () => void;
-    onSuccess: () => void;
+    onSuccess: (date?: Date) => void;
     initialDate?: Date;
 }
 
@@ -36,7 +36,7 @@ export default function ImmediateAlarmFlow({ onClose, onSuccess, initialDate = n
                 time: time,
                 comment: ''
             });
-            onSuccess();
+            onSuccess(time);
         } catch (e) {
             console.error(e);
             alert('Error creating alarm');

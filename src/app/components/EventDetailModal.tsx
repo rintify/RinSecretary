@@ -1,7 +1,7 @@
-import React from 'react';
 import { Box, Typography, IconButton } from '@mui/material';
-import { Edit as EditIcon, Close as CloseIcon, AccessTime as TimeIcon } from '@mui/icons-material';
-import { format } from 'date-fns';
+import { Edit as EditIcon, Close as CloseIcon, AccessTime as TimeIcon, Notifications as BellIcon } from '@mui/icons-material';
+import { format, subMinutes } from 'date-fns';
+import { createAlarm } from '@/lib/alarm-actions';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
@@ -47,6 +47,22 @@ export default function EventDetailModal({ event, onClose, onEdit }: EventDetail
                      <Typography variant="body1">
                          {format(new Date(event.startTime), 'HH:mm')} - {format(new Date(event.endTime), 'HH:mm')}
                      </Typography>
+                     <IconButton 
+                        size="small" 
+                        onClick={() => {
+                            if (event.startTime) {
+                                const alarmTime = subMinutes(new Date(event.startTime), 5);
+                                createAlarm({
+                                    title: `[Re] ${event.title}`,
+                                    time: alarmTime,
+                                });
+                                // Maybe show a toast or feedback? For now just action.
+                                // Revalidate path is in server action, so UI should update if showing alarms.
+                            }
+                        }}
+                    >
+                        <BellIcon fontSize="small" color="action" />
+                    </IconButton>
                  </Box>
              )}
 

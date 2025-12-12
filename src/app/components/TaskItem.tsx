@@ -1,6 +1,7 @@
 import React from 'react';
 import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR } from '../utils/colors';
 import { format, differenceInCalendarDays, differenceInHours, differenceInMinutes } from 'date-fns';
+import { ja } from 'date-fns/locale';
 import { Card, CardContent, Typography, Box, CardActionArea, LinearProgress, Chip, keyframes } from '@mui/material';
 import { AccessTime as ClockIcon, Event as CalendarIcon } from '@mui/icons-material';
 import { isSameDay } from 'date-fns'; // Using library isSameDay to be cleaner or just use the local one? Local one is defined below. I'll stick to local or import. Actually I should check if isSameDay is imported. It is not. I'll insert it or use local.
@@ -59,8 +60,42 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
   // Warning: <= 3 days
   const isWarning = daysUntilDeadline !== null && daysUntilDeadline <= 3 && daysUntilDeadline >= 0 && !isDone;
   
-  // Urgent: Within 24 hours
-  const isUrgent = minutesUntilDeadline !== null && minutesUntilDeadline < 1440 && minutesUntilDeadline >= 0 && !isDone;
+  // Urgent (Red Border & Blink) Logic
+  // User Request Step 109: 
+  // - If Duration <= 24h: Urgent if remaining <= 1/8 of duration.
+  // - If Duration > 24h: Urgent if remaining <= 24h.
+  
+  let isUrgent = false;   
+  // Note: Previous "shouldBlink" is now merged back into isUrgent because user treats "Red Border & Blink" as the "Urgent State".
+  
+  if (isTask && task.deadline && minutesUntilDeadline !== null && minutesUntilDeadline >= 0 && !isDone) {
+      if (task.startDate) {
+          const start = new Date(task.startDate);
+          const end = new Date(task.deadline);
+          const durationMinutes = differenceInMinutes(end, start);
+          
+          if (durationMinutes <= 1440) {
+              // Short Task (<= 24h)
+              // User Request Step 123: "In case of 1 day, make it within 1 hour instead of 1/8"
+              // Condition: Remaining <= 60 minutes
+              if (minutesUntilDeadline <= 180) {
+                  isUrgent = true;
+              }
+          } else {
+              // Long Task (> 24h)
+              // Condition: Remaining <= 24h (1440 mins)
+              if (minutesUntilDeadline <= 1440) {
+                  isUrgent = true;
+              }
+          }
+      } else {
+          // Fallback if no start date
+          // Default to "Urgent if < 24h" logic?
+          if (minutesUntilDeadline < 1440) {
+             isUrgent = true;
+          }
+      }
+  }
 
   // Chip Label Logic
   let chipLabel = '';
@@ -73,7 +108,7 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
           const hours = Math.floor(minutesUntilDeadline / 60);
           chipLabel = `あと${hours}時間！`;
       } else {
-          chipLabel = `${daysUntilDeadline}日前`;
+          chipLabel = `あと${daysUntilDeadline}日`;
       }
   }
 
@@ -87,8 +122,9 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
   
   // Warning only if view is Today
   const showWarning = isWarning && isViewToday;
-  // Urgent only if view is Today
+  // Urgent/Blink only if view is Today
   const showUrgent = isUrgent && isViewToday;
+  // const showBlink = shouldBlink && isViewToday; // Merged into showUrgent
 
   const getDayTimeDisplay = () => {
       // Logic for Event (range) or Alarm (point)
@@ -120,7 +156,7 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
 
   const getDeadlineDisplay = () => {
     if (!task.deadline) return null;
-    return format(new Date(task.deadline), 'MM/dd HH:mm');
+    return format(new Date(task.deadline), 'MM/dd(eee) HH:mm', { locale: ja });
   }
 
   // Colors
@@ -131,7 +167,9 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
   let borderColor = '#e0e0e0'; // default
   if (isTask) {
       if (isDone) borderColor = '#9e9e9e';
-      else if (isUrgent) borderColor = '#f44336';
+      else if (showUrgent) borderColor = '#f44336'; // Use showUrgent to respect "Today" view? Or just 'isUrgent'? Original was 'isUrgent'. But 'showUrgent = isUrgent && isViewToday'. 
+      // If I view "Tomorrow" list, tasks due tomorrow (Duration<24h) might be red?
+      // "showUrgent" is safer for "Today" emphasis.
       else borderColor = TASK_COLOR; 
   } else if (isAlarm) {
       borderColor = ALARM_COLOR; 
@@ -195,7 +233,7 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
                   <Box display="flex" alignItems="center" gap={0.5} sx={{ opacity: 0.9 }}>
                     <CalendarIcon sx={{ fontSize: 12 }} />
                     <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
-                        Limit: {getDeadlineDisplay()}
+                        {getDeadlineDisplay()}
                     </Typography>
                   </Box>
               )}

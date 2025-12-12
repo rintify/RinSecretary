@@ -14,7 +14,7 @@ interface AlarmFormProps {
     alarmId?: string;
     initialValues?: any;
     initialTime?: string;
-    onSuccess?: () => void;
+    onSuccess?: (date?: Date) => void;
     isModal?: boolean;
     initialDate?: Date;
 }
@@ -145,7 +145,7 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
                 });
             }
             
-            if (onSuccess) onSuccess();
+            if (onSuccess) onSuccess(getDisplayDate(time));
             else {
                 router.push('/');
                 router.refresh();

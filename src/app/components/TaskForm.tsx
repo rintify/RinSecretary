@@ -14,11 +14,12 @@ import { useTimeRange } from '../hooks/useTimeRange';
 
 interface TaskFormProps {
     taskId?: string;
-    onSuccess?: () => void;
+    onSuccess?: (date?: Date) => void;
     isModal?: boolean;
     initialValues?: any;
     initialDate?: Date;
 }
+
 
 interface ChecklistItem {
     text: string;
@@ -236,7 +237,7 @@ export default function TaskForm(props: TaskFormProps) {
             });
 
             if (res.ok) {
-                if (onSuccess) onSuccess();
+                if (onSuccess) onSuccess(getDisplayDate(startDate));
                 else {
                     router.push('/');
                     router.refresh();

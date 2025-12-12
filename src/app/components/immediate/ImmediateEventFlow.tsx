@@ -11,7 +11,7 @@ import { EVENT_COLOR } from '../../utils/colors';
 
 interface ImmediateEventFlowProps {
     onClose: () => void;
-    onSuccess: () => void;
+    onSuccess: (date?: Date) => void;
     initialDate?: Date;
 }
 
@@ -46,7 +46,7 @@ export default function ImmediateEventFlow({ onClose, onSuccess, initialDate = n
                 endTime: endTime,
                 memo: ''
             });
-            onSuccess();
+            onSuccess(startTime);
         } catch (e) {
             console.error(e);
             alert('Error creating event');

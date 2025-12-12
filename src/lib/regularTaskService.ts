@@ -24,56 +24,55 @@ export async function generateRegularTasks(forceDate?: Date) {
 
                 if (config.type === 'DAILY') {
                     shouldCreate = true;
-                    // Force time to be based on 4:00 AM logic for consistency?
-                    // If running at 12:00, dateStr is today.
-                    // If running at 23:00, dateStr is today.
-                    // The "Daily Task" is technically for "Today" (starts 4:00 AM).
-                    // If we run at 3:00 AM, dateStr is today, but maybe it should be considered "Yesterday's task"?
-                    // Scheduler runs at 4:00 AM.
-                    // Let's assume dateStr is local date.
-                    const dateStr = now.toISOString().split('T')[0];
-                    title = `Daily Task (${dateStr})`;
+                    // Format: Daily Task M月d日
+                    // Example: Daily Task 12月12日
+                    const month = now.getMonth() + 1;
+                    const day = now.getDate();
+                    title = `Daily Task ${month}月${day}日`;
                     
                     // Deadline: Tomorrow 03:59
-                    // If now is 12:00, deadline should be tomorrow 3:59.
-                    // If now is 23:00, deadline should be tomorrow 3:59.
-                    // Logic: deadline = now + 1 day, then set 3:59.
-                    // Wait, if I run at 4:00 AM today, deadline is tomorrow 3:59 AM.
-                    // If I run at 12:00 PM today, deadline is tomorrow 3:59 AM.
                     const d = new Date(now);
                     d.setDate(d.getDate() + 1);
                     d.setHours(3, 59, 0, 0);
                     deadline = d;
 
                 } else if (config.type === 'WEEKLY') {
-                    // Monday = 1
-                    // If manual generation, we might want to respect "This Week" logic.
-                    // If today is Monday, generate.
-                    // If today is NOT Monday, standard scheduler skips.
-                    // BUT "Generate Button" might imply "Force Generate".
-                    // User said "generate button ... to generate".
-                    // If I force generate, maybe I WANT the weekly task even if it's Tuesday?
-                    // Let's stick to strict day check for now to match scheduler behavior unless forced?
-                    // "Generate" button implies "Do what the scheduler would do, but NOW".
-                    // If scheduler wouldn't do it because it's Tuesday, then maybe we shouldn't?
-                    // But then nothing happens.
-                    // Let's relax the day check if forceDate (manual trigger) is implicitly answering "I want it".
-                    // But I don't have a specific "isManual" flag passed easily yet other than context.
-                    // Let's just stick to "Check Day" for consistency. If user wants to test Monday task, change date?
-                    // Actually, if I'm testing, I might want to see if it works.
-                    // PROPOSAL: If config.type == WEEKLY, only check day if NOT manual? 
-                    // Let's stick to strict logic: Only Monday.
+                    // Logic: Always generate for "This Week" (anchored to Monday)
+                    // This allows manual generation button to work any day.
                     
-                    if (now.getDay() === 1) {
-                         shouldCreate = true;
-                         const dateStr = now.toISOString().split('T')[0];
-                         title = `Weekly Task (${dateStr})`;
-                         // Deadline: Next Monday 03:59 (7 days later)
-                         const d = new Date(now);
-                         d.setDate(d.getDate() + 7);
-                         d.setHours(3, 59, 0, 0);
-                         deadline = d;
-                    }
+                    // Get Monday of this week
+                    const day = now.getDay();
+                    const diffToMonday = (day === 0 ? -6 : 1) - day; // 1 (Mon) - day. If Sun (0), 1-0=1 (wrong, want -6).
+                    // Sun(0) -> -6. Mon(1) -> 0. Tue(2) -> -1. ... Sat(6) -> -5.
+                    
+                    const mondayDate = new Date(now);
+                    mondayDate.setDate(now.getDate() + (day === 0 ? -6 : 1 - day));
+                    
+                    // Determine Week Number of the Month
+                    // Simple "Week of Month": ceil(date / 7)? No, "第N週" usually implies Week n in calendar rows.
+                    // Let's use simple logic: Week 1 starts on Day 1.
+                    // Or standard logic: First Monday is start of Week 2?
+                    // User request: "◯月 第◯週"
+                    // Let's rely on date-fns getWeekOfMonth if available, or simple math.
+                    // Math: (Date + DayOfFirstDay - 1) / 7 ??
+                    // Simple approximation: Math.ceil(mondayDate.getDate() / 7)
+                    // E.g. 1st (Mon) -> Week 1. 2nd (Tue) -> Week 1. 
+                    // 7th (Sun) -> Week 1. 8th (Mon) -> Week 2.
+                    // This works if we assume Week starts on specific day or just chunks of 7.
+                    // Let's Use: Math.ceil((mondayDate.getDate() - 1 + new Date(mondayDate.getFullYear(), mondayDate.getMonth(), 1).getDay()) / 7) ? Too complex?
+                    // Let's use simple Math.ceil(mondayDate.getDate() / 7) based on the Monday date.
+                    const weekNum = Math.ceil(mondayDate.getDate() / 7);
+                    
+                    const month = mondayDate.getMonth() + 1;
+                    title = `Weekly Task ${month}月 第${weekNum}週`;
+
+                    shouldCreate = true;
+                    
+                    // Deadline: Next Monday 03:59 (7 days after THIS Monday)
+                    const d = new Date(mondayDate);
+                    d.setDate(d.getDate() + 7);
+                    d.setHours(3, 59, 0, 0);
+                    deadline = d;
                 }
 
                 if (shouldCreate) {
