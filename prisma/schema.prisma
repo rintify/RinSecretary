@@ -25,6 +25,7 @@ model User {
   tasks     Task[]
   alarms    Alarm[]
   palette   EventPalette?
+  regularTasks RegularTaskConfig[]
 }
 
 model Account {
@@ -104,4 +105,15 @@ model Alarm {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model RegularTaskConfig {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // "DAILY" | "WEEKLY"
+  checklist String   @default("[]") // JSON string
+  isPaused  Boolean  @default(false)
+
+  @@unique([userId, type])
 }

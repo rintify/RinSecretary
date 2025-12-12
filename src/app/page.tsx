@@ -11,6 +11,7 @@ import EventDetailModal from './components/EventDetailModal';
 import AlarmForm from './components/AlarmForm';
 import AlarmDetailModal from './components/AlarmDetailModal';
 import SettingsModal from './components/SettingsModal';
+import RegularTaskSettingsModal from './components/RegularTaskSettingsModal';
 import FreeTimeModal from './components/FreeTimeModal';
 import { Suspense } from 'react';
 import { IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Tooltip, Button, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
@@ -32,7 +33,7 @@ export default function Home() {
 
   // Modal State
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM'>('NONE');
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS'>('NONE');
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
   const handleNewTask = () => {
@@ -161,6 +162,12 @@ export default function Home() {
                           <SettingsIcon fontSize="small" />
                       </ListItemIcon>
                       <ListItemText>設定</ListItemText>
+                  </MenuItem>
+                  <MenuItem onClick={() => { handleMenuClose(); setActiveModal('REGULAR_TASK_SETTINGS'); }}>
+                      <ListItemIcon>
+                           <TaskIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText>定期タスク設定</ListItemText>
                   </MenuItem>
               </Menu>
           </Box>
@@ -306,6 +313,11 @@ export default function Home() {
                 )}
                 {activeModal === 'SETTINGS' && (
                     <SettingsModal
+                        onClose={handleCloseModal}
+                    />
+                )}
+                {activeModal === 'REGULAR_TASK_SETTINGS' && (
+                    <RegularTaskSettingsModal
                         onClose={handleCloseModal}
                     />
                 )}

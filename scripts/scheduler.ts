@@ -1,4 +1,4 @@
-
+import { generateRegularTasks } from '../src/lib/regularTaskService';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -59,6 +59,24 @@ async function checkAlarms() {
     }
 }
 
+
+async function checkRegularTasks() {
+    const now = new Date();
+    // Check if it is 04:00 (allow a small window like 04:00 - 04:01)
+    if (now.getHours() !== 4 || now.getMinutes() !== 0) {
+        return;
+    }
+
+    console.log('Running Regular Task Scheduler...', now.toISOString());
+    
+    // Call shared logic
+    await generateRegularTasks(now);
+}
+
 // Run immediately then every minute
 checkAlarms();
-setInterval(checkAlarms, 60 * 1000);
+checkRegularTasks();
+setInterval(() => {
+    checkAlarms();
+    checkRegularTasks();
+}, 60 * 1000);
