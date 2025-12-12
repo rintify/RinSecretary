@@ -56,3 +56,27 @@ export async function getPushoverSettings() {
 
   return user;
 }
+
+import { sendPushoverNotification } from './pushover';
+
+export async function sendTestPushoverNotification(userKey: string, token: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  try {
+      const response = await sendPushoverNotification({
+          userKey: userKey,
+          token: token,
+          title: `Test Notification`,
+          message: 'This is a test notification from RinSecretary.'
+      });
+      
+      if (!response.success) {
+          throw new Error(response.error);
+      }
+      return { success: true };
+  } catch (e: any) {
+      console.error('Failed to send test notification:', e);
+      return { success: false, error: e.message };
+  }
+}

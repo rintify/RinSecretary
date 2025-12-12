@@ -175,6 +175,19 @@ export default function Home() {
                       </ListItemIcon>
                       <ListItemText>定期タスク設定</ListItemText>
                   </MenuItem>
+                  <MenuItem onClick={async () => { 
+                      handleMenuClose(); 
+                      const { logout } = await import('@/lib/actions');
+                      await logout();
+                  }}>
+                      <ListItemIcon>
+                           <Box sx={{ color: 'error.main', display: 'flex' }}>
+                               <SettingsIcon fontSize="small" sx={{ opacity: 0 }} /> {/* Spacer */}
+                               {/* Or import Logout icon? Let's keep it simple or allow standard text */}
+                           </Box>
+                      </ListItemIcon>
+                      <ListItemText primaryTypographyProps={{ color: 'error' }}>ログアウト</ListItemText>
+                  </MenuItem>
               </Menu>
           </Box>
       </Box>

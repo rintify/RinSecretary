@@ -1,6 +1,7 @@
 import { generateRegularTasks } from '../src/lib/regularTaskService';
 import { getGoogleCalendarEvents } from '../src/lib/google';
 import { PrismaClient } from '@prisma/client';
+import { sendPushoverNotification } from '../src/lib/pushover';
 
 const prisma = new PrismaClient();
 
@@ -30,26 +31,27 @@ async function checkAlarms() {
             }
 
             try {
-                const response = await fetch('https://api.pushover.net/1/messages.json', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        token: alarm.user.pushoverToken,
-                        user: alarm.user.pushoverUserKey,
-                        title: `Alarm: ${alarm.title}`,
-                        message: alarm.comment || 'Time is up!',
-                        sound: 'pushover',
-                    }),
+                // Format time: HH:mm
+                const timeStr = new Date(alarm.time).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+                const baseMessage = `${timeStr} ${alarm.comment || ''}`;
+                // Truncate to 50 chars
+                const message = baseMessage.length > 50 ? baseMessage.substring(0, 47) + '...' : baseMessage;
+
+                const response = await sendPushoverNotification({
+                    userKey: alarm.user.pushoverUserKey,
+                    token: alarm.user.pushoverToken,
+                    title: alarm.title || 'Alarm',
+                    message: message
                 });
 
-                if (response.ok) {
+                if (response.success) {
                     console.log(`Sent notification for alarm ${alarm.id}`);
                     await prisma.alarm.update({
                         where: { id: alarm.id },
                         data: { isSent: true },
                     });
                 } else {
-                    console.error(`Failed to send Pushover for alarm ${alarm.id}: ${response.statusText}`);
+                    console.error(`Failed to send Pushover for alarm ${alarm.id}: ${response.error}`);
                 }
             } catch (err) {
                 console.error(`Error sending notification for alarm ${alarm.id}:`, err);

@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Box, Button, TextField, Typography, Alert, CircularProgress } from '@mui/material';
-import { getPushoverSettings, updatePushoverSettings } from '@/lib/user-actions';
+import { Box, Button, TextField, Typography, Alert, CircularProgress, IconButton } from '@mui/material';
+import { getPushoverSettings, updatePushoverSettings, sendTestPushoverNotification } from '@/lib/user-actions';
+import { NotificationsActive as TestIcon } from '@mui/icons-material';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -17,7 +18,8 @@ const [userKey, setUserKey] = useState('');
     const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
+    const [testing, setTesting] = useState(false);
+    const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null);
 
     // Cache settings in module scope to avoid re-fetching on every open
     useEffect(() => {
@@ -115,19 +117,28 @@ const [userKey, setUserKey] = useState('');
                     {saving ? 'Saving...' : 'Save Settings'}
                 </Button>
             </Box>
-
-            <Box sx={{ mt: 2, borderTop: 1, borderColor: 'divider', pt: 2 }}>
-                 <Button 
-                    variant="outlined" 
-                    color="error" 
-                    fullWidth 
+            
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                 <Button
                     onClick={async () => {
-                        const { logout } = await import('@/lib/actions');
-                        await logout();
+                        setTesting(true);
+                        setMessage(null);
+                        const res = await sendTestPushoverNotification(userKey, token);
+                        if (res.success) {
+                             setMessage({ text: 'Test notification sent!', type: 'success' });
+                        } else {
+                             setMessage({ text: 'Failed to send test: ' + res.error, type: 'error' });
+                        }
+                        setTesting(false);
                     }}
-                >
-                    Logout
-                </Button>
+                    disabled={testing || !userKey || !token}
+                    startIcon={testing ? <CircularProgress size={20} /> : <TestIcon />}
+                    variant="outlined"
+                    color="primary"
+                    fullWidth
+                 >
+                    Test Notification
+                 </Button>
             </Box>
         </Box>
     );

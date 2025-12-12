@@ -10,6 +10,7 @@
     "test:timezone": "TZ=Asia/Tokyo tsx tests/timezone.test.ts",
     "test:e2e": "TZ=Asia/Tokyo tsx tests/time-e2e.test.ts",
     "test:time": "TZ=Asia/Tokyo tsx tests/timezone.test.ts && TZ=Asia/Tokyo tsx tests/time-e2e.test.ts",
+    "scheduler": "tsx scripts/scheduler.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

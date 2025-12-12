@@ -27,7 +27,8 @@ RUN npx prisma generate
 
 # Compile the scheduler script
 # Using npx tsc to compile the specific file to JS
-RUN npx tsc scripts/scheduler.ts --esModuleInterop --module commonjs --target es2017 --skipLibCheck --moduleResolution node
+# Using esbuild to bundle dependencies (excluding binary prisma client)
+RUN npx esbuild scripts/scheduler.ts --bundle --platform=node --target=node20 --outfile=scripts/scheduler.js --external:@prisma/client
 
 RUN npm run build
 
