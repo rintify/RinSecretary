@@ -5,8 +5,11 @@ import { NextResponse } from 'next/server';
 export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user?.email) {
+    console.log('[API Tasks] Unauthorized: No session or email');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  console.log('[API Tasks] Request from:', session.user.email);
 
   const { searchParams } = new URL(request.url);
   const start = searchParams.get('start');
@@ -18,6 +21,7 @@ export async function GET(request: Request) {
     });
 
     if (!user) {
+      console.log('[API Tasks] User not found for email:', session.user.email);
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 

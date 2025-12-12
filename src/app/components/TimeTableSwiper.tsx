@@ -25,8 +25,8 @@ interface TimeTableSwiperProps {
 // 0 to 2000 => Center at 1000.
 // +/- 1000 days (approx 2.7 years) is enough for session.
 // If outside, we could reset, but let's assume it's enough.
-const VIRTUAL_RANGE = 2000;
-const INITIAL_INDEX = 1000;
+const VIRTUAL_RANGE = 30;
+const INITIAL_INDEX = 15;
 
 export default function TimeTableSwiper({
     currentDate,

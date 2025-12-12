@@ -20,6 +20,7 @@ model User {
   
   pushoverUserKey String?
   pushoverToken   String?
+  discordWebhookUrl String?
 
   createdAt DateTime @default(now())
   tasks     Task[]

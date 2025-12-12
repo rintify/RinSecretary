@@ -216,12 +216,16 @@ export default function TimeTable({
 
   const fetchTasks = async () => {
     try {
+        console.log('[TimeTable] Fetching tasks...');
         const res = await fetch('/api/tasks');
         if (res.ok) {
             const data = await res.json();
+            console.log('[TimeTable] Fetched tasks:', data);
             setTasks(data);
+        } else {
+            console.error('[TimeTable] Failed to fetch tasks:', res.status, res.statusText);
         }
-    } catch(e) { console.error(e) }
+    } catch(e) { console.error('[TimeTable] Fetch error:', e) }
   };
 
   const loadGoogleEvents = async () => {

@@ -4,7 +4,7 @@ import { devAuth as auth } from '@/lib/dev-auth';
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 
-export async function updatePushoverSettings(userKey: string, token: string) {
+export async function updatePushoverSettings(userKey: string, token: string, discordWebhookUrl?: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -13,6 +13,7 @@ export async function updatePushoverSettings(userKey: string, token: string) {
     data: {
       pushoverUserKey: userKey,
       pushoverToken: token,
+      discordWebhookUrl: discordWebhookUrl,
     },
   });
 }
@@ -26,6 +27,7 @@ export async function getPushoverSettings() {
     select: {
       pushoverUserKey: true,
       pushoverToken: true,
+      discordWebhookUrl: true,
     },
   });
 

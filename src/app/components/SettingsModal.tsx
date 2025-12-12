@@ -9,11 +9,12 @@ interface SettingsModalProps {
 }
 
 // Module-level cache
-let settingsCache: { pushoverUserKey: string | null; pushoverToken: string | null; } | null = null;
+let settingsCache: { pushoverUserKey: string | null; pushoverToken: string | null; discordWebhookUrl: string | null; } | null = null;
 
 export default function SettingsModal({ onClose }: SettingsModalProps) {
 const [userKey, setUserKey] = useState('');
     const [token, setToken] = useState('');
+    const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
@@ -23,6 +24,7 @@ const [userKey, setUserKey] = useState('');
         if (settingsCache) {
             setUserKey(settingsCache.pushoverUserKey || '');
             setToken(settingsCache.pushoverToken || '');
+            setDiscordWebhookUrl(settingsCache.discordWebhookUrl || '');
             setLoading(false);
         }
 
@@ -39,6 +41,7 @@ const [userKey, setUserKey] = useState('');
                 // If we already showed cache, do we want to overwrite? Yes, in case it changed elsewhere.
                 setUserKey(settings.pushoverUserKey || '');
                 setToken(settings.pushoverToken || '');
+                setDiscordWebhookUrl(settings.discordWebhookUrl || '');
             }
             setLoading(false);
         });
@@ -49,9 +52,9 @@ const [userKey, setUserKey] = useState('');
         setSaving(true);
         setMessage(null);
         try {
-            await updatePushoverSettings(userKey, token);
+            await updatePushoverSettings(userKey, token, discordWebhookUrl);
             // Update cache
-            settingsCache = { pushoverUserKey: userKey, pushoverToken: token };
+            settingsCache = { pushoverUserKey: userKey, pushoverToken: token, discordWebhookUrl: discordWebhookUrl };
             
             setMessage({ text: 'Settings saved successfully!', type: 'success' });
             setTimeout(onClose, 1000);
@@ -85,6 +88,14 @@ const [userKey, setUserKey] = useState('');
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 fullWidth
+            />
+
+             <TextField 
+                label="Discord Webhook URL"
+                value={discordWebhookUrl}
+                onChange={(e) => setDiscordWebhookUrl(e.target.value)}
+                fullWidth
+                placeholder="https://discord.com/api/webhooks/..."
             />
 
             {message && (
