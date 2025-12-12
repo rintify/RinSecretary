@@ -36,6 +36,9 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
     const [isOutside, setIsOutside] = useState(false); // State to track lock mode
     const isOutsideRef = useRef(false); // Ref for synchronous logic
 
+    // State to track if user is interacting (dragging)
+    const [isInteracting, setIsInteracting] = useState(false);
+
     // Handle date selection from internal DatePicker
     const handleDateSelect = (newDate: Date) => {
         setCurrentDate(prev => {
@@ -53,6 +56,7 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
             lastAngle.current = null;
             setIsOutside(false);
             isOutsideRef.current = false;
+            setIsInteracting(false);
         }
     }, [open, value]);
 
@@ -90,7 +94,12 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
             const rect = containerRef.current.getBoundingClientRect();
             const radius = rect.width / 2;
             
-            if (distance > radius * 1.05 && !isFinal) {
+            // Activate Fixed Mode if dragging outside OR inside the track
+            // Track is at ~100% radius (knob center). 
+            // Outside: > 105%
+            // Inside: < 65% (Inner circle area)
+            const isInFixedZone = distance > radius * 1.05 || distance < radius * 0.65;
+            if (isInFixedZone && !isFinal) {
                 if (!isOutsideRef.current) {
                     setIsOutside(true);
                     isOutsideRef.current = true;
@@ -192,6 +201,7 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
         // Or check target.
         e.preventDefault();
         isDragging.current = true;
+        setIsInteracting(true);
         (e.target as Element).setPointerCapture(e.pointerId);
         // Initialize angle
          const { angle } = getAngleAndDistance(e.clientX, e.clientY);
@@ -208,6 +218,7 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
     const handlePointerUp = (e: React.PointerEvent) => {
         if (!isDragging.current) return;
         isDragging.current = false;
+        setIsInteracting(false);
         
         // If we were locked (outside), confirm the current stable value instead of updating to the pointer position
         if (isOutsideRef.current) {
@@ -258,7 +269,7 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
             }}
         >
              {guideMessage && <GuideBubble message={guideMessage} />}
-            <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', overflow: 'hidden' }}>
+            <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', overflow: 'visible' }}>
                 <Box 
                     ref={containerRef}
                     onPointerDown={handlePointerDown}
@@ -319,12 +330,12 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
                         />
                     </svg>
 
-                    {/* Center Text - Clickable */}
+                    {/* Static Center Text (Always Visible) */}
                     <Box 
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
                             e.stopPropagation();
-                            if (showDate) setShowDatePicker(true);
+                            if (showDate && !isInteracting) setShowDatePicker(true);
                         }}
                         sx={{
                             position: 'absolute',
@@ -348,6 +359,52 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
                             </Typography>
                         )}
                         <Typography variant="h3" fontWeight="bold" sx={{ color: mainColor }}>
+                            {format(currentDate, 'HH:mm')}
+                        </Typography>
+                    </Box>
+
+                    {/* Dynamic Bubble (Visible only when interacting) */}
+                    <Box 
+                        sx={{
+                            position: 'absolute',
+                            // Instant follow position, smooth opacity fade
+                            transition: isInteracting ? 'opacity 0.2s ease-in' : 'opacity 0.2s ease-out',
+                            top: `${(knobY / SIZE) * 100}%`,
+                            left: `${(knobX / SIZE) * 100}%`,
+                            transform: 'translate(-50%, -130%)',
+                            
+                            opacity: isInteracting ? 1 : 0,
+                            pointerEvents: 'none', // Pass through clicks
+                            userSelect: 'none',
+                            
+                            textAlign: 'center',
+                            px: 2,
+                            py: 1,
+                            borderRadius: 2,
+                            bgcolor: theme.palette.background.paper,
+                            boxShadow: theme.shadows[8],
+                            border: `1px solid ${theme.palette.divider}`,
+                            zIndex: 1500, // Above guide bubble
+                            
+                            // Bubble arrow
+                            '&::after': {
+                                content: '""',
+                                position: 'absolute',
+                                bottom: -8,
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                                borderWidth: '8px 8px 0 8px',
+                                borderStyle: 'solid',
+                                borderColor: `${theme.palette.background.paper} transparent transparent transparent`,
+                            }
+                        }}
+                    >
+                        {showDate && (
+                            <Typography variant="body2" color="text.secondary" fontWeight="bold">
+                                {format(currentDate, 'M/d(E)', { locale: ja })}
+                            </Typography>
+                        )}
+                        <Typography variant="h4" fontWeight="bold" sx={{ color: mainColor, lineHeight: 1.2 }}>
                             {format(currentDate, 'HH:mm')}
                         </Typography>
                     </Box>

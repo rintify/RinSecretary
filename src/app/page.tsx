@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Event as EventIcon, TaskAlt as TaskIcon } from '@mui/icons-material';
-import { format } from 'date-fns';
+import { format, isSameDay } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import TaskForm from './components/TaskForm';
 import EventForm from './components/EventForm';
@@ -266,7 +266,7 @@ export default function Home() {
                     <TaskForm 
                         onSuccess={handleCloseModal} 
                         isModal
-                        initialDate={currentDate}
+                        initialDate={isSameDay(currentDate, new Date()) ? new Date() : currentDate}
                     />
                 )}
                 {activeModal === 'EDIT_TASK' && (
@@ -282,7 +282,7 @@ export default function Home() {
                         initialStartTime={modalData?.startTime}
                         onSuccess={handleCloseModal}
                         isModal
-                        initialDate={currentDate}
+                        initialDate={isSameDay(currentDate, new Date()) ? new Date() : currentDate}
                      />
                 )}
                 {activeModal === 'EDIT_EVENT' && (
@@ -312,7 +312,7 @@ export default function Home() {
                     <AlarmForm
                         onSuccess={handleCloseModal}
                         isModal
-                        initialDate={currentDate}
+                        initialDate={isSameDay(currentDate, new Date()) ? new Date() : currentDate}
                     />
                 )}
                 {activeModal === 'EDIT_ALARM' && (
@@ -354,21 +354,21 @@ export default function Home() {
         <ImmediateTaskFlow
             onClose={handleCloseModal}
             onSuccess={handleCloseModal}
-            initialDate={currentDate}
+            initialDate={isSameDay(currentDate, new Date()) ? new Date() : currentDate}
         />
     )}
     {activeModal === 'IMMEDIATE_EVENT' && (
         <ImmediateEventFlow
             onClose={handleCloseModal}
             onSuccess={handleCloseModal}
-            initialDate={currentDate}
+            initialDate={isSameDay(currentDate, new Date()) ? new Date() : currentDate}
         />
     )}
     {activeModal === 'IMMEDIATE_ALARM' && (
         <ImmediateAlarmFlow
             onClose={handleCloseModal}
             onSuccess={handleCloseModal}
-            initialDate={currentDate}
+            initialDate={isSameDay(currentDate, new Date()) ? new Date() : currentDate}
         />
     )}
 
