@@ -6,7 +6,26 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Timezone & E2E Tests
+        run: npm run test:time
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -94,15 +113,22 @@ jobs:
             # Fix permissions using a temporary container (avoids host permission issues)
             docker run --rm -v "$(pwd)/data:/data" alpine sh -c "mkdir -p /data/uploads && chown -R 1001:1001 /data && chmod -R 777 /data"
 
-            # 6. Backup Database Before Deploy (if container exists)
-            if docker compose -f deploy/docker-compose.yml ps --quiet 2>/dev/null | grep -q .; then
+            # 6. Backup Database Before Deploy (if database file exists)
+            if [ -f "data/sqlite.db" ]; then
               echo "Backing up database before deploy..."
-              docker compose -f deploy/docker-compose.yml exec -T app npx tsx scripts/backup-db.ts || echo "Backup failed or skipped (may be first deploy)"
+              curl -F "file=@data/sqlite.db;filename=backup_$(date +%Y%m%d_%H%M%S).db" \
+                   -F "content=📦 **Database Backup** - $(date '+%Y/%m/%d %H:%M:%S JST')" \
+                   "${{ secrets.ADMIN_DISCORD_WEBHOOK }}" || echo "Backup failed"
             else
-              echo "No existing container found, skipping backup (first deploy)"
+              echo "No database file found, skipping backup (first deploy)"
             fi
 
             # 7. Pull latest image and restart
             docker compose -f deploy/docker-compose.yml --env-file .env pull
             docker compose -f deploy/docker-compose.yml --env-file .env up -d --remove-orphans
             docker image prune -f
+
+            # 8. Notify admin on deploy completion
+            curl -H "Content-Type: application/json" \
+              -d "{\"content\": \"✅ **デプロイ完了** - $(date '+%Y/%m/%d %H:%M:%S JST')\\n\`${{ github.sha }}\`\"}" \
+              "${{ secrets.ADMIN_DISCORD_WEBHOOK }}" || echo "Admin notification failed"
