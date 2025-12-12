@@ -168,7 +168,17 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
         }
 
         // --- NORMAL MODE (Absolute Position) ---
-        const totalMinutes = Math.round((currentAngle / 360) * 1440 / 5) * 5;
+        let totalMinutes = Math.round((currentAngle / 360) * 1440 / 5) * 5;
+        
+        // Fix: Prevent snapping to "Today 24:00" (which is Today 0:00) at the very top.
+        // We want 0 degrees to be handled by dayChange logic (becoming Tomorrow 0:00).
+        // If we are strictly at the top (360 -> 1440), clamp to 23:55 so it feels like "end of day".
+        // The dayChange logic (+1 day) kicks in when crossing the boundary, making 0 degrees = Tomorrow 0:00.
+        // Without this clamp, 360deg -> 1440min -> 24h -> 0h (Today).
+        if (totalMinutes === 1440) {
+            totalMinutes = 1439;
+        }
+
         const hours = Math.floor(totalMinutes / 60) % 24;
         const minutes = totalMinutes % 60;
 

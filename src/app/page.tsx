@@ -109,7 +109,11 @@ export default function Home() {
           borderColor: 'divider',
           bgcolor: 'background.paper',
           flexShrink: 0,
-          zIndex: 10
+          zIndex: 1200, // Elevated z-index
+          position: 'fixed', // Fixed position
+          top: 0,
+          left: 0,
+          right: 0
       }}>
           
           {/* Main Navigation Group: Date Left Aligned */}
@@ -193,7 +197,7 @@ export default function Home() {
       </Box>
       
       {/* Main Display with Swiper */}
-      <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+      <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative', mt: '60px', height: 'calc(100dvh - 60px)' }}>
           <TimeTableSwiper 
               currentDate={currentDate} 
               onDateChange={setCurrentDate}
