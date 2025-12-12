@@ -119,7 +119,17 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
              d1.getDate() === d2.getDate();
   };
   
-  const isViewToday = viewDate ? isSameDayFn(viewDate, new Date()) : true; 
+  // isViewToday: Check if "now" falls within the viewDate's 4am-4am business day window
+  const isViewToday = (() => {
+      if (!viewDate) return true;
+      const now = new Date();
+      // Business day for viewDate: viewDate 04:00 to viewDate+1 03:59:59
+      const dayStart = new Date(viewDate);
+      dayStart.setHours(4, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      return now >= dayStart && now < dayEnd;
+  })();
   
   // Warning only if view is Today
   const showWarning = isWarning && isViewToday;

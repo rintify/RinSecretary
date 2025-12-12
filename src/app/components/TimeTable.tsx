@@ -51,7 +51,7 @@ const DayColumn = ({
 }) => {
     
     // Filter Tasks for this day
-    const dayStart = startOfDay(date);
+    const dayStart = addHours(startOfDay(date), 4);
     const dayEnd = addHours(dayStart, 24);
 
     const dayTasks = tasks.filter(task => {
@@ -299,11 +299,13 @@ export default function TimeTable({
   }, [date, isClient]);
 
   // --- Logic for History & Sub-Header ---
-  const isToday = isSameDay(date, now);
   
   // Identify "History" items: Alarms/Events where end time < now.
-  const dayStart = startOfDay(date);
+  const dayStart = addHours(startOfDay(date), 4);
   const dayEnd = addHours(dayStart, 24);
+
+  // isToday means "now" is within this day's 4am-4am window
+  const isToday = now >= dayStart && now < dayEnd;
   
   const eventsForToday = allTasks.filter(task => {
       const tStart = task.startTime ? new Date(task.startTime) : null;
