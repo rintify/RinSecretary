@@ -81,37 +81,28 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
         return { angle: angleDeg, distance };
     };
 
+    const accumulatedRotationRef = useRef(0);
+
     const handleUpdate = useCallback((clientX: number, clientY: number, isFinal: boolean) => {
         const { angle, distance } = getAngleAndDistance(clientX, clientY);
-        
-        // Check for lock condition
-        // Radius is roughly 130px (280/2 - 10). Let's say Threshold is Radius + 20px = 150px (normalized to the SVG coordinate space or client pixels?)
-        // The Distance calculated above is in Client Pixels because rect is ClientRect.
-        // We need to know the scale.
-        // containerRef is 100% width, max 300px.
-        // Let's assume the container is roughly the size of the circle for simplicity of "outside" check.
-        // Better: Compare distance to the rect width/2.
         
         if (containerRef.current) {
             const rect = containerRef.current.getBoundingClientRect();
             const radius = rect.width / 2;
-            // Threshold: Outside the drawn circle area. 
-            // The drawing is inside SVG with padding. 
-            // Let's say if distance > radius, it's outside.
-            // User requested: "outside of the circle". 
-            // The circle radius is visual. 
-            // We can strictly check against radius * 1.0 (approx edge) or 1.1.
             
             if (distance > radius * 1.05 && !isFinal) {
                 if (!isOutsideRef.current) {
                     setIsOutside(true);
                     isOutsideRef.current = true;
+                    // Reset accumulation when entering fixed mode
+                    accumulatedRotationRef.current = 0;
                 }
-                return; // LOCKED: Do not update value
             } else {
                 if (isOutsideRef.current) {
                     setIsOutside(false);
                     isOutsideRef.current = false;
+                    // Reset accumulation when exiting fixed mode
+                    accumulatedRotationRef.current = 0;
                 }
             }
         }
@@ -119,35 +110,68 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
         const currentAngle = angle;
         
         let dayChange = 0;
-        
-        // Detect wrap around using Ref synchronously
+        let angleDelta = 0;
+
         if (lastAngle.current !== null) {
-            const delta = currentAngle - lastAngle.current;
-            if (delta < -180) {
-                // Crossover 360 -> 0 (Clockwise) -> Next Day
+            const rawDelta = currentAngle - lastAngle.current;
+            
+            // Day change detection for Absolute Mode
+            if (rawDelta < -180) {
                 dayChange = 1;
-            } else if (delta > 180) {
-                // Crossover 0 -> 360 (Counter-Clockwise) -> Prev Day
+            } else if (rawDelta > 180) {
                 dayChange = -1;
             }
+
+            // Normalization for Relative Mode calculation (shortest path)
+            angleDelta = rawDelta;
+            if (angleDelta < -180) angleDelta += 360;
+            if (angleDelta > 180) angleDelta -= 360;
         }
         
         lastAngle.current = currentAngle;
 
+        // --- FIXED MODE (Relative Rotation) ---
+        if (isOutsideRef.current && !isFinal) {
+            accumulatedRotationRef.current += angleDelta;
+
+            const THRESHOLD = 20; // 20 degrees
+            const MINUTES_PER_STEP = 5;
+
+            const steps = Math.trunc(accumulatedRotationRef.current / THRESHOLD);
+
+            if (steps !== 0) {
+                accumulatedRotationRef.current -= steps * THRESHOLD;
+                const minutesToAdd = steps * MINUTES_PER_STEP;
+
+                setCurrentDate(prev => {
+                    const newDate = new Date(prev.getTime() + minutesToAdd * 60000);
+                    
+                    if (isFinal) {
+                        setTimeout(() => {
+                            onChange(newDate);
+                            onClose();
+                        }, 0);
+                    }
+                    return newDate;
+                });
+            }
+            return;
+        }
+
+        // --- NORMAL MODE (Absolute Position) ---
         const totalMinutes = Math.round((currentAngle / 360) * 1440 / 5) * 5;
         const hours = Math.floor(totalMinutes / 60) % 24;
         const minutes = totalMinutes % 60;
 
-        // Calculate new date outside (for the purely functional update part, we just use the closure's dayChange)
-        // Actually we need 'prev' value to apply dayChange.
-        
-        // IMPORTANT: We need to set the state.
-        
         setCurrentDate(prev => {
             let newDate = new Date(prev);
+            
+            // Apply day change only if we have a valid previous angle tracking
+            // (If lastAngle was null, dayChange is 0, which is correct for initial touch)
             if (dayChange !== 0) {
                 newDate = dayChange > 0 ? addDays(newDate, dayChange) : subDays(newDate, Math.abs(dayChange));
             }
+            
             newDate.setHours(hours);
             newDate.setMinutes(minutes);
             
