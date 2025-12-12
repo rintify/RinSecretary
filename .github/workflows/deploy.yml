@@ -106,3 +106,8 @@ jobs:
             docker compose -f deploy/docker-compose.yml --env-file .env pull
             docker compose -f deploy/docker-compose.yml --env-file .env up -d --remove-orphans
             docker image prune -f
+
+            # 8. Notify admin on deploy completion
+            curl -H "Content-Type: application/json" \
+              -d "{\"content\": \"✅ **デプロイ完了** - $(date '+%Y/%m/%d %H:%M:%S JST')\\n\`${{ github.sha }}\`\"}" \
+              "${{ secrets.ADMIN_DISCORD_WEBHOOK }}" || echo "Admin notification failed"

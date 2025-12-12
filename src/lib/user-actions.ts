@@ -8,6 +8,14 @@ export async function updatePushoverSettings(userKey: string, token: string, dis
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
+  // Check if webhook URL has changed
+  const currentUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { discordWebhookUrl: true },
+  });
+
+  const webhookChanged = discordWebhookUrl && discordWebhookUrl !== currentUser?.discordWebhookUrl;
+
   await prisma.user.update({
     where: { id: session.user.id },
     data: {
@@ -16,6 +24,21 @@ export async function updatePushoverSettings(userKey: string, token: string, dis
       discordWebhookUrl: discordWebhookUrl,
     },
   });
+
+  // Send greeting message if webhook URL is newly set or changed
+  if (webhookChanged) {
+    try {
+      await fetch(discordWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: `💋 *ふふっ、ご登録ありがとうございます♪*\n\n私、RinSecretaryがあなたの秘書を務めさせていただきますわ。\n毎朝6時に、その日のご予定とタスクをお届けしますね。\n\nどうぞよろしくお願いいたします✨`,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to send greeting message:', e);
+    }
+  }
 }
 
 export async function getPushoverSettings() {
