@@ -33,6 +33,9 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
 
     const mainColor = accentColor || theme.palette.primary.main;
 
+    const [isOutside, setIsOutside] = useState(false); // State to track lock mode
+    const isOutsideRef = useRef(false); // Ref for synchronous logic
+
     // Handle date selection from internal DatePicker
     const handleDateSelect = (newDate: Date) => {
         setCurrentDate(prev => {
@@ -48,12 +51,14 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
         if (open) {
             setCurrentDate(value);
             lastAngle.current = null;
+            setIsOutside(false);
+            isOutsideRef.current = false;
         }
     }, [open, value]);
 
     // Calculate angle from center to point (0 degrees at top, clockwise)
-    const getAngle = (clientX: number, clientY: number) => {
-        if (!containerRef.current) return 0;
+    const getAngleAndDistance = (clientX: number, clientY: number) => {
+        if (!containerRef.current) return { angle: 0, distance: 0 };
         const rect = containerRef.current.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
@@ -70,11 +75,47 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
         let angleDeg = Math.atan2(y, x) * (180 / Math.PI);
         angleDeg += 90; 
         if (angleDeg < 0) angleDeg += 360;
-        return angleDeg;
+
+        const distance = Math.sqrt(x * x + y * y);
+
+        return { angle: angleDeg, distance };
     };
 
     const handleUpdate = useCallback((clientX: number, clientY: number, isFinal: boolean) => {
-        const angle = getAngle(clientX, clientY);
+        const { angle, distance } = getAngleAndDistance(clientX, clientY);
+        
+        // Check for lock condition
+        // Radius is roughly 130px (280/2 - 10). Let's say Threshold is Radius + 20px = 150px (normalized to the SVG coordinate space or client pixels?)
+        // The Distance calculated above is in Client Pixels because rect is ClientRect.
+        // We need to know the scale.
+        // containerRef is 100% width, max 300px.
+        // Let's assume the container is roughly the size of the circle for simplicity of "outside" check.
+        // Better: Compare distance to the rect width/2.
+        
+        if (containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            const radius = rect.width / 2;
+            // Threshold: Outside the drawn circle area. 
+            // The drawing is inside SVG with padding. 
+            // Let's say if distance > radius, it's outside.
+            // User requested: "outside of the circle". 
+            // The circle radius is visual. 
+            // We can strictly check against radius * 1.0 (approx edge) or 1.1.
+            
+            if (distance > radius * 1.05 && !isFinal) {
+                if (!isOutsideRef.current) {
+                    setIsOutside(true);
+                    isOutsideRef.current = true;
+                }
+                return; // LOCKED: Do not update value
+            } else {
+                if (isOutsideRef.current) {
+                    setIsOutside(false);
+                    isOutsideRef.current = false;
+                }
+            }
+        }
+
         const currentAngle = angle;
         
         let dayChange = 0;
@@ -128,7 +169,9 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
         e.preventDefault();
         isDragging.current = true;
         (e.target as Element).setPointerCapture(e.pointerId);
-        lastAngle.current = getAngle(e.clientX, e.clientY);
+        // Initialize angle
+         const { angle } = getAngleAndDistance(e.clientX, e.clientY);
+        lastAngle.current = angle;
         handleUpdate(e.clientX, e.clientY, false);
     };
 
@@ -141,7 +184,22 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
     const handlePointerUp = (e: React.PointerEvent) => {
         if (!isDragging.current) return;
         isDragging.current = false;
-        handleUpdate(e.clientX, e.clientY, true);
+        
+        // If we were locked (outside), confirm the current stable value instead of updating to the pointer position
+        if (isOutsideRef.current) {
+            setIsOutside(false);
+            isOutsideRef.current = false;
+            
+            setTimeout(() => {
+                onChange(currentDate);
+                onClose();
+            }, 0);
+        } else {
+            // Normal release - update to final position and confirm
+            setIsOutside(false);
+            isOutsideRef.current = false;
+            handleUpdate(e.clientX, e.clientY, true);
+        }
     };
 
     // Visualization
@@ -200,8 +258,9 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
                             cy={CENTER} 
                             r={RADIUS} 
                             fill="none" 
-                            stroke={theme.palette.action.selected} 
+                            stroke={isOutside ? mainColor : theme.palette.action.selected} 
                             strokeWidth="24" 
+                            style={{ transition: 'stroke 0.3s ease' }}
                         />
                         
                         {/* Tick Marks */}

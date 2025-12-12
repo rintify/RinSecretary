@@ -3,6 +3,7 @@ import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR } from '../utils/colors';
 import { format, differenceInCalendarDays, differenceInHours, differenceInMinutes } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Card, CardContent, Typography, Box, CardActionArea, LinearProgress, Chip, keyframes } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { AccessTime as ClockIcon, Event as CalendarIcon } from '@mui/icons-material';
 import { isSameDay } from 'date-fns'; // Using library isSameDay to be cleaner or just use the local one? Local one is defined below. I'll stick to local or import. Actually I should check if isSameDay is imported. It is not. I'll insert it or use local.
 // Let's rely on the local definition or Date comparison. Wait, "isSameDay" is defined inside locally at line 54. I should lift it or use date-fns.
@@ -201,8 +202,8 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
           variant="outlined"
           sx={{ 
             borderRadius: 3, 
-            bgcolor: 'transparent', 
-            border: '2px solid',
+            bgcolor: alpha(borderColor, 0.1), 
+            border: '1px solid',
             borderColor: borderColor,
             color: 'text.primary',
             boxShadow: 'none',
