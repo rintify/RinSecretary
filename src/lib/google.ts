@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { prisma } from '@/lib/prisma';
+import { prisma } from './prisma';
 
 export async function getGoogleCalendarEvents(userId: string, timeMin: Date, timeMax: Date) {
   try {
