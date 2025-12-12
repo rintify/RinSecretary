@@ -4,7 +4,7 @@ import { format, differenceInCalendarDays, differenceInHours, differenceInMinute
 import { ja } from 'date-fns/locale';
 import { Card, CardContent, Typography, Box, CardActionArea, LinearProgress, Chip, keyframes } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { AccessTime as ClockIcon, Event as CalendarIcon } from '@mui/icons-material';
+import { AccessTime as ClockIcon, Event as CalendarIcon, Notifications as BellIcon } from '@mui/icons-material';
 import { isSameDay } from 'date-fns'; // Using library isSameDay to be cleaner or just use the local one? Local one is defined below. I'll stick to local or import. Actually I should check if isSameDay is imported. It is not. I'll insert it or use local.
 // Let's rely on the local definition or Date comparison. Wait, "isSameDay" is defined inside locally at line 54. I should lift it or use date-fns.
 // I will just use the local logic for now or modify the code to check "Today".
@@ -180,8 +180,36 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
 
   const warningColor = '#ffb74d'; // Orange-yellow chip
   
+  if (isAlarm) {
+    return (
+      <Box 
+        onClick={() => onClick(task)}
+        sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          mb: 0.1,
+          py: 0.1, 
+          px: 1,
+          cursor: 'pointer',
+          borderRadius: 2,
+          transition: 'background-color 0.2s',
+          '&:hover': { bgcolor: 'action.hover' }
+        }}
+        style={style}
+      >
+        <BellIcon sx={{ color: ALARM_COLOR, mr: 0.5, fontSize: 12 }} />
+        <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.75rem', mr: 2, color: 'text.secondary', minWidth: 40 }}>
+          {getDayTimeDisplay()}
+        </Typography>
+        <Typography variant="body1" sx={{ fontWeight: 500 }}>
+           {task.title}
+        </Typography>
+      </Box>
+    );
+  }
+
   return (
-    <Box sx={{ position: 'relative', mb: 1.5 }}>
+    <Box sx={{ position: 'relative', mt: showWarning ? 1.8 : 0.7, mb: 0.7 }}>
         {showWarning && (
             <Chip 
                 label={chipLabel} 

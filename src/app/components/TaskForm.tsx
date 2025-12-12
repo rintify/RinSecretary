@@ -225,7 +225,7 @@ export default function TaskForm(props: TaskFormProps) {
             });
 
             if (res.ok) {
-                if (onSuccess) onSuccess(getDisplayDate(startDate));
+                if (onSuccess) onSuccess(getDisplayDate(deadline || startDate));
                 else {
                     router.push('/');
                     router.refresh();

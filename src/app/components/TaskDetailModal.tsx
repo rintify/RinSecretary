@@ -5,8 +5,9 @@ import { TASK_COLOR } from '../utils/colors';
 // ... (existing imports, interfaces)
 
 
-import { Edit as EditIcon, Close as CloseIcon, CalendarMonth as CalendarIcon } from '@mui/icons-material';
-import { format } from 'date-fns';
+import { Edit as EditIcon, Close as CloseIcon, CalendarMonth as CalendarIcon, Notifications as BellIcon } from '@mui/icons-material';
+import { format, subHours } from 'date-fns';
+import { createAlarm } from '@/lib/alarm-actions';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
@@ -125,6 +126,21 @@ export default function TaskDetailModal({ task, onClose, onEdit, onUpdate }: Tas
                      <Typography variant="body2">
                          Limit: {format(new Date(task.deadline), 'yyyy/MM/dd HH:mm')}
                      </Typography>
+                     <IconButton 
+                        size="small" 
+                        onClick={() => {
+                            if (task.deadline) {
+                                const alarmTime = subHours(new Date(task.deadline), 1);
+                                createAlarm({
+                                    title: `[Re] ${task.title}`,
+                                    time: alarmTime,
+                                });
+                                if (onClose) onClose();
+                            }
+                        }}
+                    >
+                        <BellIcon fontSize="small" color="action" />
+                    </IconButton>
                  </Box>
              )}
 
