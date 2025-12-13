@@ -26,24 +26,17 @@ services:
         echo 'Starting Next.js Server...' &&
         node server.js
       "
-    networks: [webnet]
-
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    ports: ["80:80","443:443"]
-    environment:
-      - DOMAIN=${DOMAIN}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on: [web]
-    networks: [webnet]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${ROUTER_NAME}.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.${ROUTER_NAME}.entrypoints=websecure"
+      - "traefik.http.routers.${ROUTER_NAME}.tls.certresolver=myresolver"
+    networks:
+      - webnet
+      - proxy
 
 networks:
   webnet:
+  proxy:
+    external: true
 
-volumes:
-  caddy-data:
-  caddy-config:
