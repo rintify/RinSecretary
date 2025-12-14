@@ -26,13 +26,15 @@ else
     
     cd "$TRAEFIK_DIR"
 
-    # Ensure acme.json exists with correct permissions
+    # Ensure acme.json exists with correct permissions (MUST be 600)
+    mkdir -p letsencrypt
     if [ ! -f "letsencrypt/acme.json" ]; then
         echo "Initializing acme.json..."
-        mkdir -p letsencrypt
         touch letsencrypt/acme.json
-        chmod 600 letsencrypt/acme.json
     fi
+    # Always fix permissions (even if file existed with wrong permissions)
+    chmod 600 letsencrypt/acme.json
+    echo "acme.json permissions set to 600"
 
     # Create .env for Traefik if LETSENCRYPT_EMAIL is provided
     if [ -n "$LETSENCRYPT_EMAIL" ]; then

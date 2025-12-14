@@ -30,13 +30,25 @@
 | `ADMIN_DISCORD_WEBHOOK` | 管理者用Discord Webhook URL（DBバックアップ送信先） |
 | `LETSENCRYPT_EMAIL` | Let's Encrypt証明書通知用メールアドレス |
 
-### 2. VPSの準備
+### 2. DNSの設定
+
+`NEXTAUTH_URL` で指定したドメイン（またはサブドメイン）がVPSのIPを指すようにDNS Aレコードを設定してください。
+
+**例**: `https://secretary.example.com` を使う場合
+
+| Type | Name | Value |
+|------|------|-------|
+| A | secretary | `<VPSのIPアドレス>` |
+
+> **Note**: DNS反映には数分〜数時間かかる場合があります。`dig +short secretary.example.com` で確認できます。
+
+### 3. VPSの準備
 
 VPSに以下がインストールされていること：
 - Docker
 - Docker Compose
 
-### 3. デプロイ実行
+### 4. デプロイ実行
 
 `main`ブランチにpushすると自動デプロイが実行されます。
 

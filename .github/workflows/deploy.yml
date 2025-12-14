@@ -99,7 +99,20 @@ jobs:
 
             # 2. Prepare Environment Variables
             RAW_URL="${{ secrets.NEXTAUTH_URL }}"
-            DOMAIN=$(echo "$RAW_URL" | sed -E 's/^\s*.*:\/\///g')
+            # Extract domain clearly: remove protocol, then remove path and trailing slashes
+            AUTH_DOMAIN=$(echo "$RAW_URL" | sed -E 's/^\s*.*:\/\///g' | sed -E 's/\/.*//g')
+            
+            # Use DEPLOY_HOST if provided, otherwise use validity-checked AUTH_DOMAIN
+            # This allows deploying to a subdomain while NEXTAUTH_URL might check a different internal path
+            HOST_OVERRIDE="${{ secrets.DEPLOY_HOST }}"
+            if [ -n "$HOST_OVERRIDE" ]; then
+              DOMAIN="$HOST_OVERRIDE"
+            else
+              DOMAIN="$AUTH_DOMAIN"
+            fi
+            
+            echo "Determined Deployment Domain: $DOMAIN"
+
             # Variable for docker-compose (ghcr.io/owner/repo:latest)
             LOWER_REPO=$(echo "$FULL_REPO" | tr '[:upper:]' '[:lower:]')
             IMAGE_NAME="ghcr.io/$LOWER_REPO:latest"
@@ -112,7 +125,7 @@ jobs:
             IMAGE_NAME=$IMAGE_NAME
             DOMAIN=$DOMAIN
             ROUTER_NAME=$ROUTER_NAME
-            NEXTAUTH_URL=https://$DOMAIN
+            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
             LETSENCRYPT_EMAIL=${{ secrets.LETSENCRYPT_EMAIL }}
             
