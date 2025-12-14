@@ -26,7 +26,6 @@ import ImmediateAlarmFlow from './components/immediate/ImmediateAlarmFlow';
 import LongPressFab from './components/ui/LongPressFab';
 
 import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR } from './utils/colors';
-import { logout } from '@/lib/actions';
 
 // Helper to get the "Business Date" (shifts day back if before 4 AM)
 const getBusinessDate = () => {
@@ -195,6 +194,7 @@ export default function Home() {
                   </MenuItem>
                   <MenuItem onClick={async () => { 
                       handleMenuClose(); 
+                      const { logout } = await import('@/lib/actions');
                       await logout();
                   }}>
                       <ListItemIcon>

@@ -71,65 +71,32 @@ jobs:
           command_timeout: 30m
           script: |
             set -e
-            
-            # --- Configuration (Dynamic) ---
-            # Repository full name (e.g. rintify/RinSecretary)
-            FULL_REPO="${{ github.repository }}"
-            # Repository name only (e.g. RinSecretary) -> rinsecretary (lowercase)
-            REPO_SLUG=$(echo "$FULL_REPO" | cut -d'/' -f2 | tr '[:upper:]' '[:lower:]')
-            
-            APP_DIR=~/$REPO_SLUG
-            REPO_URL="https://github.com/$FULL_REPO.git"
-            
-            echo "Deploying $FULL_REPO to $APP_DIR..."
-            
+            APP_DIR=~/rin-secretary
             mkdir -p $APP_DIR
             cd $APP_DIR
 
             # 1. Clone or Update Repository
             if [ ! -d .git ]; then
-              echo "Initializing new repository..."
+              # カレントディレクトリの中身を全て削除（隠しファイル含む）してクリーンにする
               find . -mindepth 1 -delete
-              git clone $REPO_URL .
+              git clone https://github.com/rintify/RinSecretary.git .
             else
-              echo "Updating existing repository..."
               git fetch origin main
               git reset --hard origin/main
             fi
 
             # 2. Prepare Environment Variables
             RAW_URL="${{ secrets.NEXTAUTH_URL }}"
-            # Extract domain clearly: remove protocol, then remove path and trailing slashes
-            AUTH_DOMAIN=$(echo "$RAW_URL" | sed -E 's/^\s*.*:\/\///g' | sed -E 's/\/.*//g')
-            
-            # Use DEPLOY_HOST if provided, otherwise use validity-checked AUTH_DOMAIN
-            # This allows deploying to a subdomain while NEXTAUTH_URL might check a different internal path
-            HOST_OVERRIDE="${{ secrets.DEPLOY_HOST }}"
-            if [ -n "$HOST_OVERRIDE" ]; then
-              DOMAIN="$HOST_OVERRIDE"
-            else
-              DOMAIN="$AUTH_DOMAIN"
-            fi
-            
-            echo "Determined Deployment Domain: $DOMAIN"
-
-            # Variable for docker-compose (ghcr.io/owner/repo:latest)
-            LOWER_REPO=$(echo "$FULL_REPO" | tr '[:upper:]' '[:lower:]')
-            IMAGE_NAME="ghcr.io/$LOWER_REPO:latest"
-            # routable name for traefik (replace / with -)
-            ROUTER_NAME=$(echo "$LOWER_REPO" | sed 's/\//-/g')
+            DOMAIN=$(echo "$RAW_URL" | sed -E 's/^\s*.*:\/\///g')
+            REPO_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+            IMAGE_NAME="ghcr.io/$REPO_NAME:latest"
 
             # 3. Create .env file
             cat > .env <<EOF
-            # --- Common Deployment Vars ---
             IMAGE_NAME=$IMAGE_NAME
             DOMAIN=$DOMAIN
-            ROUTER_NAME=$ROUTER_NAME
-            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
+            NEXTAUTH_URL=https://$DOMAIN
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-            LETSENCRYPT_EMAIL=${{ secrets.LETSENCRYPT_EMAIL }}
-            
-            # --- Project Specific Vars (Edit these for new projects) ---
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
             AUTH_TRUST_HOST=true
@@ -140,21 +107,13 @@ jobs:
 
             # 4. Login to GHCR
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
-            # 5. Migration / Cleanup (Ensure ports are free)
-            # Stops current app and removes old containers (like Caddy) to free port 80/443
-            docker compose -f deploy/docker-compose.yml --env-file .env down --remove-orphans || true
 
-            # 6. Ensure Infrastructure (Global Proxy) is Ready
-            # Use the portable script to setup network and proxy if needed
-            LETSENCRYPT_EMAIL=${{ secrets.LETSENCRYPT_EMAIL }} bash deploy/ensure-proxy.sh
-
-            # 7. Deploy using the committed configuration files
+            # 5. Deploy using the committed configuration files
             # Ensure data directories exist and have correct permissions
             # Fix permissions using a temporary container (avoids host permission issues)
             docker run --rm -v "$(pwd)/data:/data" alpine sh -c "mkdir -p /data/uploads && chown -R 1001:1001 /data && chmod -R 777 /data"
 
-            # 8. Backup Database Before Deploy (if database file exists)
+            # 6. Backup Database Before Deploy (if database file exists)
             if [ -f "data/sqlite.db" ]; then
               echo "Backing up database before deploy..."
               curl -F "file=@data/sqlite.db;filename=backup_$(date +%Y%m%d_%H%M%S).db" \
