@@ -12,6 +12,21 @@ else
 fi
 
 # ==========================================
+# Ensure acme.json permissions (ALWAYS run)
+# ==========================================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TRAEFIK_DIR="$SCRIPT_DIR/traefik"
+
+mkdir -p "$TRAEFIK_DIR/letsencrypt"
+if [ ! -f "$TRAEFIK_DIR/letsencrypt/acme.json" ]; then
+    echo "Initializing acme.json..."
+    touch "$TRAEFIK_DIR/letsencrypt/acme.json"
+fi
+# CRITICAL: Always fix permissions (MUST be 600 for Let's Encrypt)
+chmod 600 "$TRAEFIK_DIR/letsencrypt/acme.json"
+echo "acme.json permissions set to 600"
+
+# ==========================================
 # Ensure Traefik is Running
 # ==========================================
 # Check if the specific Traefik container is running
@@ -20,21 +35,7 @@ if [ "$(docker ps -q -f name=traefik)" ]; then
 else
     echo "Traefik is not running. Starting it..."
     
-    # Navigate to script directory to find docker-compose.yml
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    TRAEFIK_DIR="$SCRIPT_DIR/traefik"
-    
     cd "$TRAEFIK_DIR"
-
-    # Ensure acme.json exists with correct permissions (MUST be 600)
-    mkdir -p letsencrypt
-    if [ ! -f "letsencrypt/acme.json" ]; then
-        echo "Initializing acme.json..."
-        touch letsencrypt/acme.json
-    fi
-    # Always fix permissions (even if file existed with wrong permissions)
-    chmod 600 letsencrypt/acme.json
-    echo "acme.json permissions set to 600"
 
     # Create .env for Traefik if LETSENCRYPT_EMAIL is provided
     if [ -n "$LETSENCRYPT_EMAIL" ]; then
