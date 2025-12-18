@@ -30,8 +30,17 @@ import DataUsageModal from './components/DataUsageModal';
 
 import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR, MEMO_COLOR } from './utils/colors';
 
+// Helper to get the "Business Date" (shifts day back if before 4 AM)
+const getBusinessDate = () => {
+    const now = new Date();
+    if (now.getHours() < 4) {
+        return subDays(now, 1);
+    }
+    return now;
+};
+
 export default function Home() {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(getBusinessDate());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Modal State
@@ -81,7 +90,11 @@ export default function Home() {
       setModalData(null);
       setRefreshTrigger(prev => prev + 1);
       if (arg instanceof Date) {
-          setCurrentDate(arg);
+          // Convert the item's date to its corresponding business date
+          // If the time is before 4 AM, it belongs to the previous calendar day's business day
+          const itemDate = arg;
+          const businessDate = itemDate.getHours() < 4 ? subDays(itemDate, 1) : itemDate;
+          setCurrentDate(businessDate);
       }
   };
   
@@ -128,7 +141,11 @@ export default function Home() {
           borderColor: 'divider',
           bgcolor: 'background.paper',
           flexShrink: 0,
-          zIndex: 10
+          zIndex: 1200, // Elevated z-index
+          position: 'fixed', // Fixed position
+          top: 0,
+          left: 0,
+          right: 0
       }}>
           
           {/* Main Navigation Group: Date Left Aligned */}
@@ -149,7 +166,7 @@ export default function Home() {
               >
                   {format(currentDate, 'MM/dd (E)', { locale: ja })}
               </Button>
-              <IconButton onClick={() => setCurrentDate(new Date())} size="small" sx={{ ml: 1, color: 'text.secondary' }}>
+              <IconButton onClick={() => setCurrentDate(getBusinessDate())} size="small" sx={{ ml: 1, color: 'text.secondary' }}>
                   <MyLocationIcon />
               </IconButton>
               <CustomDatePicker 
@@ -222,7 +239,7 @@ export default function Home() {
       </Box>
       
       {/* Main Display with Swiper */}
-      <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+      <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative', mt: '60px', height: 'calc(100dvh - 60px)' }}>
           <TimeTableSwiper 
               currentDate={currentDate} 
               onDateChange={setCurrentDate}
@@ -308,7 +325,7 @@ export default function Home() {
                     <TaskForm 
                         onSuccess={handleCloseModal} 
                         isModal
-                        initialDate={isSameDay(currentDate, new Date()) ? new Date() : currentDate}
+                        initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
                     />
                 )}
                 {activeModal === 'EDIT_TASK' && (
@@ -324,7 +341,7 @@ export default function Home() {
                         initialStartTime={modalData?.startTime}
                         onSuccess={handleCloseModal}
                         isModal
-                        initialDate={isSameDay(currentDate, new Date()) ? new Date() : currentDate}
+                        initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
                      />
                 )}
                 {activeModal === 'EDIT_EVENT' && (
@@ -354,7 +371,7 @@ export default function Home() {
                     <AlarmForm
                         onSuccess={handleCloseModal}
                         isModal
-                        initialDate={isSameDay(currentDate, new Date()) ? new Date() : currentDate}
+                        initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
                     />
                 )}
                 {activeModal === 'EDIT_ALARM' && (
@@ -402,21 +419,21 @@ export default function Home() {
         <ImmediateTaskFlow
             onClose={handleCloseModal}
             onSuccess={handleCloseModal}
-            initialDate={isSameDay(currentDate, new Date()) ? new Date() : currentDate}
+            initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
         />
     )}
     {activeModal === 'IMMEDIATE_EVENT' && (
         <ImmediateEventFlow
             onClose={handleCloseModal}
             onSuccess={handleCloseModal}
-            initialDate={isSameDay(currentDate, new Date()) ? new Date() : currentDate}
+            initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
         />
     )}
     {activeModal === 'IMMEDIATE_ALARM' && (
         <ImmediateAlarmFlow
             onClose={handleCloseModal}
             onSuccess={handleCloseModal}
-            initialDate={isSameDay(currentDate, new Date()) ? new Date() : currentDate}
+            initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
         />
     )}
 
