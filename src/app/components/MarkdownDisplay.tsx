@@ -55,7 +55,7 @@ export default function MarkdownDisplay({ children, attachments = [] }: Markdown
 
         if (isAudio) {
             return (
-                <Box sx={{ my: 2, p: 2, border: '1px solid #eee', borderRadius: 2, width: '100%' }}>
+                <Box sx={{ my: 2, p: 2, border: '1px solid #eee', borderRadius: 2, width: '100%' }} className="not-selectable">
                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                         <AudioIcon sx={{ mr: 1, color: 'text.secondary' }} />
                         <Typography variant="body2" noWrap>{file.fileName}</Typography>
@@ -67,7 +67,7 @@ export default function MarkdownDisplay({ children, attachments = [] }: Markdown
 
         if (isVideo) {
             return (
-                 <Box sx={{ my: 2, width: '100%' }}>
+                 <Box sx={{ my: 2, width: '100%' }} className="not-selectable">
                     <video 
                         controls 
                         src={file.filePath} 
@@ -89,7 +89,7 @@ export default function MarkdownDisplay({ children, attachments = [] }: Markdown
                     alignItems: 'center', 
                     bgcolor: 'background.paper',
                     '&:hover': { bgcolor: 'action.hover' }
-                }}>
+                }} className="not-selectable">
                     <Box sx={{ mr: 2, color: isPdf ? 'error.main' : 'text.secondary', display: 'flex', alignItems: 'center' }}>
                         {isPdf ? <PdfIcon /> : <TextIcon />}
                     </Box>
@@ -121,7 +121,7 @@ export default function MarkdownDisplay({ children, attachments = [] }: Markdown
     };
 
     return (
-        <div style={{ overflowWrap: 'anywhere', wordBreak: 'break-word', lineHeight: 1.6 }}>
+        <div className="selectable-text" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word', lineHeight: 1.6 }}>
             <ReactMarkdown
                 remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
                 rehypePlugins={[rehypeKatex]}

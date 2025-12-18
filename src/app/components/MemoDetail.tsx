@@ -163,7 +163,7 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
                 </Box>
             </Popover>
 
-            <Box sx={{ flex: 1, p: 2, overflow: 'auto', paddingBottom: '160px' }}>
+            <Box sx={{ flex: 1, p: 2, overflow: 'auto', paddingBottom: '160px' }} className="selectable-text">
                  <MarkdownDisplay attachments={attachments}>
                     {memo.content}
                  </MarkdownDisplay>
