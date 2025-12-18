@@ -38,6 +38,8 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [internalMemoId, setInternalMemoId] = useState<string | undefined>(memoId);
+    const [isDragging, setIsDragging] = useState(false);
+    const dragCounter = useRef(0);
     
     const contentRef = useRef(content);
     const isSavedRef = useRef(false);
@@ -172,15 +174,100 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         }
     }));
 
-    const handlePaste = async (e: React.ClipboardEvent) => {
-        const items = e.clipboardData.items;
+    const handlePaste = async (e: React.ClipboardEvent | ClipboardEvent) => {
+        // e.clipboardData is distinct in React vs Native event, but both have it (React wraps it). 
+        // We need to handle potential nulls if using native events blindly, though usually it's there.
+        const clipboardData = (e as any).clipboardData || (window as any).clipboardData;
+        if (!clipboardData) return;
+
+        const items = clipboardData.items;
         for (let i = 0; i < items.length; i++) {
             if (items[i].kind === 'file') {
                 e.preventDefault();
+                (e as any).stopImmediatePropagation?.(); // Stop Monaco from handling it if we found a file
                 const file = items[i].getAsFile();
                 if (file) await uploadFile(file);
                 return;
             }
+        }
+    };
+
+    // Ref to hold the latest handlePaste so the listener always uses fresh state (closures)
+    const handlePasteRef = useRef(handlePaste);
+    useEffect(() => {
+        handlePasteRef.current = handlePaste;
+    });
+
+    // Clean up listener when component unmounts
+    useEffect(() => {
+        return () => {
+            if (editorInstanceRef.current) {
+                // We can't verify easily if we added the EXACT same function reference unless we saved it.
+                // Given the complexity of mixing React lifecycle with Monaco lifecycle,
+                // let's try to just trust the DOM node removal cleans listeners, 
+                // OR promote editor instance to state to use in useEffect.
+            }
+        };
+    }, []);
+
+    // Promoting editor to state to handle listener lifecycle properly
+    const [editorInstance, setEditorInstance] = useState<any>(null);
+
+    useEffect(() => {
+        if (!editorInstance) return;
+        
+        const listener = (e: ClipboardEvent) => {
+             // Only handle if editor has focus to avoid intercepting pastes in other inputs (if any)
+             // Although this is a full page component, better to be safe.
+             if (editorInstance.hasWidgetFocus()) {
+                 handlePasteRef.current(e);
+             }
+        };
+
+        // Attach to window to ensure we catch it no matter what Monaco does
+        window.addEventListener('paste', listener, true);
+        return () => {
+            window.removeEventListener('paste', listener, true);
+        };
+    }, [editorInstance]);
+
+
+    const handleDragEnter = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current += 1;
+        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+            setIsDragging(true);
+        }
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current -= 1;
+        if (dragCounter.current === 0) {
+            setIsDragging(false);
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDrop = async (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+        dragCounter.current = 0;
+
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const files = Array.from(e.dataTransfer.files);
+            // Process sequentially to maintain rudimentary order or just handle one by one
+            for (const file of files) {
+                await uploadFile(file);
+            }
+            e.dataTransfer.clearData();
         }
     };
 
@@ -189,9 +276,9 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         try {
             let id = internalMemoId;
             if (!id) {
-                id = await saveMemo(content);
+                id = await saveMemo(contentRef.current); // Use ref for current content
                 if (!id) {
-                     const newMemo = await createMemo(content || '無題のメモ');
+                     const newMemo = await createMemo(contentRef.current || '無題のメモ');
                      setInternalMemoId(newMemo.id);
                      id = newMemo.id;
                 }
@@ -209,7 +296,35 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                 ? `\n![${file.name}](${attachment.filePath})` 
                 : `\n[${file.name}](${attachment.filePath})`;
             
-            setContent(prev => prev + markdown + '\n');
+            // Insert at cursor position if editor is available
+            if (editorInstanceRef.current) {
+                const editor = editorInstanceRef.current;
+                const contribution = editor.getContribution('snippetController2');
+                if (contribution) {
+                    contribution.insert(markdown);
+                } else {
+                    const position = editor.getPosition();
+                    const range = {
+                        startLineNumber: position?.lineNumber || 1,
+                        startColumn: position?.column || 1,
+                        endLineNumber: position?.lineNumber || 1,
+                        endColumn: position?.column || 1,
+                    };
+                    editor.executeEdits('insert-upload', [{
+                        range: range,
+                        text: markdown,
+                        forceMoveMarkers: true
+                    }]);
+                }
+                // Push change to state immediately so standard onChange handles it
+                // Actually SharedEditor onChange might be enough if executeEdits triggers it. 
+                // Monaco executeEdits usually DOES trigger ModelContentChanged.
+                // However, let's ensure we focus back.
+                editor.focus();
+            } else {
+                // Fallback to append if no editor ref (should shouldn't happen usually)
+                setContent(prev => prev + markdown + '\n');
+            }
 
         } catch (e) {
             console.error(e);
@@ -230,15 +345,64 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         return handleManualSave();
     };
 
-    const handleEditorMount: OnMount = (editor) => {
+    const handleEditorMountCallback: OnMount = (editor) => {
         editorInstanceRef.current = editor;
+        setEditorInstance(editor);
     };
 
     return (
         <Box 
-            sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'transparent' }}
+            sx={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                height: '100%', 
+                bgcolor: 'transparent',
+                position: 'relative' // For overlay positioning
+            }}
             onPaste={handlePaste} 
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
         >
+            {/* Drag Overlay */}
+            {isDragging && (
+                <Box
+                    sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        bgcolor: 'rgba(0, 0, 0, 0.1)',
+                        zIndex: 2000,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backdropFilter: 'blur(2px)',
+                        pointerEvents: 'none' // Let events pass through to parent for drop
+                    }}
+                >
+                    <Box
+                        sx={{
+                            bgcolor: 'background.paper',
+                            p: 3,
+                            borderRadius: 2,
+                            boxShadow: 3,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: 1
+                        }}
+                    >
+                        <FolderIcon sx={{ fontSize: 48, color: MEMO_COLOR }} />
+                        <Box sx={{ fontWeight: 'bold', color: 'text.primary' }}>
+                            ファイルをドロップしてアップロード
+                        </Box>
+                    </Box>
+                </Box>
+            )}
+
             {uploading && <LinearProgress color="primary" />}
             
             <Box flex={1} sx={{ overflow: 'hidden' }}>
@@ -248,7 +412,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                         setContent(v);
                         isSavedRef.current = false;
                     }}
-                    onMount={handleEditorMount}
+                    onMount={handleEditorMountCallback}
                     paddingBottom={160} // Increased padding for 2 FABs
                     paddingTop={8}
                     showLineNumbers={showLineNumbers}
