@@ -45,44 +45,14 @@ export function MemoListFabs() {
     );
 }
 
-// 後方互換のため残す
-export function MemoListFab() {
-    const router = useRouter();
-    const [loading, setLoading] = useState(false);
-
-    const handleCreate = async () => {
-        if (loading) return;
-        setLoading(true);
-        try {
-            const memo = await createEmptyMemo();
-            router.push(`/memos/${memo.id}/edit?new=true`);
-        } catch (e) {
-            console.error(e);
-            setLoading(false);
-            alert('メモ作成に失敗しました');
-        }
-    };
-
-    return (
-        <Fab 
-            aria-label="add" 
-            onClick={handleCreate}
-            disabled={loading}
-            sx={{ position: 'fixed', bottom: 16, right: 16, bgcolor: MEMO_COLOR, color: '#fff' }}
-        >
-            {loading ? <CircularProgress size={24} color="inherit" /> : <AddIcon />}
-        </Fab>
-    );
-}
-
 export function MemoListEditButton({ id }: { id: string }) {
     return (
         <IconButton 
             component={Link} 
-            href={`/memos/${id}?edit=true`}
+            href={`/memos/${id}/edit`}
             edge="end" 
             aria-label="edit"
-            sx={{ color: 'action.active' }}
+            sx={{ color: MEMO_COLOR }}
         >
             <EditIcon />
         </IconButton>

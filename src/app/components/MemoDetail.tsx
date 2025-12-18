@@ -4,11 +4,7 @@ import { useState } from 'react';
 import { Box, Fab, IconButton, Popover } from '@mui/material';
 import { Edit as EditIcon, Info as InfoIcon, Folder as FolderIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import MemoHeader from './MemoHeader';
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import remarkGfm from 'remark-gfm';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
+import MarkdownDisplay from './MarkdownDisplay';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MEMO_COLOR } from '../utils/colors';
@@ -90,29 +86,9 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
             </Popover>
 
             <Box sx={{ flex: 1, p: 2, overflow: 'auto' }}>
-                 <ReactMarkdown 
-                    remarkPlugins={[remarkMath, remarkGfm]}
-                    rehypePlugins={[rehypeKatex]}
-                    components={{
-                        img: (props) => (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img 
-                                {...props} 
-                                style={{ 
-                                    maxWidth: '100%', 
-                                    maxHeight: '80vh',
-                                    objectFit: 'contain',
-                                    display: 'block',
-                                    marginLeft: 'auto',
-                                    marginRight: 0,
-                                    marginBlock: '0.5rem'
-                                }} 
-                            />
-                        )
-                    }}
-                 >
+                 <MarkdownDisplay>
                     {memo.content}
-                 </ReactMarkdown>
+                 </MarkdownDisplay>
             </Box>
 
             <Box sx={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>

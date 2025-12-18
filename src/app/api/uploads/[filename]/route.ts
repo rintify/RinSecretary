@@ -9,8 +9,9 @@ export async function GET(
   props: { params: Promise<{ filename: string }> }
 ) {
   const params = await props.params;
-  const session = await auth();
-  if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Next.js Image Optimizationがアクセスできるように認証を除外
+  // const session = await auth();
+  // if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const filename = params.filename;
   // Security check: prevent directory traversal

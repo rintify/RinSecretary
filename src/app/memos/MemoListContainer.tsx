@@ -11,11 +11,12 @@ import {
     Close as CloseIcon, 
     Note as NoteIcon 
 } from '@mui/icons-material';
+import { alpha } from '@mui/material/styles';
+import Image from 'next/image';
 import MemoHeader from '../components/MemoHeader';
 import { MemoListFabs, MemoListEditButton, MemoListItemButton } from './MemoListClient';
 import { deleteMemos } from './actions';
 import { MEMO_COLOR } from '../utils/colors';
-import Image from 'next/image';
 
 type Attachment = {
     id: string;
@@ -25,8 +26,11 @@ type Attachment = {
 
 type Memo = {
     id: string;
+    title: string;
     content: string;
+    createdAt: Date;
     updatedAt: Date;
+    userId: string;
     attachments: Attachment[];
 };
 
@@ -119,17 +123,23 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                     <List>
                         {memos.map(memo => {
                             const isSelected = selectedIds.has(memo.id);
+                            // TaskItem風のデザインを適用
+                            // Border color priority: Selection -> Default (MEMO_COLOR)
+                            const borderColor = (isSelectionMode && isSelected) ? 'primary.main' : MEMO_COLOR;
+                            
                             return (
                                 <ListItem 
                                     key={memo.id} 
                                     disablePadding 
                                     sx={{ 
                                         mb: 1, 
-                                        bgcolor: isSelectionMode && isSelected ? 'rgba(171, 71, 188, 0.08)' : 'background.paper', 
-                                        borderRadius: 2, 
+                                        bgcolor: alpha(MEMO_COLOR, 0.1), 
+                                        borderRadius: 3, 
                                         overflow: 'hidden',
                                         transition: 'all 0.2s',
-                                        border: isSelectionMode && isSelected ? `1px solid ${MEMO_COLOR}` : '1px solid transparent'
+                                        border: '1px solid',
+                                        borderColor: borderColor,
+                                        boxShadow: 'none',
                                     }}
                                     secondaryAction={
                                         isSelectionMode ? (
@@ -150,9 +160,9 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                                     }
                                 >
                                     {isSelectionMode ? (
-                                        <ListItemButton onClick={() => toggleSelection(memo.id)} sx={{ p: 2, pr: 8 }}>
+                                        <ListItemButton onClick={() => toggleSelection(memo.id)} sx={{ p: 1, pr: 8 }}>
                                            <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', overflow: 'hidden' }}>
-                                                {/* サムネイルエリア（選択モードでも表示） */}
+                                                {/* サムネイルエリア */}
                                                 <Box sx={{ 
                                                     mr: 2, 
                                                     flexShrink: 0, 
@@ -161,7 +171,7 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                                                     position: 'relative', 
                                                     borderRadius: 1, 
                                                     overflow: 'hidden', 
-                                                    bgcolor: 'action.hover',
+                                                    bgcolor: 'action.hover', // サムネイル背景は少し濃くするか、白にするか。
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     justifyContent: 'center'
@@ -186,7 +196,7 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                                             </Box>
                                         </ListItemButton>
                                     ) : (
-                                        <MemoListItemButton href={`/memos/${memo.id}`} sx={{ p: 2, pr: 8 }}>
+                                        <MemoListItemButton href={`/memos/${memo.id}`} sx={{ p: 1, pr: 8 }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', overflow: 'hidden' }}>
                                                 {/* サムネイルエリア */}
                                                 <Box sx={{ 

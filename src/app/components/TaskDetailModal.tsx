@@ -8,11 +8,7 @@ import { TASK_COLOR } from '../utils/colors';
 import { Edit as EditIcon, Close as CloseIcon, CalendarMonth as CalendarIcon, Notifications as BellIcon } from '@mui/icons-material';
 import { format, subHours } from 'date-fns';
 import { createAlarm } from '@/lib/alarm-actions';
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import remarkGfm from 'remark-gfm';
-import remarkBreaks from 'remark-breaks';
-import rehypeKatex from 'rehype-katex';
+import MarkdownDisplay from './MarkdownDisplay';
 
 interface Task {
     id: string;
@@ -147,15 +143,9 @@ export default function TaskDetailModal({ task, onClose, onEdit, onUpdate }: Tas
 
              {task.memo && (
                  <Box className="selectable-text" sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 2, mb: 3, '& p': { m: 0 } }}>
-                     <ReactMarkdown
-                        remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
-                        rehypePlugins={[rehypeKatex]}
-                        components={{
-                            a: ({node, ...props}) => <a {...props} style={{ color: '#1976d2', textDecoration: 'underline' }} target="_blank" rel="noopener noreferrer" />
-                        }}
-                     >
+                     <MarkdownDisplay>
                          {task.memo} 
-                     </ReactMarkdown>
+                     </MarkdownDisplay>
                  </Box>
              )}
 
