@@ -8,7 +8,17 @@ import MarkdownDisplay from './MarkdownDisplay';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MEMO_COLOR } from '../utils/colors';
-import MemoFileManagement from './MemoFileManagement';
+import MemoFileManagement, { Attachment } from './MemoFileManagement';
+import { getAttachments } from '../memos/actions';
+import { useEffect, useRef } from 'react';
+import Image from 'next/image';
+import { 
+    InsertDriveFile as FileIcon, 
+    PictureAsPdf as PdfIcon,
+    AudioFile as AudioIcon,
+    VideoFile as VideoIcon,
+    TextSnippet as TextIcon
+} from '@mui/icons-material';
 
 interface MemoDetailProps {
     memo: {
@@ -25,6 +35,74 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
     const router = useRouter();
     const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
     const [isFileManagementOpen, setIsFileManagementOpen] = useState(false);
+    const [attachments, setAttachments] = useState<Attachment[]>([]);
+    
+    // Long press logic
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const isLongPress = useRef(false);
+
+    useEffect(() => {
+        loadAttachments();
+    }, [memo.id, isFileManagementOpen]); // Reload when management modal closes to reflect changes
+
+    const loadAttachments = async () => {
+        try {
+            const files = await getAttachments(memo.id);
+            setAttachments(files);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const handleTouchStart = (file: Attachment) => {
+        isLongPress.current = false;
+        timerRef.current = setTimeout(() => {
+            isLongPress.current = true;
+            handleDownload(file);
+        }, 800);
+    };
+
+    const handleTouchEnd = () => {
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
+        }
+    };
+
+    const handleDownload = (file: Attachment) => {
+        // Haptic feedback if available (optional)
+        if (navigator.vibrate) navigator.vibrate(50);
+        
+        const link = document.createElement('a');
+        link.href = file.filePath;
+        link.download = file.fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleFileClick = (file: Attachment) => {
+        if (isLongPress.current) return;
+        
+        // Audio/Video: handled by inline controls if visible, but if clicking the card area:
+        // Requirement: "その場で再生" (Play locally) implies controls are exposed.
+        // If clicking non-control area, maybe open viewer or do nothing.
+        // For simplicity, we just navigate to viewer for non-media types.
+        
+        if (file.mimeType.startsWith('video/') || file.mimeType.startsWith('audio/')) {
+            // Do nothing on container click, let user interact with controls
+            return; 
+        }
+
+        // Navigate to viewer for Text/PDF/Image/Others
+        router.push(`/memos/files/${file.id}`);
+    };
+
+    const formatSize = (bytes: number) => {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    };
 
     const handleInfoClick = (event: React.MouseEvent<HTMLButtonElement>) => {
         setAnchorEl(event.currentTarget);
@@ -85,8 +163,8 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
                 </Box>
             </Popover>
 
-            <Box sx={{ flex: 1, p: 2, overflow: 'auto' }}>
-                 <MarkdownDisplay>
+            <Box sx={{ flex: 1, p: 2, overflow: 'auto', paddingBottom: '100px' }}>
+                 <MarkdownDisplay attachments={attachments}>
                     {memo.content}
                  </MarkdownDisplay>
             </Box>

@@ -31,7 +31,7 @@ type Memo = {
     createdAt: Date;
     updatedAt: Date;
     userId: string;
-    attachments: Attachment[];
+    attachments?: Attachment[];
 };
 
 function getDisplayTitle(content: string): string {

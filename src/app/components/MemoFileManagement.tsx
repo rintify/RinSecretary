@@ -18,7 +18,7 @@ import Image from 'next/image';
 import { getAttachments, deleteAttachment, uploadAttachment } from '@/app/memos/actions';
 import { MEMO_COLOR } from '../utils/colors';
 
-interface Attachment {
+export interface Attachment {
     id: string;
     fileName: string;
     filePath: string;
@@ -56,16 +56,6 @@ export default function MemoFileManagement({ memoId, open, onClose }: MemoFileMa
         }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('ファイルを削除しますか？')) return;
-        try {
-            await deleteAttachment(id);
-            setAttachments(prev => prev.filter(f => f.id !== id));
-        } catch (e) {
-            alert('削除に失敗しました');
-        }
-    };
-
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -84,6 +74,17 @@ export default function MemoFileManagement({ memoId, open, onClose }: MemoFileMa
             e.target.value = ''; // Reset input
         }
     };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm('ファイルを削除しますか？')) return;
+        try {
+            await deleteAttachment(id);
+            setAttachments(prev => prev.filter(f => f.id !== id));
+        } catch (e) {
+            alert('削除に失敗しました');
+        }
+    };
+
 
     const handleCopy = async (text: string) => {
         try {

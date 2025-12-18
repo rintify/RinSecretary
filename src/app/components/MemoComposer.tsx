@@ -145,7 +145,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     const handlePaste = async (e: React.ClipboardEvent) => {
         const items = e.clipboardData.items;
         for (let i = 0; i < items.length; i++) {
-            if (items[i].type.indexOf('image') !== -1) {
+            if (items[i].kind === 'file') {
                 e.preventDefault();
                 const file = items[i].getAsFile();
                 if (file) await uploadFile(file);
@@ -174,8 +174,12 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
 
             const attachment = await uploadAttachment(formData, id);
             
-            const markdown = `\n![image](${attachment.filePath})\n`;
-            setContent(prev => prev + markdown);
+            const isImage = file.type.startsWith('image/');
+            const markdown = isImage 
+                ? `\n![${file.name}](${attachment.filePath})` 
+                : `\n[${file.name}](${attachment.filePath})`;
+            
+            setContent(prev => prev + markdown + '\n');
 
         } catch (e) {
             console.error(e);

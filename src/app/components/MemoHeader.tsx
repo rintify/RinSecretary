@@ -26,7 +26,12 @@ export default function MemoHeader({ title = 'Memos', actions, sx }: MemoHeaderP
             top: 0,
             ...sx
         }}>
-            <Typography variant="h6" fontWeight="bold">
+            <Typography 
+                variant="h6" 
+                fontWeight="bold" 
+                noWrap 
+                sx={{ flex: 1, minWidth: 0, mr: 2 }}
+            >
                 {title}
             </Typography>
             <Box>
