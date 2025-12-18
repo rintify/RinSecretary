@@ -14,8 +14,8 @@ import SettingsModal from './components/SettingsModal';
 import RegularTaskSettingsModal from './components/RegularTaskSettingsModal';
 import FreeTimeModal from './components/FreeTimeModal';
 import { Suspense } from 'react';
-import { IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Tooltip, Button, Menu, MenuItem, ListItemIcon, ListItemText, CircularProgress } from '@mui/material';
-import { Settings as SettingsIcon, Notifications as AlarmIcon, Menu as MenuIcon, AccessTime as AccessTimeIcon, MyLocation as MyLocationIcon } from '@mui/icons-material';
+import { IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Tooltip, Button, Menu, MenuItem, ListItemIcon, ListItemText, CircularProgress, Divider } from '@mui/material';
+import { Settings as SettingsIcon, Notifications as AlarmIcon, Menu as MenuIcon, AccessTime as AccessTimeIcon, MyLocation as MyLocationIcon, DataUsage as DataUsageIcon } from '@mui/icons-material';
 import TimeTableSwiper from './components/TimeTableSwiper';
 import CustomDatePicker from './components/ui/CustomDatePicker';
 import { useRouter } from 'next/navigation';
@@ -26,6 +26,7 @@ import ImmediateTaskFlow from './components/immediate/ImmediateTaskFlow';
 import ImmediateEventFlow from './components/immediate/ImmediateEventFlow';
 import ImmediateAlarmFlow from './components/immediate/ImmediateAlarmFlow';
 import LongPressFab from './components/ui/LongPressFab';
+import DataUsageModal from './components/DataUsageModal';
 
 import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR, MEMO_COLOR } from './utils/colors';
 
@@ -35,7 +36,7 @@ export default function Home() {
 
   // Modal State
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS'>('NONE');
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE'>('NONE');
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
   const handleNewTask = () => {
@@ -196,6 +197,13 @@ export default function Home() {
                       </ListItemIcon>
                       <ListItemText>定期タスク設定</ListItemText>
                   </MenuItem>
+                  <Divider />
+                  <MenuItem onClick={() => { handleMenuClose(); setActiveModal('DATA_USAGE'); }}>
+                       <ListItemIcon>
+                           <DataUsageIcon fontSize="small" />
+                       </ListItemIcon>
+                       <ListItemText>通信量</ListItemText>
+                   </MenuItem>
                   <MenuItem onClick={async () => { 
                       handleMenuClose(); 
                       const { logout } = await import('@/lib/actions');
@@ -376,6 +384,12 @@ export default function Home() {
                 )}
                 {activeModal === 'FREE_TIME' && (
                     <FreeTimeModal
+                        onClose={handleCloseModal}
+                    />
+                )}
+                {activeModal === 'DATA_USAGE' && (
+                    <DataUsageModal
+                        open={true}
                         onClose={handleCloseModal}
                     />
                 )}

@@ -27,6 +27,8 @@ export default async function MemoListPage() {
       title: true,
       updatedAt: true,
       thumbnailPath: true,
+      createdAt: true,
+      userId: true,
     },
   });
 
