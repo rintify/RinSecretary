@@ -23,6 +23,7 @@ interface MemoComposerProps {
 export interface MemoComposerRef {
     handleDelete: () => Promise<void>;
     handleSave: () => Promise<void>;
+    insertContent: (text: string) => void;
 }
 
 function generateTitle(content: string): string {
@@ -143,9 +144,32 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         }
     };
 
+    const editorInstanceRef = useRef<any>(null);
+
     useImperativeHandle(ref, () => ({
         handleDelete,
-        handleSave: handleManualSave
+        handleSave: handleManualSave,
+        insertContent: (text: string) => {
+            if (editorInstanceRef.current) {
+                const editor = editorInstanceRef.current;
+                const contribution = editor.getContribution('snippetController2');
+                if (contribution) {
+                    contribution.insert(text);
+                } else {
+                    const position = editor.getPosition();
+                    editor.executeEdits('insert-content', [{
+                        range: {
+                            startLineNumber: position?.lineNumber || 1,
+                            startColumn: position?.column || 1,
+                            endLineNumber: position?.lineNumber || 1,
+                            endColumn: position?.column || 1,
+                        },
+                        text: text
+                    }]);
+                }
+                editor.focus();
+            }
+        }
     }));
 
     const handlePaste = async (e: React.ClipboardEvent) => {
@@ -207,7 +231,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     };
 
     const handleEditorMount: OnMount = (editor) => {
-        // Additional setup if needed
+        editorInstanceRef.current = editor;
     };
 
     return (

@@ -5,14 +5,16 @@ import {
     Dialog, DialogTitle, DialogContent, DialogActions, 
     List, ListItem, ListItemText, ListItemSecondaryAction, 
     IconButton, Button, Typography, Box, CircularProgress,
-    Snackbar, ListItemButton
+    Snackbar, ListItemButton, Menu, MenuItem, ListItemIcon
 } from '@mui/material';
 import { 
     Delete as DeleteIcon, 
     InsertDriveFile as FileIcon, 
     Close as CloseIcon, 
     CloudUpload as UploadIcon,
-    Note as NoteIcon
+    Note as NoteIcon,
+    MoreVert as MoreVertIcon,
+    Download as DownloadIcon
 } from '@mui/icons-material';
 import Image from 'next/image';
 import { getAttachments, deleteAttachment, uploadAttachment } from '@/app/memos/actions';
@@ -31,12 +33,25 @@ interface MemoFileManagementProps {
     memoId: string;
     open: boolean;
     onClose: () => void;
+    onSelect?: (file: Attachment) => void;
 }
 
-export default function MemoFileManagement({ memoId, open, onClose }: MemoFileManagementProps) {
+export default function MemoFileManagement({ memoId, open, onClose, onSelect }: MemoFileManagementProps) {
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [loading, setLoading] = useState(false);
     const [snackbarOpen, setSnackbarOpen] = useState(false);
+    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+
+    const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, id: string) => {
+        setAnchorEl(event.currentTarget);
+        setSelectedFileId(id);
+    };
+
+    const handleMenuClose = () => {
+        setAnchorEl(null);
+        setSelectedFileId(null);
+    };
 
     useEffect(() => {
         if (open && memoId) {
@@ -75,6 +90,28 @@ export default function MemoFileManagement({ memoId, open, onClose }: MemoFileMa
         }
     };
 
+    const handleDeleteClick = () => {
+        if (selectedFileId) {
+            handleDelete(selectedFileId);
+            handleMenuClose();
+        }
+    };
+
+    const handleDownloadClick = () => {
+        if (selectedFileId) {
+            const file = attachments.find(f => f.id === selectedFileId);
+            if (file) {
+                const link = document.createElement('a');
+                link.href = file.filePath;
+                link.download = file.fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+            handleMenuClose();
+        }
+    };
+
     const handleDelete = async (id: string) => {
         if (!confirm('ファイルを削除しますか？')) return;
         try {
@@ -95,6 +132,23 @@ export default function MemoFileManagement({ memoId, open, onClose }: MemoFileMa
         }
     };
 
+    const handleItemClick = (file: Attachment) => {
+        if (onSelect) {
+            onSelect(file);
+            onClose(); // Optional: close modal after selection if desired, or keep open. 
+            // Usually insert -> close is better UX for "insert", but user didn't specify.
+            // Let's assume we keep it open or let parent decide? 
+            // Actually, for "insert at caret", closing is usually expected?
+            // User request: "click item -> insert at caret".
+            // Let's NOT close it automatically unless standard behavior suggests so.
+            // But wait, if they want to insert multiple, keeping open is good.
+            // If I look at `MemoEditClient`, passing `onSelect` usually implies action.
+            // Let's keep it open for now, consistent with "copy" behavior.
+        } else {
+            handleCopy(file.filePath);
+        }
+    };
+
     const formatSize = (bytes: number) => {
         if (bytes < 1024) return bytes + ' B';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -109,7 +163,7 @@ export default function MemoFileManagement({ memoId, open, onClose }: MemoFileMa
                     <CloseIcon />
                 </IconButton>
             </DialogTitle>
-            <DialogContent dividers>
+            <DialogContent dividers sx={{ p: 0 }}>
                 {loading && attachments.length === 0 ? (
                     <Box display="flex" justifyContent="center" p={3}>
                         <CircularProgress sx={{ color: MEMO_COLOR }} />
@@ -122,7 +176,7 @@ export default function MemoFileManagement({ memoId, open, onClose }: MemoFileMa
                     <List disablePadding>
                         {attachments.map(file => (
                             <ListItem key={file.id} divider disablePadding>
-                                <ListItemButton onClick={() => handleCopy(file.filePath)} sx={{ py: 1, px: 2 }}>
+                                <ListItemButton onClick={() => handleItemClick(file)} sx={{ py: 1, px: 2 }}>
                                     <Box sx={{ 
                                         mr: 2, 
                                         flexShrink: 0, 
@@ -160,14 +214,32 @@ export default function MemoFileManagement({ memoId, open, onClose }: MemoFileMa
                                     />
                                 </ListItemButton>
                                 <ListItemSecondaryAction sx={{ right: 8 }}>
-                                    <IconButton edge="end" onClick={() => handleDelete(file.id)} size="small" sx={{ color: 'error.main' }}>
-                                        <DeleteIcon fontSize="small" />
+                                    <IconButton edge="end" onClick={(e) => handleMenuOpen(e, file.id)} size="small">
+                                        <MoreVertIcon fontSize="small" />
                                     </IconButton>
                                 </ListItemSecondaryAction>
                             </ListItem>
                         ))}
                     </List>
                 )}
+                <Menu
+                    anchorEl={anchorEl}
+                    open={Boolean(anchorEl)}
+                    onClose={handleMenuClose}
+                >
+                     <MenuItem onClick={handleDownloadClick}>
+                        <ListItemIcon>
+                            <DownloadIcon fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText>ダウンロード</ListItemText>
+                    </MenuItem>
+                    <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}>
+                        <ListItemIcon>
+                            <DeleteIcon fontSize="small" color="error" />
+                        </ListItemIcon>
+                        <ListItemText>削除</ListItemText>
+                    </MenuItem>
+                </Menu>
                 <Snackbar
                     open={snackbarOpen}
                     autoHideDuration={700}

@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { MEMO_COLOR } from '@/app/utils/colors';
 import MemoHeader from '@/app/components/MemoHeader';
 import MemoComposer, { MemoComposerRef } from '@/app/components/MemoComposer';
-import MemoFileManagement from '@/app/components/MemoFileManagement';
+import MemoFileManagement, { Attachment } from '@/app/components/MemoFileManagement';
 import { Fab } from '@mui/material';
 
 interface MemoEditClientProps {
@@ -24,6 +24,15 @@ export default function MemoEditClient({ memo, isNew }: MemoEditClientProps) {
     const composerRef = useRef<MemoComposerRef>(null);
     const [isFileManagementOpen, setIsFileManagementOpen] = useState(false);
     const [showLineNumbers, setShowLineNumbers] = useState(false);
+
+    const handleFileSelect = (file: Attachment) => {
+        const isImage = file.mimeType.startsWith('image/');
+        const markdown = isImage 
+            ? `![${file.fileName}](${file.filePath})` 
+            : `[${file.fileName}](${file.filePath})`;
+        
+        composerRef.current?.insertContent(markdown);
+    };
 
     return (
         <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: '#f9f2fb' }} className="memo-page-transition">
@@ -69,6 +78,7 @@ export default function MemoEditClient({ memo, isNew }: MemoEditClientProps) {
                 memoId={memo.id}
                 open={isFileManagementOpen}
                 onClose={() => setIsFileManagementOpen(false)}
+                onSelect={handleFileSelect}
             />
         </Box>
     );

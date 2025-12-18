@@ -6,14 +6,15 @@ import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { Attachment } from './MemoFileManagement';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, IconButton } from '@mui/material';
 import Image from 'next/image';
 import Link from 'next/link';
 import { 
     PictureAsPdf as PdfIcon, 
     AudioFile as AudioIcon,
     VideoFile as VideoIcon,
-    TextSnippet as TextIcon 
+    TextSnippet as TextIcon,
+    Download as DownloadIcon
 } from '@mui/icons-material';
 
 interface MarkdownDisplayProps {
@@ -89,15 +90,31 @@ export default function MarkdownDisplay({ children, attachments = [] }: Markdown
                     bgcolor: 'background.paper',
                     '&:hover': { bgcolor: 'action.hover' }
                 }}>
-                    <Box sx={{ mr: 2, color: isPdf ? 'error.main' : 'text.secondary' }}>
+                    <Box sx={{ mr: 2, color: isPdf ? 'error.main' : 'text.secondary', display: 'flex', alignItems: 'center' }}>
                         {isPdf ? <PdfIcon /> : <TextIcon />}
                     </Box>
-                    <Box sx={{ overflow: 'hidden' }}>
+                    <Box sx={{ overflow: 'hidden', flex: 1 }}>
                         <Typography variant="body2" fontWeight="bold" noWrap>{file.fileName}</Typography>
                         <Typography variant="caption" color="text.secondary">
                             {file.mimeType} • {(file.fileSize / 1024).toFixed(1)} KB
                         </Typography>
                     </Box>
+                    <IconButton 
+                        size="small" 
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const link = document.createElement('a');
+                            link.href = file.filePath;
+                            link.download = file.fileName;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        }}
+                        sx={{ ml: 1, color: 'text.secondary' }}
+                    >
+                        <DownloadIcon fontSize="small" />
+                    </IconButton>
                 </Box>
             </Link>
         );
