@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { Box, TextField, Fab, CircularProgress, LinearProgress } from '@mui/material';
-import { Check as CheckIcon, Close as CloseIcon, Delete as DeleteIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
+import { Box, Fab, CircularProgress, LinearProgress } from '@mui/material';
+import { Check as CheckIcon, Close as CloseIcon, Delete as DeleteIcon, ArrowBack as ArrowBackIcon, Folder as FolderIcon } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { useRouter } from 'next/navigation';
 import { createMemo, updateMemo, deleteMemo, uploadAttachment } from '@/app/memos/actions';
 import { MEMO_COLOR } from '../utils/colors';
+import { OnMount } from '@monaco-editor/react';
+import SharedEditor from './SharedEditor';
 
 interface MemoComposerProps {
     initialContent?: string;
@@ -14,10 +16,13 @@ interface MemoComposerProps {
     onSuccess?: () => void;
     onDelete?: () => void;
     isNew?: boolean;
+    showLineNumbers?: boolean;
+    onFileManagementOpen?: () => void;
 }
 
 export interface MemoComposerRef {
     handleDelete: () => Promise<void>;
+    handleSave: () => Promise<void>;
 }
 
 function generateTitle(content: string): string {
@@ -27,7 +32,7 @@ function generateTitle(content: string): string {
 }
 
 const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
-    ({ initialContent = '', memoId, onSuccess, onDelete, isNew }, ref) => {
+    ({ initialContent = '', memoId, onSuccess, onDelete, isNew, showLineNumbers = false, onFileManagementOpen }, ref) => {
     const [content, setContent] = useState(initialContent);
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -139,7 +144,8 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     };
 
     useImperativeHandle(ref, () => ({
-        handleDelete
+        handleDelete,
+        handleSave: handleManualSave
     }));
 
     const handlePaste = async (e: React.ClipboardEvent) => {
@@ -200,47 +206,66 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         return handleManualSave();
     };
 
+    const handleEditorMount: OnMount = (editor) => {
+        // Additional setup if needed
+    };
+
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: alpha(MEMO_COLOR, 0.1) }}>
+        <Box 
+            sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'transparent' }}
+            onPaste={handlePaste} 
+        >
             {uploading && <LinearProgress color="primary" />}
             
-            <Box p={2} flex={1} sx={{ overflowY: 'auto' }}>
-                <TextField
-                    name="content-input"
-                    placeholder="メモを入力..."
-                    multiline
-                    fullWidth
-                    minRows={10}
-                    variant="standard"
+            <Box flex={1} sx={{ overflow: 'hidden' }}>
+                <SharedEditor
                     value={content}
-                    onChange={e => setContent(e.target.value)}
-                    onPaste={handlePaste}
-                    slotProps={{ input: { disableUnderline: true } }}
-                    sx={{ height: '100%', '& .MuiInputBase-root': { alignItems: 'flex-start', height: '100%' } }}
-                    autoFocus
+                    onChange={(v: string) => {
+                        setContent(v);
+                        isSavedRef.current = false;
+                    }}
+                    onMount={handleEditorMount}
+                    paddingBottom={160} // Increased padding for 2 FABs
+                    paddingTop={8}
+                    showLineNumbers={showLineNumbers}
+                    backgroundColor="#f9f2fb"
                 />
             </Box>
 
-             <Fab 
-                onClick={handleFabClick} 
-                disabled={loading || uploading}
-                aria-label={showDelete ? "delete" : (showBack ? "back" : "save")}
-                sx={{ 
-                    position: 'fixed', 
-                    bottom: 16, 
-                    right: 16, 
-                    bgcolor: (showDelete || showBack) ? 'background.paper' : MEMO_COLOR, 
-                    color: showDelete ? 'error.main' : (showBack ? MEMO_COLOR : '#fff'),
-                    '&:hover': { 
-                        bgcolor: (showDelete || showBack) ? 'action.hover' : MEMO_COLOR, 
-                        opacity: (showDelete || showBack) ? 1 : 0.9 
-                    } 
-                }}
-            >
-                {loading ? <CircularProgress size={24} color="inherit" /> : (
-                    showDelete ? <DeleteIcon /> : (showBack ? <ArrowBackIcon /> : <CheckIcon />)
-                )}
-            </Fab>
+            <Box sx={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 3, zIndex: 1050, alignItems: 'center' }}>
+                <Fab 
+                    onClick={handleFabClick} 
+                    disabled={loading || uploading}
+                    aria-label={showDelete ? "delete" : (showBack ? "back" : "save")}
+                    sx={{ 
+                        bgcolor: (showDelete || showBack) ? 'background.paper' : MEMO_COLOR,
+                        color: showDelete ? 'error.main' : (showBack ? MEMO_COLOR : '#fff'),
+                        border: (showDelete || showBack) ? `1px solid ${alpha(showDelete ? '#d32f2f' : MEMO_COLOR, 0.2)}` : 'none',
+                        '&:hover': { 
+                            bgcolor: (showDelete || showBack) ? alpha(showDelete ? '#d32f2f' : MEMO_COLOR, 0.05) : MEMO_COLOR,
+                            opacity: (showDelete || showBack) ? 1 : 0.9
+                        } 
+                    }}
+                >
+                    {loading ? <CircularProgress size={24} color="inherit" /> : (
+                        showDelete ? <DeleteIcon /> : (showBack ? <ArrowBackIcon /> : <CheckIcon />)
+                    )}
+                </Fab>
+                 {onFileManagementOpen && (
+                    <Fab 
+                        aria-label="files"
+                        onClick={onFileManagementOpen}
+                        sx={{ 
+                            bgcolor: 'background.paper', 
+                            color: MEMO_COLOR,
+                            border: `1px solid ${alpha(MEMO_COLOR, 0.2)}`,
+                            '&:hover': { bgcolor: alpha(MEMO_COLOR, 0.05) }
+                        }}
+                    >
+                        <FolderIcon />
+                    </Fab>
+                 )}
+            </Box>
         </Box>
     );
 });

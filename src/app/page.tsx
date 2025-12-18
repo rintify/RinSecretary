@@ -14,10 +14,11 @@ import SettingsModal from './components/SettingsModal';
 import RegularTaskSettingsModal from './components/RegularTaskSettingsModal';
 import FreeTimeModal from './components/FreeTimeModal';
 import { Suspense } from 'react';
-import { IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Tooltip, Button, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
+import { IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Tooltip, Button, Menu, MenuItem, ListItemIcon, ListItemText, CircularProgress } from '@mui/material';
 import { Settings as SettingsIcon, Notifications as AlarmIcon, Menu as MenuIcon, AccessTime as AccessTimeIcon, MyLocation as MyLocationIcon } from '@mui/icons-material';
 import TimeTableSwiper from './components/TimeTableSwiper';
 import CustomDatePicker from './components/ui/CustomDatePicker';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AppRegistration as BulkIcon } from '@mui/icons-material';
 import BulkEventCreator from './components/BulkEventCreator';
@@ -84,6 +85,22 @@ export default function Home() {
   };
   
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [memoLoading, setMemoLoading] = useState(false);
+  const router = useRouter();
+
+  const handleCreateMemo = async () => {
+    if (memoLoading) return;
+    setMemoLoading(true);
+    try {
+        const { createEmptyMemo } = await import('./memos/actions');
+        const memo = await createEmptyMemo();
+        router.push(`/memos/${memo.id}/edit?new=true`);
+    } catch (e) {
+        console.error(e);
+        setMemoLoading(false);
+        alert('メモ作成に失敗しました');
+    }
+  };
 
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => setAnchorEl(event.currentTarget);
@@ -251,12 +268,12 @@ export default function Home() {
                 <Box>
                 <Fab 
                     aria-label="add memo" 
-                    component={Link}
-                    href="/memos/new"
+                    onClick={handleCreateMemo}
+                    disabled={memoLoading}
                     size="medium" 
                     sx={{ bgcolor: MEMO_COLOR, color: '#fff', '&:hover': { bgcolor: MEMO_COLOR, opacity: 0.9 } }}
                 >
-                    <MemoIcon />
+                    {memoLoading ? <CircularProgress size={24} color="inherit" /> : <MemoIcon />}
                 </Fab>
                 </Box>
              </Tooltip>

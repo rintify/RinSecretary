@@ -2,13 +2,14 @@
 
 import { useState, useRef } from 'react';
 import { Box, IconButton } from '@mui/material';
-import { Folder as FolderIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { ArrowBack as ArrowBackIcon, Folder as FolderIcon, Delete as DeleteIcon, Check as CheckIcon, FormatListNumbered as LineNumberIcon } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { useRouter } from 'next/navigation';
 import { MEMO_COLOR } from '@/app/utils/colors';
 import MemoHeader from '@/app/components/MemoHeader';
 import MemoComposer, { MemoComposerRef } from '@/app/components/MemoComposer';
 import MemoFileManagement from '@/app/components/MemoFileManagement';
+import { Fab } from '@mui/material';
 
 interface MemoEditClientProps {
     memo: {
@@ -22,25 +23,30 @@ export default function MemoEditClient({ memo, isNew }: MemoEditClientProps) {
     const router = useRouter();
     const composerRef = useRef<MemoComposerRef>(null);
     const [isFileManagementOpen, setIsFileManagementOpen] = useState(false);
+    const [showLineNumbers, setShowLineNumbers] = useState(false);
 
     return (
-        <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: alpha(MEMO_COLOR, 0.1) }} className="memo-page-transition">
+        <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: '#f9f2fb' }} className="memo-page-transition">
             <MemoHeader 
                 title={isNew ? "新規メモ" : "メモ編集"}
-                sx={{ bgcolor: MEMO_COLOR, color: 'common.white' }}
+                sx={{ 
+                    bgcolor: '#f4eafa', 
+                    color: 'text.primary',
+                    borderBottom: 1,
+                    borderColor: 'divider',
+                    boxShadow: 'none'
+                }}
                 actions={
-                    <Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
                          <IconButton 
-                            onClick={() => setIsFileManagementOpen(true)} 
-                            edge="end" 
-                            sx={{ color: 'common.white', mr: 1 }}
+                            onClick={() => setShowLineNumbers(!showLineNumbers)}
+                            sx={{ color: showLineNumbers ? MEMO_COLOR : 'text.secondary' }}
                         >
-                            <FolderIcon />
+                            <LineNumberIcon />
                         </IconButton>
                         <IconButton 
                             onClick={() => composerRef.current?.handleDelete()} 
-                            edge="end" 
-                            sx={{ color: 'common.white' }}
+                            sx={{ color: 'error.main' }}
                         >
                             <DeleteIcon />
                         </IconButton>
@@ -52,8 +58,10 @@ export default function MemoEditClient({ memo, isNew }: MemoEditClientProps) {
                     ref={composerRef}
                     memoId={memo.id}
                     initialContent={memo.content}
-                    onSuccess={() => router.back()}
+                    onSuccess={() => router.push('/memos')}
                     isNew={isNew}
+                    showLineNumbers={showLineNumbers}
+                    onFileManagementOpen={() => setIsFileManagementOpen(true)}
                 />
             </Box>
             

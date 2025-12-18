@@ -9,7 +9,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { MEMO_COLOR } from '@/app/utils/colors';
 import MemoHeader from '@/app/components/MemoHeader';
-import Editor from '@monaco-editor/react';
+import SharedEditor from '@/app/components/SharedEditor';
 
 export default function FileViewerPage(props: { params: Promise<{ fileId: string }> }) {
     const params = use(props.params); 
@@ -90,35 +90,10 @@ export default function FileViewerPage(props: { params: Promise<{ fileId: string
                 {fileType === 'application/pdf' ? (
                     <iframe src={fileUrl} width="100%" height="100%" style={{ border: 'none' }} />
                 ) : fileType === 'text/plain' ? (
-                    <Editor
-                        height="100%"
-                        defaultLanguage="plaintext"
+                    <SharedEditor 
                         value={content}
-                        options={{
-                            readOnly: true,
-                            minimap: { enabled: false },
-                            fontSize: 14,
-                            lineNumbers: showLineNumbers ? 'on' : 'off',
-                            scrollBeyondLastLine: false,
-                            wordWrap: 'on',
-                            automaticLayout: true,
-                            contextmenu: true,
-                            selectionHighlight: false,
-                            occurrencesHighlight: 'off',
-                            renderLineHighlight: 'none',
-                            lineDecorationsWidth: showLineNumbers ? 10 : 0, // 行番号エリアの幅
-                            unicodeHighlight: {
-                                ambiguousCharacters: false,
-                                invisibleCharacters: false,
-                            },
-                            renderWhitespace: 'none',
-                            renderControlCharacters: false,
-                            padding: { bottom: 80 },
-                            scrollbar: {
-                                verticalScrollbarSize: 6,
-                                horizontalScrollbarSize: 6,
-                            }
-                        }}
+                        readOnly={true}
+                        showLineNumbers={showLineNumbers}
                         theme="vs"
                     />
                 ) : (

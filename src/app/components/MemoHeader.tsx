@@ -19,7 +19,7 @@ export default function MemoHeader({ title = 'Memos', actions, sx }: MemoHeaderP
             px: 2, 
             borderBottom: 1, 
             borderColor: 'divider',
-            bgcolor: 'background.paper',
+            bgcolor: '#f4eafa',
             flexShrink: 0,
             zIndex: 1100,
             position: 'sticky',
