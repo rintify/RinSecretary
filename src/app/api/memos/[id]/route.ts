@@ -3,6 +3,18 @@ import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 
+function extractTitle(content: string): string {
+  const lines = content.split('\n');
+  const firstLine = lines.find(line => line.trim().length > 0) || '';
+  const title = firstLine.trim().slice(0, 30);
+  return title || '無題のメモ';
+}
+
+function extractThumbnail(content: string): string | null {
+  const match = content.match(/!\[.*?\]\((.*?)\)/);
+  return match ? match[1] : null;
+}
+
 export async function GET(
   request: Request,
   props: { params: Promise<{ id: string }> }
@@ -39,11 +51,16 @@ export async function PUT(
   const user = await prisma.user.findUnique({ where: { email: session.user.email } });
   if (existing.userId !== user?.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
+  const content = json.content;
+  const title = extractTitle(content);
+  const thumbnailPath = extractThumbnail(content);
+
   const memo = await prisma.memo.update({
     where: { id },
     data: {
-      title: json.title,
-      content: json.content,
+      title,
+      content,
+      thumbnailPath
     },
   });
 

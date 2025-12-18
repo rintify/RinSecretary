@@ -27,18 +27,12 @@ type Attachment = {
 type Memo = {
     id: string;
     title: string;
-    content: string;
+    // content: string; // Removed for payload optimization
     createdAt: Date;
     updatedAt: Date;
     userId: string;
-    attachments?: Attachment[];
+    thumbnailPath?: string | null;
 };
-
-function getDisplayTitle(content: string): string {
-  const firstLine = content.split('\n')[0] || '';
-  const title = firstLine.slice(0, 30).trim();
-  return title || '無題のメモ';
-}
 
 export default function MemoListContainer({ memos }: { memos: Memo[] }) {
     const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -176,9 +170,9 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                                                     alignItems: 'center',
                                                     justifyContent: 'center'
                                                 }}>
-                                                    {memo.attachments && memo.attachments.find(a => a.mimeType.startsWith('image/')) ? (
+                                                    {memo.thumbnailPath ? (
                                                         <Image 
-                                                            src={memo.attachments.find(a => a.mimeType.startsWith('image/'))!.filePath} 
+                                                            src={memo.thumbnailPath} 
                                                             alt="thumbnail" 
                                                             fill 
                                                             sizes="48px"
@@ -189,7 +183,7 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                                                     )}
                                                 </Box>
                                                 <ListItemText 
-                                                    primary={getDisplayTitle(memo.content)} 
+                                                    primary={memo.title} 
                                                     secondary={new Date(memo.updatedAt).toLocaleString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} 
                                                     primaryTypographyProps={{ fontWeight: 'bold' }}
                                                 />
@@ -212,9 +206,9 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                                                     alignItems: 'center',
                                                     justifyContent: 'center'
                                                 }}>
-                                                    {memo.attachments && memo.attachments.find(a => a.mimeType.startsWith('image/')) ? (
+                                                    {memo.thumbnailPath ? (
                                                         <Image 
-                                                            src={memo.attachments.find(a => a.mimeType.startsWith('image/'))!.filePath} 
+                                                            src={memo.thumbnailPath} 
                                                             alt="thumbnail" 
                                                             fill 
                                                             sizes="56px"
@@ -226,7 +220,7 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                                                 </Box>
 
                                                 <ListItemText 
-                                                    primary={getDisplayTitle(memo.content)} 
+                                                    primary={memo.title} 
                                                     secondary={new Date(memo.updatedAt).toLocaleString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} 
                                                     primaryTypographyProps={{ fontWeight: 'bold', noWrap: true }}
                                                     secondaryTypographyProps={{ noWrap: true }}

@@ -11,6 +11,18 @@ import fs from 'fs';
 const UPLOAD_DIR = process.env.UPLOADS_DIR || join(process.cwd(), 'data/uploads');
 const MAX_TOTAL_SIZE = 3 * 1024 * 1024 * 1024; // 3GB
 
+function extractTitle(content: string): string {
+  const lines = content.split('\n');
+  const firstLine = lines.find(line => line.trim().length > 0) || '';
+  const title = firstLine.trim().slice(0, 30);
+  return title || '無題のメモ';
+}
+
+function extractThumbnail(content: string): string | null {
+  const match = content.match(/!\[.*?\]\((.*?)\)/);
+  return match ? match[1] : null;
+}
+
 const ensureDir = (dir: string) => {
     if (!fs.existsSync(dir)){
         fs.mkdirSync(dir, { recursive: true });
@@ -42,7 +54,8 @@ export async function createEmptyMemo() {
         data: {
             title: '無題のメモ',
             content: '',
-            userId: user.id
+            userId: user.id,
+            thumbnailPath: null,
         }
     });
 
@@ -63,14 +76,15 @@ export async function createMemo(content: string) {
     throw new Error('User not found');
   }
 
-  const firstLine = content.split('\n')[0] || '';
-  const title = firstLine.slice(0, 30).trim() || '無題のメモ';
+  const title = extractTitle(content);
+  const thumbnailPath = extractThumbnail(content);
 
   const memo = await prisma.memo.create({
     data: {
       title,
       content,
       userId: user.id,
+      thumbnailPath,
     },
   });
 
@@ -87,8 +101,8 @@ export async function updateMemo(id: string, content: string) {
   });
   if (!user) throw new Error('User not found');
 
-  const firstLine = content.split('\n')[0] || '';
-  const title = firstLine.slice(0, 30).trim() || '無題のメモ';
+  const title = extractTitle(content);
+  const thumbnailPath = extractThumbnail(content);
 
   const memo = await prisma.memo.update({
     where: {
@@ -98,6 +112,7 @@ export async function updateMemo(id: string, content: string) {
     data: {
       title,
       content,
+      thumbnailPath,
     },
   });
 

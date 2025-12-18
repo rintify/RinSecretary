@@ -22,7 +22,12 @@ export default async function MemoListPage() {
   const memos = await prisma.memo.findMany({
     where: { userId: user.id },
     orderBy: { updatedAt: 'desc' },
-    include: { attachments: true },
+    select: {
+      id: true,
+      title: true,
+      updatedAt: true,
+      thumbnailPath: true,
+    },
   });
 
   return <MemoListContainer memos={memos} />;

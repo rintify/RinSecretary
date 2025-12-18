@@ -124,6 +124,7 @@ model Memo {
   id        String   @id @default(cuid())
   title     String
   content   String   // Max 20000 chars roughly
+  thumbnailPath String? // URL to the first image in the content
   
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
