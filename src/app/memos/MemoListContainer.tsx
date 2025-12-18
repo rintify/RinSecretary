@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { 
     Box, List, ListItem, ListItemButton, ListItemText, 
     Checkbox, IconButton, Menu, MenuItem, Typography 
@@ -15,8 +15,9 @@ import { alpha } from '@mui/material/styles';
 import Image from 'next/image';
 import MemoHeader from '../components/MemoHeader';
 import { MemoListFabs, MemoListEditButton, MemoListItemButton } from './MemoListClient';
-import { deleteMemos } from './actions';
+import { deleteMemos, createMemoWithFile } from './actions';
 import { MEMO_COLOR } from '../utils/colors';
+import { Folder as FolderIcon } from '@mui/icons-material';
 
 type Attachment = {
     id: string;
@@ -38,6 +39,9 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const dragCounter = useRef(0);
 
     const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
         setAnchorEl(event.currentTarget);
@@ -76,8 +80,99 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
         cancelSelectionMode();
     };
 
+    const handleDragEnter = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current += 1;
+        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+            setIsDragging(true);
+        }
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current -= 1;
+        if (dragCounter.current === 0) {
+            setIsDragging(false);
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDrop = async (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+        dragCounter.current = 0;
+
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            setUploading(true);
+            const files = Array.from(e.dataTransfer.files);
+            try {
+                for (const file of files) {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    await createMemoWithFile(formData);
+                }
+            } catch (error) {
+                console.error('File upload failed', error);
+                alert('ファイルのアップロードに失敗しました');
+            } finally {
+                setUploading(false);
+            }
+        }
+    };
+
     return (
-        <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }} className="memo-page-transition">
+        <Box 
+            sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', position: 'relative' }} 
+            className="memo-page-transition"
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+        >
+            {/* Drag Overlay */}
+            {isDragging && (
+                <Box
+                    sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        bgcolor: 'rgba(0, 0, 0, 0.1)',
+                        zIndex: 2000,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backdropFilter: 'blur(2px)',
+                        pointerEvents: 'none'
+                    }}
+                >
+                    <Box
+                        sx={{
+                            bgcolor: 'background.paper',
+                            p: 3,
+                            borderRadius: 2,
+                            boxShadow: 3,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: 1
+                        }}
+                    >
+                        <FolderIcon sx={{ fontSize: 48, color: MEMO_COLOR }} />
+                        <Box sx={{ fontWeight: 'bold', color: 'text.primary' }}>
+                            ファイルをドロップして新規メモを作成
+                        </Box>
+                    </Box>
+                </Box>
+            )}
             <MemoHeader 
                 title={isSelectionMode ? `${selectedIds.size}件選択中` : "メモ一覧"} 
                 actions={

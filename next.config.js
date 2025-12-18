@@ -17,6 +17,10 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '3072mb', // 3GB
     },
+    // Required to allow large body sizes to pass through middleware
+    // See https://nextjs.org/docs/app/api-reference/config/next-config-js/middlewareClientMaxBodySize
+    serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs'], 
+    middlewareClientMaxBodySize: '3072mb',
   },
 };
 

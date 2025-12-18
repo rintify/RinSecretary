@@ -7,21 +7,12 @@ import { writeFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
+import { extractTitle, extractThumbnail } from '@/lib/memo-utils';
 
 const UPLOAD_DIR = process.env.UPLOADS_DIR || join(process.cwd(), 'data/uploads');
 const MAX_TOTAL_SIZE = 3 * 1024 * 1024 * 1024; // 3GB
 
-function extractTitle(content: string): string {
-  const lines = content.split('\n');
-  const firstLine = lines.find(line => line.trim().length > 0) || '';
-  const title = firstLine.trim().slice(0, 30);
-  return title || '無題のメモ';
-}
 
-function extractThumbnail(content: string): string | null {
-  const match = content.match(/!\[.*?\]\((.*?)\)/);
-  return match ? match[1] : null;
-}
 
 const ensureDir = (dir: string) => {
     if (!fs.existsSync(dir)){
@@ -183,6 +174,81 @@ export async function deleteMemos(ids: string[]) {
   });
 
   revalidatePath('/memos');
+}
+
+export async function createMemoWithFile(formData: FormData) {
+    const session = await devAuth();
+    if (!session?.user?.email) throw new Error('Unauthorized');
+
+    const user = await prisma.user.findUnique({ where: { email: session.user.email }});
+    if (!user) throw new Error('User not found');
+
+    const file = formData.get('file') as File;
+    if (!file) throw new Error('No file provided');
+
+    const memo = await prisma.memo.create({
+        data: {
+            title: 'アップロード中...',
+            content: '',
+            userId: user.id,
+            thumbnailPath: null,
+        }
+    });
+
+    try {
+        const totalSizeResult = await prisma.attachment.aggregate({
+            _sum: { fileSize: true }
+        });
+        const currentTotalSize = totalSizeResult._sum.fileSize || 0;
+        if (currentTotalSize + file.size > MAX_TOTAL_SIZE) {
+            throw new Error('Over storage limit');
+        }
+
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const nameParts = file.name.split('.');
+        const ext = nameParts.length > 1 ? `.${nameParts.pop()}` : '';
+        const filename = `${randomUUID()}${ext}`;
+        
+        ensureDir(UPLOAD_DIR);
+        const filepath = join(UPLOAD_DIR, filename);
+        await writeFile(filepath, buffer);
+        const url = `/api/uploads/${filename}`;
+
+        const attachment = await prisma.attachment.create({
+            data: {
+                fileName: file.name,
+                filePath: url,
+                fileSize: file.size,
+                mimeType: file.type || 'application/octet-stream',
+                memoId: memo.id,
+            }
+        });
+
+        const isImage = file.type.startsWith('image/');
+        const markdown = isImage 
+            ? `![${file.name}](${attachment.filePath})` 
+            : `[${file.name}](${attachment.filePath})`;
+        
+        const title = extractTitle(markdown);
+        const thumbnailPath = extractThumbnail(markdown);
+
+        await prisma.memo.update({
+            where: { id: memo.id },
+            data: {
+                title,
+                content: markdown,
+                thumbnailPath
+            }
+        });
+
+        revalidatePath('/memos');
+        return { success: true, memoId: memo.id };
+
+    } catch (e) {
+        await prisma.memo.delete({ where: { id: memo.id }});
+        console.error(e);
+        throw e;
+    }
 }
 
 // 添付ファイル関連

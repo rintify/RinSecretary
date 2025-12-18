@@ -2,18 +2,9 @@ import { devAuth as auth } from '@/lib/dev-auth';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { extractTitle, extractThumbnail } from '@/lib/memo-utils';
 
-function extractTitle(content: string): string {
-  const lines = content.split('\n');
-  const firstLine = lines.find(line => line.trim().length > 0) || '';
-  const title = firstLine.trim().slice(0, 30);
-  return title || '無題のメモ';
-}
 
-function extractThumbnail(content: string): string | null {
-  const match = content.match(/!\[.*?\]\((.*?)\)/);
-  return match ? match[1] : null;
-}
 
 export async function GET(
   request: Request,
