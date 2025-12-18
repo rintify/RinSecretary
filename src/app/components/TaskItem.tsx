@@ -58,7 +58,9 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
       minutesUntilDeadline = differenceInMinutes(d, now);
   }
 
-  // Warning: <= 3 days
+  // Expired check
+  const isExpired = daysUntilDeadline !== null && daysUntilDeadline < 0 && !isDone;
+  // Warning: <= 3 days (not expired)
   const isWarning = daysUntilDeadline !== null && daysUntilDeadline <= 3 && daysUntilDeadline >= 0 && !isDone;
   
   // Urgent (Red Border & Blink) Logic
@@ -119,12 +121,23 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
              d1.getDate() === d2.getDate();
   };
   
-  const isViewToday = viewDate ? isSameDayFn(viewDate, new Date()) : true; 
+  // isViewToday: Check if "now" falls within the viewDate's 4am-4am business day window
+  const isViewToday = (() => {
+      if (!viewDate) return true;
+      const now = new Date();
+      // Business day for viewDate: viewDate 04:00 to viewDate+1 03:59:59
+      const dayStart = new Date(viewDate);
+      dayStart.setHours(4, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      return now >= dayStart && now < dayEnd;
+  })();
   
-  // Warning only if view is Today
-  const showWarning = isWarning && isViewToday;
-  // Urgent/Blink only if view is Today
-  const showUrgent = isUrgent && isViewToday;
+  // Warning or Expired only if view is Today (but Expired shows always)
+  const showExpired = isExpired; // Always show expired regardless of view date
+  const showWarning = (isWarning || isExpired) && isViewToday;
+  // Urgent/Blink only if view is Today (but NOT for expired - no blink for expired)
+  const showUrgent = isUrgent && isViewToday && !isExpired;
   // const showBlink = shouldBlink && isViewToday; // Merged into showUrgent
 
   const getDayTimeDisplay = () => {
@@ -165,12 +178,14 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
   // Task -> Yellow (#ffeb3b or yellow[500] but border should be visible)
   
 
+  const warningColor = '#ffb74d'; // Orange-yellow chip
+  const expiredColor = '#c62828'; // Dark red
+
   let borderColor = '#e0e0e0'; // default
   if (isTask) {
       if (isDone) borderColor = '#9e9e9e';
-      else if (showUrgent) borderColor = '#f44336'; // Use showUrgent to respect "Today" view? Or just 'isUrgent'? Original was 'isUrgent'. But 'showUrgent = isUrgent && isViewToday'. 
-      // If I view "Tomorrow" list, tasks due tomorrow (Duration<24h) might be red?
-      // "showUrgent" is safer for "Today" emphasis.
+      else if (showExpired) borderColor = expiredColor; // Dark red for expired
+      else if (showUrgent) borderColor = '#f44336';
       else borderColor = TASK_COLOR; 
   } else if (isAlarm) {
       borderColor = ALARM_COLOR; 
@@ -178,7 +193,6 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
       borderColor = EVENT_COLOR; 
   }
 
-  const warningColor = '#ffb74d'; // Orange-yellow chip
   
   if (isAlarm) {
     return (
@@ -209,8 +223,8 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
   }
 
   return (
-    <Box sx={{ position: 'relative', mt: showWarning ? 1.8 : 0.7, mb: 0.7 }}>
-        {showWarning && (
+    <Box sx={{ position: 'relative', mt: (showWarning || showExpired) ? 1.8 : 0.7, mb: 0.7 }}>
+        {(showWarning || showExpired) && (
             <Chip 
                 label={chipLabel} 
                 size="small"
@@ -219,7 +233,8 @@ export default function TaskItem({ task, style, onClick, viewDate }: TaskItemPro
                     top: -8, 
                     left: -4, 
                     zIndex: 10, 
-                    bgcolor: warningColor, 
+                    bgcolor: showExpired ? expiredColor : warningColor,
+                    color: showExpired ? '#fff' : 'inherit', 
                     fontWeight: 'bold', 
                     height: 20, 
                     fontSize: '0.7rem' 

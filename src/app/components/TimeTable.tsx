@@ -31,18 +31,27 @@ const DayColumn = ({
     date, 
     tasks, 
     onEditTask,
-    isHeaderVisible,
-    isLoading
+    isLoading,
+    // New props for sub-header
+    hasDeadlineWarning,
+    showHistory,
+    onToggleHistory,
+    hiddenCount,
+    isToday
 }: { 
     date: Date, 
     tasks: TaskLocal[], 
     onEditTask?: (task: TaskLocal) => void;
-    isHeaderVisible?: boolean;
     isLoading?: boolean;
+    hasDeadlineWarning?: boolean;
+    showHistory?: boolean;
+    onToggleHistory?: () => void;
+    hiddenCount?: number;
+    isToday?: boolean;
 }) => {
     
     // Filter Tasks for this day
-    const dayStart = startOfDay(date);
+    const dayStart = addHours(startOfDay(date), 4);
     const dayEnd = addHours(dayStart, 24);
 
     const dayTasks = tasks.filter(task => {
@@ -106,7 +115,7 @@ const DayColumn = ({
         return dA - dB;
     });
 
-    if (dayTasks.length === 0 && deadlineTasks.length === 0) {
+    if (dayTasks.length === 0 && deadlineTasks.length === 0 && !hasDeadlineWarning && !(isToday && (hiddenCount || 0) > 0)) {
         if (isLoading) {
             return (
                 <Box sx={{ p: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', height: 200 }}>
@@ -122,7 +131,42 @@ const DayColumn = ({
     }
 
     return (
-        <Box sx={{ px: 2, pb: 2, pt: isHeaderVisible ? 0.2 : 2, height: '100%', overflowY: 'auto' }}>
+        <Box sx={{ px: 2, pb: 2, pt: 2, height: '100%', overflowY: 'auto' }}>
+            {/* Header / Warning Section inside scrollable area */}
+            {(hasDeadlineWarning || (isToday && (hiddenCount !== undefined || showHistory))) && (
+                <Box sx={{ 
+                    mb: 1,
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    minHeight: 20
+                }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                        {hasDeadlineWarning && (
+                             <>
+                                <WarningIcon color="error" sx={{ mr: 1, flexShrink: 0 }} />
+                                <Typography variant="body2" color="error" sx={{ fontWeight: 'bold', lineHeight: 1.2 }}>
+                                    今日までのタスクがあります
+                                </Typography>
+                             </>
+                        )}
+                    </Box>
+
+                    {/* History Toggle - Only show on Today and if there are history items or we are showing them */}
+                    {isToday && (
+                        <IconButton 
+                            onClick={onToggleHistory} 
+                            color={showHistory ? 'primary' : 'default'}
+                            sx={{ p: 0.5 }}
+                        >
+                            <Badge badgeContent={hiddenCount} sx={{ '& .MuiBadge-badge': { bgcolor: '#9acd32', color: 'white', transform: 'scale(0.8) translate(50%, -50%)', transformOrigin: '100% 0%' } }}>
+                                <HistoryIcon />
+                            </Badge>
+                        </IconButton>
+                    )}
+                </Box>
+            )}
+
             <AnimatePresence mode='popLayout'>
                 {dayTasks.map(task => (
                     <motion.div
@@ -164,6 +208,7 @@ const DayColumn = ({
                     </AnimatePresence>
                 </Box>
             )}
+            <Box sx={{ height: 100 }} />
         </Box>
     );
 };
@@ -254,11 +299,13 @@ export default function TimeTable({
   }, [date, isClient]);
 
   // --- Logic for History & Sub-Header ---
-  const isToday = isSameDay(date, now);
   
   // Identify "History" items: Alarms/Events where end time < now.
-  const dayStart = startOfDay(date);
+  const dayStart = addHours(startOfDay(date), 4);
   const dayEnd = addHours(dayStart, 24);
+
+  // isToday means "now" is within this day's 4am-4am window
+  const isToday = now >= dayStart && now < dayEnd;
   
   const eventsForToday = allTasks.filter(task => {
       const tStart = task.startTime ? new Date(task.startTime) : null;
@@ -279,17 +326,15 @@ export default function TimeTable({
 
   // Count hidden items (if we are strictly hiding them, these are the ones that WOULd be hidden if toggle is off)
   // The badge should show how many are hidden.
-  // If showHistory is true, none are hidden -> 0?
+  // If showHistory is true, items are visible, so 0 hidden?
   // User: "何件の非表示カードがあるか" -> "How many hidden cards there are".
   // So if showHistory is true, items are visible, so 0 hidden?
   // But maybe user wants "How many past items there are" regardless?
-  // Usually "Hidden count" implies current state.
-  // I will show `historyItems.length` if `!showHistory`. If `showHistory`, I'll show 0 or hide badge.
+  // Actually, usually badge on the toggle means "items inside". 
+  // If we hide them, "3" means "3 hidden items". If we show them, "3" means "3 past items shown"?
+  // Let's stick to logic: hiddenCount is purely for badge.
   const hiddenCount = (!showHistory) ? historyItems.length : 0;
   
-  // Warning logic: "24時間以内締切のタスクがある場合"
-  // Exclude completed tasks (progress >= maxProgress)
-  // Only show on "Today"
   // Warning logic: "24時間以内締切のタスクがある場合"
   // Exclude completed tasks (progress >= maxProgress)
   // Only show on "Today"
@@ -332,50 +377,18 @@ export default function TimeTable({
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        {/* Header Bar - only render if needed to avoid whitespace */}
-        {/* Header Bar - only render if needed to avoid whitespace */}
-        {(hasDeadlineWarning || (isToday && historyItems.length > 0)) && (
-        <Box sx={{ 
-            px: 2, 
-            py: 0.5, 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            minHeight: 44
-        }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-                {hasDeadlineWarning && (
-                     <>
-                        <WarningIcon color="error" sx={{ mr: 1, flexShrink: 0 }} />
-                        <Typography variant="body2" color="error" sx={{ fontWeight: 'bold', lineHeight: 1.2 }}>
-                            今日までのタスクがあります
-                        </Typography>
-                     </>
-                )}
-            </Box>
-
-            {/* History Toggle - Only show on Today and if there are history items */}
-            {isToday && historyItems.length > 0 && (
-                <IconButton 
-                    onClick={() => setShowHistory(!showHistory)} 
-                    color={showHistory ? 'primary' : 'default'}
-                    sx={{ p: 0.5 }}
-                >
-                    <Badge badgeContent={hiddenCount} sx={{ '& .MuiBadge-badge': { bgcolor: '#9acd32', color: 'white', transform: 'scale(0.8) translate(50%, -50%)', transformOrigin: '100% 0%' } }}>
-                        <HistoryIcon />
-                    </Badge>
-                </IconButton>
-            )}
-        </Box>
-        )}
-
         <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
              <DayColumn 
                 date={date} 
                 tasks={visibleTasks} 
                 onEditTask={onEditTask} 
-                isHeaderVisible={!!(hasDeadlineWarning || (isToday && historyItems.length > 0))}
                 isLoading={isLoading}
+                // Props for Sub-header injection
+                hasDeadlineWarning={hasDeadlineWarning}
+                showHistory={showHistory}
+                onToggleHistory={() => setShowHistory(!showHistory)}
+                hiddenCount={hiddenCount}
+                isToday={isToday && historyItems.length > 0} // Only show toggle if there are history items
              />
         </Box>
     </Box>

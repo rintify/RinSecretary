@@ -26,6 +26,7 @@ interface Task {
 }
 
 interface ChecklistItem {
+    id?: string;
     text: string;
     checked: boolean;
 }
@@ -81,7 +82,7 @@ export default function TaskDetailModal({ task, onClose, onEdit, onUpdate }: Tas
 
     const handleChecklistToggle = async (index: number) => {
         const newItems = [...checklistItems];
-        newItems[index].checked = !newItems[index].checked;
+        newItems[index] = { ...newItems[index], checked: !newItems[index].checked };
         setChecklistItems(newItems);
 
         const checkedCount = newItems.filter(i => i.checked).length;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft as ChevronLeftIcon, Delete as DeleteIcon, AccessTime as AccessTimeIcon, Add as AddIcon, Close as RemoveIcon } from '@mui/icons-material';
+import { ChevronLeft as ChevronLeftIcon, Delete as DeleteIcon, AccessTime as AccessTimeIcon, Add as AddIcon, Close as RemoveIcon, DragIndicator as DragIcon } from '@mui/icons-material';
 import { Box, Button, TextField, Typography, Paper, Stack, IconButton, Container, Checkbox } from '@mui/material';
 import { format, subDays, addHours, startOfDay, endOfDay, isBefore } from 'date-fns';
 import { TASK_COLOR } from '../utils/colors';
@@ -10,6 +10,7 @@ import { ja } from 'date-fns/locale';
 import { formatLocalIsoString } from '@/lib/utils';
 import CustomDatePicker from './ui/CustomDatePicker';
 import CustomTimePicker from './ui/CustomTimePicker';
+import { Reorder, useDragControls } from 'framer-motion';
 
 import { useTimeRange } from '../hooks/useTimeRange';
 
@@ -23,8 +24,46 @@ interface TaskFormProps {
 
 
 interface ChecklistItem {
+    id: string;
     text: string;
     checked: boolean;
+}
+
+function ChecklistItemRow({ item, index, onChange, onRemove }: { item: ChecklistItem, index: number, onChange: (text: string) => void, onRemove: () => void }) {
+    const controls = useDragControls();
+
+    return (
+        <Reorder.Item
+            value={item}
+            id={item.id}
+            dragListener={false}
+            dragControls={controls}
+            style={{ position: 'relative' }} // generic style
+        >
+            <Box display="flex" alignItems="center" gap={1} sx={{ bgcolor: 'background.paper', mb: 1 }}>
+                <Box 
+                    onPointerDown={(e) => controls.start(e)}
+                    sx={{ cursor: 'grab', display: 'flex', alignItems: 'center', color: 'action.active' }}
+                >
+                    <DragIcon fontSize="small" />
+                </Box>
+                <TextField
+                    value={item.text}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder="Item name"
+                    fullWidth
+                    size="small"
+                    variant="standard"
+                />
+                <IconButton 
+                    size="small" 
+                    onClick={onRemove}
+                >
+                    <RemoveIcon fontSize="small" />
+                </IconButton>
+            </Box>
+        </Reorder.Item>
+    );
 }
 
 export default function TaskForm(props: TaskFormProps) {
@@ -68,7 +107,9 @@ export default function TaskForm(props: TaskFormProps) {
              if (task.maxProgress !== undefined) setMaxProgress(task.maxProgress);
              if (task.checklist) {
                  try {
-                     setChecklist(JSON.parse(task.checklist));
+                     const parsed: ChecklistItem[] = JSON.parse(task.checklist);
+                     // Ensure IDs exist
+                     setChecklist(parsed.map(item => ({ ...item, id: item.id || crypto.randomUUID() })));
                  } catch (e) {
                      setChecklist([]);
                  }
@@ -90,7 +131,8 @@ export default function TaskForm(props: TaskFormProps) {
                     if (task.maxProgress !== undefined) setMaxProgress(task.maxProgress);
                     if (task.checklist) {
                         try {
-                            setChecklist(JSON.parse(task.checklist));
+                            const parsed: ChecklistItem[] = JSON.parse(task.checklist);
+                            setChecklist(parsed.map(item => ({ ...item, id: item.id || crypto.randomUUID() })));
                         } catch (e) {
                             setChecklist([]);
                         }
@@ -163,7 +205,7 @@ export default function TaskForm(props: TaskFormProps) {
     };
 
     const handleAddChecklistItem = () => {
-        setChecklist([...checklist, { text: '', checked: false }]);
+        setChecklist([...checklist, { id: crypto.randomUUID(), text: '', checked: false }]);
     };
 
     const handleRemoveChecklistItem = (index: number) => {
@@ -325,6 +367,7 @@ export default function TaskForm(props: TaskFormProps) {
                      </Box>
                 </Box>
 
+            {checklist.length === 0 && (
                 <Stack direction="row" spacing={1}>
                     <TextField
                         label="Current Progress"
@@ -351,6 +394,7 @@ export default function TaskForm(props: TaskFormProps) {
                         helperText={checklist.length > 0 ? "Fixed to 100%" : ""}
                     />
                 </Stack>
+            )}
             </Stack>
 
             {/* Checklist Section */}
@@ -361,37 +405,22 @@ export default function TaskForm(props: TaskFormProps) {
                         <AddIcon fontSize="small" />
                     </IconButton>
                 </Box>
-                <Stack spacing={1}>
+                <Reorder.Group axis="y" values={checklist} onReorder={setChecklist} style={{ listStyle: 'none', padding: 0 }}>
                     {checklist.map((item, index) => (
-                        <Box key={index} display="flex" alignItems="center" gap={1}>
-                            <Checkbox 
-                                checked={item.checked} 
-                                disabled 
-                                size="small" 
-                                sx={{ p: 0.5 }}
-                            />
-                            <TextField
-                                value={item.text}
-                                onChange={(e) => handleChecklistItemChange(index, e.target.value)}
-                                placeholder="Item name"
-                                fullWidth
-                                size="small"
-                                variant="standard"
-                            />
-                            <IconButton 
-                                size="small" 
-                                onClick={() => handleRemoveChecklistItem(index)}
-                            >
-                                <RemoveIcon fontSize="small" />
-                            </IconButton>
-                        </Box>
+                        <ChecklistItemRow
+                            key={item.id}
+                            item={item}
+                            index={index}
+                            onChange={(text) => handleChecklistItemChange(index, text)}
+                            onRemove={() => handleRemoveChecklistItem(index)}
+                        />
                     ))}
+                </Reorder.Group>
                     {checklist.length === 0 && (
                          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', fontSize: '0.8rem' }}>
                              No items
                          </Typography>
                     )}
-                </Stack>
             </Box>
             
             <CustomDatePicker
