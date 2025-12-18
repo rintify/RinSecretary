@@ -9,6 +9,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 
 const UPLOAD_DIR = process.env.UPLOADS_DIR || join(process.cwd(), 'data/uploads');
+const MAX_TOTAL_SIZE = 3 * 1024 * 1024 * 1024; // 3GB
 
 const ensureDir = (dir: string) => {
     if (!fs.existsSync(dir)){
@@ -182,6 +183,17 @@ export async function uploadAttachment(formData: FormData, memoId: string) {
 
     const file = formData.get('file') as File;
     if (!file) throw new Error('No file provided');
+
+    // サーバー全体の合計サイズチェック
+    const totalSizeResult = await prisma.attachment.aggregate({
+        _sum: {
+            fileSize: true
+        }
+    });
+    const currentTotalSize = totalSizeResult._sum.fileSize || 0;
+    if (currentTotalSize + file.size > MAX_TOTAL_SIZE) {
+        throw new Error('サーバーの総アップロード容量制限(3GB)を超えています');
+    }
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const nameParts = file.name.split('.');

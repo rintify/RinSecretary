@@ -4,14 +4,17 @@ import { useState, useEffect } from 'react';
 import { 
     Dialog, DialogTitle, DialogContent, DialogActions, 
     List, ListItem, ListItemText, ListItemSecondaryAction, 
-    IconButton, Button, Typography, Box, CircularProgress 
+    IconButton, Button, Typography, Box, CircularProgress,
+    Snackbar, ListItemButton
 } from '@mui/material';
 import { 
     Delete as DeleteIcon, 
     InsertDriveFile as FileIcon, 
     Close as CloseIcon, 
-    CloudUpload as UploadIcon 
+    CloudUpload as UploadIcon,
+    Note as NoteIcon
 } from '@mui/icons-material';
+import Image from 'next/image';
 import { getAttachments, deleteAttachment, uploadAttachment } from '@/app/memos/actions';
 import { MEMO_COLOR } from '../utils/colors';
 
@@ -20,6 +23,7 @@ interface Attachment {
     fileName: string;
     filePath: string;
     fileSize: number;
+    mimeType: string;
     createdAt: Date;
 }
 
@@ -32,6 +36,7 @@ interface MemoFileManagementProps {
 export default function MemoFileManagement({ memoId, open, onClose }: MemoFileManagementProps) {
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [loading, setLoading] = useState(false);
+    const [snackbarOpen, setSnackbarOpen] = useState(false);
 
     useEffect(() => {
         if (open && memoId) {
@@ -65,18 +70,27 @@ export default function MemoFileManagement({ memoId, open, onClose }: MemoFileMa
         const file = e.target.files?.[0];
         if (!file) return;
 
-        setLoading(true); // リスト全体をローディングにするよりかは、追加中は操作不能にする程度がいいが、簡単のため
+        setLoading(true);
         try {
             const formData = new FormData();
             formData.append('file', file);
             const newFile = await uploadAttachment(formData, memoId);
             setAttachments(prev => [newFile, ...prev]);
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            alert('アップロードに失敗しました');
+            alert(e.message || 'アップロードに失敗しました');
         } finally {
             setLoading(false);
             e.target.value = ''; // Reset input
+        }
+    };
+
+    const handleCopy = async (text: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setSnackbarOpen(true);
+        } catch (e) {
+            console.error('Copy failed', e);
         }
     };
 
@@ -104,20 +118,47 @@ export default function MemoFileManagement({ memoId, open, onClose }: MemoFileMa
                         ファイルはありません
                     </Typography>
                 ) : (
-                    <List>
+                    <List disablePadding>
                         {attachments.map(file => (
-                            <ListItem key={file.id}>
-                                <FileIcon sx={{ mr: 2, color: 'text.secondary' }} />
-                                <ListItemText 
-                                    primary={
-                                        <a href={file.filePath} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', color: 'inherit', fontWeight: 500 }}>
-                                            {file.fileName}
-                                        </a>
-                                    }
-                                    secondary={`${formatSize(file.fileSize)} • ${new Date(file.createdAt).toLocaleString()}`} 
-                                    secondaryTypographyProps={{ variant: 'caption' }}
-                                />
-                                <ListItemSecondaryAction>
+                            <ListItem key={file.id} divider disablePadding>
+                                <ListItemButton onClick={() => handleCopy(file.filePath)} sx={{ py: 1, px: 2 }}>
+                                    <Box sx={{ 
+                                        mr: 2, 
+                                        flexShrink: 0, 
+                                        width: 48, 
+                                        height: 48, 
+                                        position: 'relative', 
+                                        borderRadius: 1, 
+                                        overflow: 'hidden', 
+                                        bgcolor: 'action.hover',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}>
+                                        {file.mimeType.startsWith('image/') ? (
+                                            <Image 
+                                                src={file.filePath} 
+                                                alt="thumbnail" 
+                                                fill 
+                                                sizes="48px"
+                                                style={{ objectFit: 'cover' }} 
+                                            />
+                                        ) : (
+                                            <NoteIcon sx={{ fontSize: 24, color: 'text.secondary', opacity: 0.7 }} />
+                                        )}
+                                    </Box>
+                                    <ListItemText 
+                                        primary={
+                                            <Typography variant="body2" sx={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {file.fileName}
+                                            </Typography>
+                                        }
+                                        secondary={`${formatSize(file.fileSize)} • ${new Date(file.createdAt).toLocaleString()}`} 
+                                        secondaryTypographyProps={{ variant: 'caption' }}
+                                        sx={{ minWidth: 0 }}
+                                    />
+                                </ListItemButton>
+                                <ListItemSecondaryAction sx={{ right: 8 }}>
                                     <IconButton edge="end" onClick={() => handleDelete(file.id)} size="small" sx={{ color: 'error.main' }}>
                                         <DeleteIcon fontSize="small" />
                                     </IconButton>
@@ -126,6 +167,13 @@ export default function MemoFileManagement({ memoId, open, onClose }: MemoFileMa
                         ))}
                     </List>
                 )}
+                <Snackbar
+                    open={snackbarOpen}
+                    autoHideDuration={700}
+                    onClose={() => setSnackbarOpen(false)}
+                    message="リンクをコピーしました"
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                />
             </DialogContent>
             <DialogActions>
                 <Button component="label" startIcon={<UploadIcon />} sx={{ color: MEMO_COLOR, mr: 'auto' }}>
