@@ -1,6 +1,7 @@
 import { devAuth as auth } from '@/lib/dev-auth';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 
 export async function GET(
   request: Request,
@@ -46,6 +47,9 @@ export async function PUT(
     },
   });
 
+  revalidatePath('/memos');
+  revalidatePath(`/memos/${id}`);
+
   return NextResponse.json(memo);
 }
 
@@ -66,6 +70,8 @@ export async function DELETE(
   if (existing.userId !== user?.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   await prisma.memo.delete({ where: { id } });
+
+  revalidatePath('/memos');
 
   return NextResponse.json({ success: true });
 }

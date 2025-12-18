@@ -1,6 +1,7 @@
 import { devAuth as auth } from '@/lib/dev-auth';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -52,6 +53,8 @@ export async function POST(request: Request) {
         userId: user.id,
       },
     });
+
+    revalidatePath('/memos');
 
     return NextResponse.json(memo);
   } catch (error) {

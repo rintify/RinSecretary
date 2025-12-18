@@ -1,29 +1,15 @@
 'use client';
 
-import { Box, IconButton, Typography } from '@mui/material';
-import { ArrowBack as ArrowBackIcon, Add as AddIcon } from '@mui/icons-material';
-import { useRouter } from 'next/navigation';
+import { Box, Typography } from '@mui/material';
+import { SxProps, Theme } from '@mui/material/styles';
 
 interface MemoHeaderProps {
     title?: string;
-    onBack?: () => void;
-    backUrl?: string;
     actions?: React.ReactNode;
+    sx?: SxProps<Theme>;
 }
 
-export default function MemoHeader({ title = 'Memos', onBack, backUrl, actions }: MemoHeaderProps) {
-    const router = useRouter();
-
-    const handleBack = () => {
-        if (onBack) {
-            onBack();
-        } else if (backUrl) {
-            router.push(backUrl);
-        } else {
-            router.back();
-        }
-    };
-
+export default function MemoHeader({ title = 'Memos', actions, sx }: MemoHeaderProps) {
     return (
         <Box sx={{ 
             height: '60px', 
@@ -37,16 +23,12 @@ export default function MemoHeader({ title = 'Memos', onBack, backUrl, actions }
             flexShrink: 0,
             zIndex: 1100,
             position: 'sticky',
-            top: 0
+            top: 0,
+            ...sx
         }}>
-            <Box display="flex" alignItems="center">
-                <IconButton onClick={handleBack} edge="start" sx={{ mr: 1 }}>
-                    <ArrowBackIcon />
-                </IconButton>
-                <Typography variant="h6" fontWeight="bold">
-                    {title}
-                </Typography>
-            </Box>
+            <Typography variant="h6" fontWeight="bold">
+                {title}
+            </Typography>
             <Box>
                 {actions}
             </Box>

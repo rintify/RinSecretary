@@ -130,4 +130,19 @@ model Memo {
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  attachments Attachment[]
+}
+
+model Attachment {
+  id        String   @id @default(cuid())
+  fileName  String
+  filePath  String
+  fileSize  Int
+  mimeType  String
+  
+  memoId    String
+  memo      Memo     @relation(fields: [memoId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
 }

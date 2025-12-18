@@ -1,54 +1,146 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Box, TextField, Fab, CircularProgress, LinearProgress } from '@mui/material';
-import { Save as SaveIcon } from '@mui/icons-material';
+import { Check as CheckIcon, Close as CloseIcon, Delete as DeleteIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
+import { alpha } from '@mui/material/styles';
 import { useRouter } from 'next/navigation';
+import { createMemo, updateMemo, deleteMemo, uploadAttachment } from '@/app/memos/actions';
+import { MEMO_COLOR } from '../utils/colors';
 
 interface MemoComposerProps {
-    initialTitle?: string;
     initialContent?: string;
-    memoId?: string; // If present, update. If absent, create.
-    onSuccess?: (id: string) => void;
+    memoId?: string;
+    onSuccess?: () => void;
+    onDelete?: () => void;
+    isNew?: boolean;
 }
 
-export default function MemoComposer({ initialTitle = '', initialContent = '', memoId, onSuccess }: MemoComposerProps) {
-    const [title, setTitle] = useState(initialTitle);
+export interface MemoComposerRef {
+    handleDelete: () => Promise<void>;
+}
+
+function generateTitle(content: string): string {
+    const firstLine = content.split('\n')[0] || '';
+    const title = firstLine.slice(0, 30).trim();
+    return title || '無題のメモ';
+}
+
+const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
+    ({ initialContent = '', memoId, onSuccess, onDelete, isNew }, ref) => {
     const [content, setContent] = useState(initialContent);
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
-    const contentRef = useRef<HTMLDivElement>(null); // For cursor position if needed, but TextField handles it
+    const [internalMemoId, setInternalMemoId] = useState<string | undefined>(memoId);
+    
+    const contentRef = useRef(content);
+    const isSavedRef = useRef(false);
+    const isSavingRef = useRef(false);
+
     const router = useRouter();
 
-    const handleSave = async () => {
-        if (!title.trim()) return;
-        setLoading(true);
+    useEffect(() => {
+        contentRef.current = content;
+    }, [content]);
+
+    // 自動保存用（APIルート + keepalive）
+    const saveMemo = async (currentContent: string): Promise<string | undefined> => {
+        if (isSavedRef.current || isSavingRef.current) return internalMemoId;
+        // 内容が空かつ新規作成の場合は保存しない（無題メモ量産防止）
+        if (!internalMemoId && !currentContent.trim()) return undefined;
+
+        isSavingRef.current = true;
+        
+        const title = generateTitle(currentContent);
 
         try {
-            const url = memoId ? `/api/memos/${memoId}` : '/api/memos';
-            const method = memoId ? 'PUT' : 'POST';
+            const idToUse = internalMemoId; 
+            const url = idToUse ? `/api/memos/${idToUse}` : '/api/memos';
+            const method = idToUse ? 'PUT' : 'POST';
             
             const res = await fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, content })
+                body: JSON.stringify({ title, content: currentContent }),
+                keepalive: true
             });
 
-            if (!res.ok) throw new Error('Failed to save');
-            
-            const data = await res.json();
-            if (onSuccess) {
-                onSuccess(data.id);
+            if (res.ok && !idToUse) {
+                const data = await res.json();
+                if (data.id) {
+                    setInternalMemoId(data.id);
+                    return data.id;
+                }
+            }
+            return idToUse;
+        } catch (e) {
+            console.error('Auto Save failed', e);
+            return internalMemoId;
+        } finally {
+            isSavingRef.current = false;
+        }
+    };
+
+    // 手動保存（Server Actions）
+    const handleManualSave = async () => {
+        if (isSavedRef.current) return;
+        isSavedRef.current = true;
+        setLoading(true); 
+        
+        try {
+            if (internalMemoId) {
+                await updateMemo(internalMemoId, content);
             } else {
-                router.push(`/memos/${data.id}`);
-                router.refresh();
+                await createMemo(content);
+            }
+            
+            if (onSuccess) {
+                onSuccess();
+            } else {
+                router.back();
             }
         } catch (e) {
-            console.error(e);
-            alert('Save failed');
+            console.error('Manual save failed', e);
+            isSavedRef.current = false;
             setLoading(false);
         }
     };
+
+    // アンマウント時の自動保存
+    useEffect(() => {
+        return () => {
+            if (!isSavedRef.current) {
+                saveMemo(contentRef.current);
+            }
+        };
+    }, []);
+
+    // 削除処理（Server Actions）
+    const handleDelete = async () => {
+        if (!isNew && !confirm('このメモを削除しますか？')) return;
+        
+        isSavedRef.current = true;
+        setLoading(true);
+
+        try {
+            if (internalMemoId) {
+                await deleteMemo(internalMemoId);
+            }
+            if (onDelete) {
+                onDelete();
+            } else {
+                router.replace('/memos');
+            }
+        } catch (e) {
+            console.error('Delete failed', e);
+            isSavedRef.current = false;
+            setLoading(false);
+        }
+    };
+
+    useImperativeHandle(ref, () => ({
+        handleDelete
+    }));
 
     const handlePaste = async (e: React.ClipboardEvent) => {
         const items = e.clipboardData.items;
@@ -64,36 +156,26 @@ export default function MemoComposer({ initialTitle = '', initialContent = '', m
 
     const uploadFile = async (file: File) => {
         setUploading(true);
-        const formData = new FormData();
-        formData.append('file', file);
-
         try {
-            const res = await fetch('/api/uploads', {
-                method: 'POST',
-                body: formData
-            });
-            if (!res.ok) throw new Error('Upload failed');
-            const data = await res.json();
-            
-            // Insert markdown at cursor? 
-            // Simple append for now or try to insert
-            // Since TextField doesn't expose cursor simply in controlled state without Ref magic, 
-            // I'll just append to end or try to use document.activeElement if it is the textarea
-            
-            const markdown = `\n![image](${data.url})\n`;
-            
-            // Better: get selection start
-            const activeEl = document.activeElement as HTMLTextAreaElement;
-            if (activeEl && activeEl.name === 'content-input') {
-                const start = activeEl.selectionStart;
-                const end = activeEl.selectionEnd;
-                const newContent = content.substring(0, start) + markdown + content.substring(end);
-                setContent(newContent);
-                // Need to restore cursor? React re-render might mess it up.
-                // For MVP, appending or simple insertion is fine.
-            } else {
-                setContent(prev => prev + markdown);
+            let id = internalMemoId;
+            if (!id) {
+                id = await saveMemo(content);
+                if (!id) {
+                     const newMemo = await createMemo(content || '無題のメモ');
+                     setInternalMemoId(newMemo.id);
+                     id = newMemo.id;
+                }
             }
+
+            if (!id) throw new Error('Could not determine memo ID');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const attachment = await uploadAttachment(formData, id);
+            
+            const markdown = `\n![image](${attachment.filePath})\n`;
+            setContent(prev => prev + markdown);
 
         } catch (e) {
             console.error(e);
@@ -103,23 +185,25 @@ export default function MemoComposer({ initialTitle = '', initialContent = '', m
         }
     };
 
+    const isEmpty = !content.trim();
+    const showDelete = isNew && isEmpty;
+    const isChanged = content !== initialContent;
+    const showBack = !isNew && !isChanged;
+
+    const handleFabClick = () => {
+        if (showDelete) return handleDelete();
+        if (showBack) return router.back();
+        return handleManualSave();
+    };
+
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            {uploading && <LinearProgress />}
-            <Box p={2} flexShrink={0}>
-                <TextField
-                    placeholder="Title"
-                    variant="standard"
-                    fullWidth
-                    value={title}
-                    onChange={e => setTitle(e.target.value)}
-                    slotProps={{ input: { style: { fontSize: '1.5rem', fontWeight: 'bold' } } }}
-                />
-            </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: alpha(MEMO_COLOR, 0.1) }}>
+            {uploading && <LinearProgress color="primary" />}
+            
             <Box p={2} flex={1} sx={{ overflowY: 'auto' }}>
                 <TextField
                     name="content-input"
-                    placeholder="Memo content (Markdown supported, Paste images allowed)"
+                    placeholder="メモを入力..."
                     multiline
                     fullWidth
                     minRows={10}
@@ -129,16 +213,34 @@ export default function MemoComposer({ initialTitle = '', initialContent = '', m
                     onPaste={handlePaste}
                     slotProps={{ input: { disableUnderline: true } }}
                     sx={{ height: '100%', '& .MuiInputBase-root': { alignItems: 'flex-start', height: '100%' } }}
+                    autoFocus
                 />
             </Box>
-            <Fab 
-                color="primary" 
-                onClick={handleSave} 
+
+             <Fab 
+                onClick={handleFabClick} 
                 disabled={loading || uploading}
-                sx={{ position: 'fixed', bottom: 16, right: 16 }}
+                aria-label={showDelete ? "delete" : (showBack ? "back" : "save")}
+                sx={{ 
+                    position: 'fixed', 
+                    bottom: 16, 
+                    right: 16, 
+                    bgcolor: (showDelete || showBack) ? 'background.paper' : MEMO_COLOR, 
+                    color: showDelete ? 'error.main' : (showBack ? MEMO_COLOR : '#fff'),
+                    '&:hover': { 
+                        bgcolor: (showDelete || showBack) ? 'action.hover' : MEMO_COLOR, 
+                        opacity: (showDelete || showBack) ? 1 : 0.9 
+                    } 
+                }}
             >
-                {loading ? <CircularProgress size={24} color="inherit" /> : <SaveIcon />}
+                {loading ? <CircularProgress size={24} color="inherit" /> : (
+                    showDelete ? <DeleteIcon /> : (showBack ? <ArrowBackIcon /> : <CheckIcon />)
+                )}
             </Fab>
         </Box>
     );
-}
+});
+
+MemoComposer.displayName = 'MemoComposer';
+
+export default MemoComposer;
