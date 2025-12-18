@@ -1,8 +1,8 @@
 'use client'; 
 
 import { useState } from 'react';
-import { Event as EventIcon, TaskAlt as TaskIcon } from '@mui/icons-material';
-import { format, isSameDay } from 'date-fns';
+import { Event as EventIcon, TaskAlt as TaskIcon, Note as MemoIcon } from '@mui/icons-material';
+import { format, isSameDay, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import TaskForm from './components/TaskForm';
 import EventForm from './components/EventForm';
@@ -18,6 +18,7 @@ import { IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, T
 import { Settings as SettingsIcon, Notifications as AlarmIcon, Menu as MenuIcon, AccessTime as AccessTimeIcon, MyLocation as MyLocationIcon } from '@mui/icons-material';
 import TimeTableSwiper from './components/TimeTableSwiper';
 import CustomDatePicker from './components/ui/CustomDatePicker';
+import Link from 'next/link';
 import { AppRegistration as BulkIcon } from '@mui/icons-material';
 import BulkEventCreator from './components/BulkEventCreator';
 import ImmediateTaskFlow from './components/immediate/ImmediateTaskFlow';
@@ -25,7 +26,7 @@ import ImmediateEventFlow from './components/immediate/ImmediateEventFlow';
 import ImmediateAlarmFlow from './components/immediate/ImmediateAlarmFlow';
 import LongPressFab from './components/ui/LongPressFab';
 
-import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR } from './utils/colors';
+import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR, MEMO_COLOR } from './utils/colors';
 
 export default function Home() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -143,6 +144,9 @@ export default function Home() {
 
           {/* Right: Menu */}
           <Box>
+              <IconButton component={Link} href="/memos">
+                  <MemoIcon />
+              </IconButton>
               <IconButton onClick={handleMenuOpen}>
                   <MenuIcon />
               </IconButton>
@@ -241,6 +245,19 @@ export default function Home() {
                 >
                     <AlarmIcon />
                 </LongPressFab>
+                </Box>
+             </Tooltip>
+             <Tooltip title="New Memo" placement="left">
+                <Box>
+                <Fab 
+                    aria-label="add memo" 
+                    component={Link}
+                    href="/memos/new"
+                    size="medium" 
+                    sx={{ bgcolor: MEMO_COLOR, color: '#fff', '&:hover': { bgcolor: MEMO_COLOR, opacity: 0.9 } }}
+                >
+                    <MemoIcon />
+                </Fab>
                 </Box>
              </Tooltip>
           </Box>
