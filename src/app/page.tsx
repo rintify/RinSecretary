@@ -1,7 +1,7 @@
 'use client'; 
 
 import { useState } from 'react';
-import { Event as EventIcon, TaskAlt as TaskIcon } from '@mui/icons-material';
+import { Event as EventIcon, TaskAlt as TaskIcon, Note as MemoIcon } from '@mui/icons-material';
 import { format, isSameDay, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import TaskForm from './components/TaskForm';
@@ -14,18 +14,21 @@ import SettingsModal from './components/SettingsModal';
 import RegularTaskSettingsModal from './components/RegularTaskSettingsModal';
 import FreeTimeModal from './components/FreeTimeModal';
 import { Suspense } from 'react';
-import { IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Tooltip, Button, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
-import { Settings as SettingsIcon, Notifications as AlarmIcon, Menu as MenuIcon, AccessTime as AccessTimeIcon, MyLocation as MyLocationIcon } from '@mui/icons-material';
+import { IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Tooltip, Button, Menu, MenuItem, ListItemIcon, ListItemText, CircularProgress, Divider } from '@mui/material';
+import { Settings as SettingsIcon, Notifications as AlarmIcon, Menu as MenuIcon, AccessTime as AccessTimeIcon, MyLocation as MyLocationIcon, DataUsage as DataUsageIcon } from '@mui/icons-material';
 import TimeTableSwiper from './components/TimeTableSwiper';
 import CustomDatePicker from './components/ui/CustomDatePicker';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { AppRegistration as BulkIcon } from '@mui/icons-material';
 import BulkEventCreator from './components/BulkEventCreator';
 import ImmediateTaskFlow from './components/immediate/ImmediateTaskFlow';
 import ImmediateEventFlow from './components/immediate/ImmediateEventFlow';
 import ImmediateAlarmFlow from './components/immediate/ImmediateAlarmFlow';
 import LongPressFab from './components/ui/LongPressFab';
+import DataUsageModal from './components/DataUsageModal';
 
-import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR } from './utils/colors';
+import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR, MEMO_COLOR } from './utils/colors';
 
 // Helper to get the "Business Date" (shifts day back if before 4 AM)
 const getBusinessDate = () => {
@@ -42,7 +45,7 @@ export default function Home() {
 
   // Modal State
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS'>('NONE');
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE'>('NONE');
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
   const handleNewTask = () => {
@@ -96,6 +99,22 @@ export default function Home() {
   };
   
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [memoLoading, setMemoLoading] = useState(false);
+  const router = useRouter();
+
+  const handleCreateMemo = async () => {
+    if (memoLoading) return;
+    setMemoLoading(true);
+    try {
+        const { createEmptyMemo } = await import('./memos/actions');
+        const memo = await createEmptyMemo();
+        router.push(`/memos/${memo.id}/edit?new=true`);
+    } catch (e) {
+        console.error(e);
+        setMemoLoading(false);
+        alert('メモ作成に失敗しました');
+    }
+  };
 
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => setAnchorEl(event.currentTarget);
@@ -160,6 +179,9 @@ export default function Home() {
 
           {/* Right: Menu */}
           <Box>
+              <IconButton component={Link} href="/memos">
+                  <MemoIcon />
+              </IconButton>
               <IconButton onClick={handleMenuOpen}>
                   <MenuIcon />
               </IconButton>
@@ -192,6 +214,13 @@ export default function Home() {
                       </ListItemIcon>
                       <ListItemText>定期タスク設定</ListItemText>
                   </MenuItem>
+                  <Divider />
+                  <MenuItem onClick={() => { handleMenuClose(); setActiveModal('DATA_USAGE'); }}>
+                       <ListItemIcon>
+                           <DataUsageIcon fontSize="small" />
+                       </ListItemIcon>
+                       <ListItemText>通信量</ListItemText>
+                   </MenuItem>
                   <MenuItem onClick={async () => { 
                       handleMenuClose(); 
                       const { logout } = await import('@/lib/actions');
@@ -258,6 +287,19 @@ export default function Home() {
                 >
                     <AlarmIcon />
                 </LongPressFab>
+                </Box>
+             </Tooltip>
+             <Tooltip title="New Memo" placement="left">
+                <Box>
+                <Fab 
+                    aria-label="add memo" 
+                    onClick={handleCreateMemo}
+                    disabled={memoLoading}
+                    size="medium" 
+                    sx={{ bgcolor: MEMO_COLOR, color: '#fff', '&:hover': { bgcolor: MEMO_COLOR, opacity: 0.9 } }}
+                >
+                    {memoLoading ? <CircularProgress size={24} color="inherit" /> : <MemoIcon />}
+                </Fab>
                 </Box>
              </Tooltip>
           </Box>
@@ -359,6 +401,12 @@ export default function Home() {
                 )}
                 {activeModal === 'FREE_TIME' && (
                     <FreeTimeModal
+                        onClose={handleCloseModal}
+                    />
+                )}
+                {activeModal === 'DATA_USAGE' && (
+                    <DataUsageModal
+                        open={true}
                         onClose={handleCloseModal}
                     />
                 )}

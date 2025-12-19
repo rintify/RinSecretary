@@ -2,12 +2,7 @@ import { Box, Typography, IconButton } from '@mui/material';
 import { Edit as EditIcon, Close as CloseIcon, AccessTime as TimeIcon, Notifications as BellIcon } from '@mui/icons-material';
 import { format, subMinutes } from 'date-fns';
 import { createAlarm } from '@/lib/alarm-actions';
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import remarkGfm from 'remark-gfm';
-import remarkBreaks from 'remark-breaks';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
+import MarkdownDisplay from './MarkdownDisplay';
 
 interface EventLocal {
     id: string;
@@ -68,15 +63,9 @@ export default function EventDetailModal({ event, onClose, onEdit }: EventDetail
 
              {event.memo && (
                  <Box className="selectable-text" sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 2, mb: 1, '& p': { m: 0 } }}>
-                     <ReactMarkdown
-                        remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
-                        rehypePlugins={[rehypeKatex]}
-                        components={{
-                            a: ({node, ...props}) => <a {...props} style={{ color: '#1976d2', textDecoration: 'underline' }} target="_blank" rel="noopener noreferrer" />
-                        }}
-                     >
+                     <MarkdownDisplay>
                          {event.memo}
-                     </ReactMarkdown>
+                     </MarkdownDisplay>
                  </Box>
              )}
         </Box>

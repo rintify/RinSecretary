@@ -7,6 +7,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import GlobalStyles from '@mui/material/GlobalStyles';
 import { createTheme } from '@mui/material/styles';
 import { Roboto } from 'next/font/google';
+import DataUsageTracker from './components/DataUsageTracker';
 
 const roboto = Roboto({
   weight: ['300', '400', '500', '700'],
@@ -88,6 +89,7 @@ export default function ThemeRegistry({ children }: { children: React.ReactNode 
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <GlobalStyles styles={globalUserSelectStyles} />
+        <DataUsageTracker />
         {children}
       </ThemeProvider>
     </AppRouterCacheProvider>
