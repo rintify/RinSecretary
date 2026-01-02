@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Event as EventIcon, TaskAlt as TaskIcon, Note as MemoIcon } from '@mui/icons-material';
 import { format, isSameDay, subDays, addDays, differenceInMinutes } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import { useRef } from 'react';
 import TaskForm from './components/TaskForm';
 import EventForm from './components/EventForm';
 import TaskDetailModal from './components/TaskDetailModal';
@@ -21,7 +22,7 @@ import { getAlarms } from '@/lib/alarm-actions';
 import { TaskLocal } from './components/TimeTable';
 import { Suspense, useEffect } from 'react';
 import { 
-    IconButton, Box, Fab, Dialog, DialogContent, 
+    IconButton, Box, Fab, Dialog, DialogContent, DialogTitle, DialogActions, Typography,
     useTheme, useMediaQuery, Tooltip, Button, 
     Menu, MenuItem, ListItemIcon, ListItemText, 
     CircularProgress, Divider, Badge 
@@ -64,6 +65,7 @@ const getBusinessDate = () => {
 export default function Home() {
   const [currentDate, setCurrentDate] = useState(getBusinessDate());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   // Modal State
   // Modal State
@@ -108,9 +110,21 @@ export default function Home() {
   };
 
   const handleCloseModal = (arg?: any) => {
+      const closingModal = activeModal;
       setActiveModal('NONE');
       setModalData(null);
-      setRefreshTrigger(prev => prev + 1);
+      
+      // Update logic: Only refresh what's needed
+      const isCalendar = closingModal.includes('EVENT') || closingModal.includes('ALARM') || closingModal === 'SETTINGS' || closingModal === 'FREE_TIME';
+      const isTask = closingModal.includes('TASK') || closingModal === 'BULK_CREATE' || closingModal === 'SETTINGS' || closingModal === 'FREE_TIME' || closingModal === 'EXPIRED_TASKS' || closingModal === 'REGULAR_TASK_SETTINGS';
+
+      if (isCalendar) {
+          setCalendarRefreshTrigger(prev => prev + 1);
+      }
+      if (isTask) {
+          setTaskRefreshTrigger(prev => prev + 1);
+      }
+
       if (arg instanceof Date) {
           // Convert the item's date to its corresponding business date
           // If the time is before 4 AM, it belongs to the previous calendar day's business day
@@ -120,7 +134,8 @@ export default function Home() {
       }
   };
   
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [taskRefreshTrigger, setTaskRefreshTrigger] = useState(0);
+  const [calendarRefreshTrigger, setCalendarRefreshTrigger] = useState(0);
   const [memoLoading, setMemoLoading] = useState(false);
   const router = useRouter();
 
@@ -153,7 +168,7 @@ export default function Home() {
     if (activeModal === 'NONE') {
         fetchCount();
     }
-  }, [refreshTrigger, activeModal]);
+  }, [taskRefreshTrigger, activeModal]);
 
   // Google Events & Alarms Sync
   const [googleEvents, setGoogleEvents] = useState<TaskLocal[]>([]);
@@ -163,10 +178,33 @@ export default function Home() {
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [now, setNow] = useState(new Date());
 
+  // Client-side caching for Calendar
+  const [calendarCacheRange, setCalendarCacheRange] = useState<{ start: Date; end: Date } | null>(null);
+  const prevTriggerRef = useRef(calendarRefreshTrigger);
+  const FETCH_WINDOW_DAYS = 7;
+  const BUFFER_DAYS = 2;
+
   const loadEvents = async () => {
+      // Check cache validity
+      const isForce = calendarRefreshTrigger !== prevTriggerRef.current;
+      prevTriggerRef.current = calendarRefreshTrigger;
+
+      const inRange = calendarCacheRange && 
+          currentDate > addDays(calendarCacheRange.start, BUFFER_DAYS) && 
+          currentDate < subDays(calendarCacheRange.end, BUFFER_DAYS);
+
+      // If legitimate cache hit and not force refresh, skip
+      if (!isForce && inRange && googleEvents.length > 0) {
+          // console.log("Cache Hit: Skipping fetch");
+          // Update lastSyncedAt just to show it's "live" enough? Or maybe kept as is?
+          // Let's keep lastSyncedAt as the actual API fetch time to be honest.
+          return;
+      }
+
       setIsSyncing(true);
-      const start = subDays(currentDate, 7);
-      const end = addDays(currentDate, 7);
+      // Fetch wider window
+      const start = subDays(currentDate, FETCH_WINDOW_DAYS);
+      const end = addDays(currentDate, FETCH_WINDOW_DAYS);
       
       try {
           const eventsPromise = fetchGoogleEvents(start, end);
@@ -176,6 +214,7 @@ export default function Home() {
           setGoogleEvents([...(events as TaskLocal[]), ...(alarms as TaskLocal[])]);
           setLastSyncedAt(new Date());
           setSyncError(false);
+          setCalendarCacheRange({ start, end });
       } catch (e: any) {
           // AUTH_ERROR is expected when token is expired/revoked, so we don't log it as error
           if (e?.message !== 'AUTH_ERROR' && !e?.message?.includes('AUTH_ERROR')) {
@@ -199,8 +238,11 @@ export default function Home() {
 
   useEffect(() => {
       loadEvents();
-      fetchTasks();
-  }, [currentDate, refreshTrigger]);
+  }, [currentDate, calendarRefreshTrigger]);
+
+  useEffect(() => {
+    fetchTasks();
+  }, [currentDate, taskRefreshTrigger]);
 
   // Update 'now' for sync status calculation
   useEffect(() => {
@@ -263,9 +305,6 @@ export default function Home() {
               >
                   {format(currentDate, 'MM/dd (E)', { locale: ja })}
               </Button>
-              <IconButton onClick={() => setCurrentDate(getBusinessDate())} size="small" sx={{ ml: 1, color: 'text.secondary' }}>
-                  <MyLocationIcon />
-              </IconButton>
               <CustomDatePicker 
                   open={showDatePicker}
                   onClose={() => setShowDatePicker(false)}
@@ -273,9 +312,20 @@ export default function Home() {
                   onChange={setCurrentDate}
               />
               
-              {/* Sync Status Indicator */}
               <Tooltip title={isSyncing ? "同期中..." : (syncError ? "認証エラー：再ログインしてください" : `最終同期: ${lastSyncedAt ? format(lastSyncedAt, 'HH:mm') : '未同期'}`)}>
-                  <Box sx={{ ml: 1, display: 'flex', alignItems: 'center', height: 24, width: 24, justifyContent: 'center' }}>
+                  <Box 
+                      onClick={() => setShowSyncModal(true)}
+                      sx={{ 
+                          ml: 1, 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          height: 24, 
+                          width: 24, 
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          '&:hover': { opacity: 0.8 }
+                      }}
+                  >
                       <AnimatePresence mode="wait">
                           {isSyncing ? (
                               <motion.div
@@ -293,14 +343,13 @@ export default function Home() {
                                   initial={{ scale: 0.8 }}
                                   animate={{ 
                                       scale: 1,
-                                      backgroundColor: syncError ? '#f44336' : (isSyncedRecently ? '#4caf50' : '#ffeb3b')
+                                      backgroundColor: syncError ? '#f44336' : (isSyncedRecently ? '#4caf50' : '#ff9800')
                                   }}
                                   transition={{ type: "spring", stiffness: 300, damping: 20 }}
                                   style={{
                                       width: 8,
                                       height: 8,
                                       borderRadius: '50%',
-                                      boxShadow: '0 0 4px rgba(0,0,0,0.2)'
                                   }}
                               />
                           )}
@@ -310,8 +359,10 @@ export default function Home() {
           </Box>
 
           {/* Right: Menu */}
-          <Box>
-
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+               <IconButton onClick={() => setCurrentDate(getBusinessDate())} size="small" sx={{ mr: 0, color: 'text.secondary' }}>
+                  <MyLocationIcon />
+              </IconButton>
               <IconButton onClick={handleMenuOpen}>
                   <MenuIcon />
               </IconButton>
@@ -381,7 +432,7 @@ export default function Home() {
               onDateChange={setCurrentDate}
               onNewTask={(time) => handleNewEvent(time)} 
               onEditTask={handleTaskClick}
-              refreshTrigger={refreshTrigger}
+              refreshTrigger={taskRefreshTrigger}
               expiredCount={expiredCount}
               onOpenExpired={() => setActiveModal('EXPIRED_TASKS')}
               googleEvents={googleEvents}
@@ -468,7 +519,7 @@ export default function Home() {
                         initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
                     />
                 )}
-                {activeModal === 'EDIT_TASK' && (
+                 {activeModal === 'EDIT_TASK' && (
                     <TaskForm 
                         taskId={modalData?.id} 
                         initialValues={modalData}
@@ -497,7 +548,7 @@ export default function Home() {
                         task={modalData}
                         onClose={handleCloseModal}
                         onEdit={handleEditFromDetail}
-                        onUpdate={() => setRefreshTrigger(prev => prev + 1)}
+                        onUpdate={() => setTaskRefreshTrigger(prev => prev + 1)}
                     />
                 )}
                 {activeModal === 'DETAIL_EVENT' && (
@@ -588,10 +639,45 @@ export default function Home() {
     {activeModal === 'BULK_CREATE' && (
         <BulkEventCreator 
             onBack={handleCloseModal}
-            onSuccess={() => { handleCloseModal(); setRefreshTrigger(prev => prev + 1); }}
+            onSuccess={() => { handleCloseModal(); setTaskRefreshTrigger(prev => prev + 1); }}
             startWeekDate={currentDate}
         />
     )}
+
+    {/* Sync Status Dialog */}
+    <Dialog open={showSyncModal} onClose={() => setShowSyncModal(false)}>
+        <DialogTitle>同期ステータス</DialogTitle>
+        <DialogContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ 
+                    width: 12, 
+                    height: 12, 
+                    borderRadius: '50%', 
+                    bgcolor: syncError ? '#f44336' : (isSyncedRecently ? '#4caf50' : '#ff9800'),
+                    mr: 1
+                }} />
+                <Typography variant="body1">
+                    {syncError ? "認証エラー" : (isSyncedRecently ? "最新 (同期済み)" : "未同期 (時間経過)")}
+                </Typography>
+            </Box>
+            <Typography variant="body2" color="text.secondary" paragraph>
+                最終同期: {lastSyncedAt ? format(lastSyncedAt, 'yyyy/MM/dd HH:mm:ss') : '未同期'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+                {syncError ? "Googleアカウントの認証が切れています。再ログインしてください。" : "通常は自動で同期されますが、ボタンを押して手動で更新することもできます。"}
+            </Typography>
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={() => setShowSyncModal(false)}>閉じる</Button>
+            <Button variant="contained" onClick={() => {
+                setTaskRefreshTrigger(prev => prev + 1);
+                setCalendarRefreshTrigger(prev => prev + 1);
+                setShowSyncModal(false);
+            }}>
+                最新にする
+            </Button>
+        </DialogActions>
+    </Dialog>
 
     </Box>
   );
