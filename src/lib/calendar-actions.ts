@@ -13,6 +13,7 @@ interface CacheEntry {
 }
 const eventCache = new Map<string, CacheEntry>();
 const CACHE_TTL = 60 * 1000; // 1 minute
+console.log('calendar-actions: Cache initialized/cleared');
 
 export async function fetchGoogleEvents(start: Date, end: Date) {
   const session = await auth();

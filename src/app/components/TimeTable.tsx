@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import { addHours, startOfDay, format, addDays, subDays, isSameDay, isBefore } from 'date-fns';
 import TaskItem from './TaskItem';
-import { fetchGoogleEvents } from '@/lib/calendar-actions';
-import { getAlarms } from '@/lib/alarm-actions';
+
 import { Box, Typography, IconButton, Paper, Container, Badge, CircularProgress } from '@mui/material';
 import { ArrowBackIosNew, ArrowForwardIos, History as HistoryIcon, ReportProblem as WarningIcon } from '@mui/icons-material';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -231,7 +230,9 @@ export default function TimeTable({
     onEditTask,
     refreshTrigger,
     expiredCount,
-    onOpenExpired
+    onOpenExpired,
+    googleEvents,
+    tasks
 }: { 
     date: Date;
     onNewTask?: (startTime?: string) => void;
@@ -239,9 +240,9 @@ export default function TimeTable({
     refreshTrigger?: number;
     expiredCount?: number;
     onOpenExpired?: () => void;
+    googleEvents: TaskLocal[];
+    tasks: TaskLocal[];
 }) {
-  const [tasks, setTasks] = useState<TaskLocal[]>([]);
-  const [googleEvents, setGoogleEvents] = useState<TaskLocal[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
   const allTasks = [...tasks, ...googleEvents];
@@ -257,55 +258,21 @@ export default function TimeTable({
     // Update 'now' every minute to keep UI fresh
     const timer = setInterval(() => setNow(new Date()), 60000);
     
-    fetchTasks();
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
-      if (isClient) {
-          fetchTasks();
-          loadGoogleEvents(); // Also reload events on refreshTrigger
-      }
+      // Internal fetching removed, relying on props
   }, [refreshTrigger, isClient]);
 
-  const fetchTasks = async () => {
-    try {
-        console.log('[TimeTable] Fetching tasks...');
-        const res = await fetch('/api/tasks');
-        if (res.ok) {
-            const data = await res.json();
-            console.log('[TimeTable] Fetched tasks:', data);
-            setTasks(data);
-        } else {
-            console.error('[TimeTable] Failed to fetch tasks:', res.status, res.statusText);
-        }
-    } catch(e) { console.error('[TimeTable] Fetch error:', e) }
-  };
+  // Internal fetchTasks removed
 
-  const loadGoogleEvents = async () => {
-      setIsLoading(true);
-      // Load events and alarms around the current date
-      const start = subDays(date, 7);
-      const end = addDays(date, 7);
-      try {
-          const eventsPromise = fetchGoogleEvents(start, end);
-          const alarmsPromise = getAlarms(start, end); // Fetch alarms
 
-          const [events, alarms] = await Promise.all([eventsPromise, alarmsPromise]);
-          
-          setGoogleEvents([...(events as TaskLocal[]), ...(alarms as TaskLocal[])]); // Merge arrays
-      } catch (e) {
-          console.error("Failed to load events/alarms", e);
-      } finally {
-          setIsLoading(false);
-      }
-  };
+  // Internal Google Events fetching removed in favor of passed prop
 
-  useEffect(() => {
-      if (isClient) {
-          loadGoogleEvents();
-      }
-  }, [date, isClient]);
+
+  // Removed useEffect for loadGoogleEvents
+
 
   // --- Logic for History & Sub-Header ---
   
@@ -347,8 +314,8 @@ export default function TimeTable({
   // Warning logic: "24時間以内締切のタスクがある場合"
   // Exclude completed tasks (progress >= maxProgress)
   // Only show on "Today"
-  let triggerTaskName = "";
-  let triggerDebug = "";
+  // Only show on "Today"
+
 
   const hasDeadlineWarning = isToday && tasks.some(task => {
       if (!task.deadline) return false;
@@ -366,9 +333,7 @@ export default function TimeTable({
       
       const inRange = d >= now && d <= limit;
       if (inRange) {
-          triggerTaskName = task.title;
-          triggerDebug = `P:${p}/${max}`;
-          console.log(`[Warning Trigger] Task: ${task.title}, Deadline: ${d.toLocaleString()}, Progress: ${p}/${max}`);
+          // Warning logic can be expanded here if needed
       }
       return inRange; 
   });

@@ -11,8 +11,9 @@ export async function getGoogleCalendarEvents(userId: string, timeMin: Date, tim
     });
 
     if (!account) {
-      console.error('getGoogleCalendarEvents: Account not found for user', userId);
-      return [];
+      console.warn('getGoogleCalendarEvents: Account not found for user', userId);
+      // Treat missing account as auth error so UI shows red dot prompting to login
+      throw new Error("AUTH_ERROR");
     }
     
     if (!account.access_token) {
@@ -67,9 +68,22 @@ export async function getGoogleCalendarEvents(userId: string, timeMin: Date, tim
 
     return response.data.items || [];
 
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message?.includes('invalid_grant')) {
+      console.warn('getGoogleCalendarEvents: Invalid grant (token expired/revoked). Clearing account to force re-login.');
+      await prisma.account.deleteMany({
+        where: {
+          userId: userId,
+          provider: 'google',
+        },
+      });
+      // Re-throw so UI knows it failed
+      throw new Error("AUTH_ERROR");
+    }
     console.error('Failed to fetch calendar events:', error);
-    return [];
+    // For other errors, maybe we still want to throw? Or return empty?
+    // Let's throw to be safe and show red dot for any fetch failure.
+    throw error;
   }
 }
 

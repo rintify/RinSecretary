@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { addDays, differenceInCalendarDays } from 'date-fns';
 import { Box } from '@mui/material';
 import TimeTable from './TimeTable';
+import { TaskLocal } from './TimeTable';
 // Import Swiper React components
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Swiper as SwiperClass } from 'swiper/types';
@@ -21,6 +22,8 @@ interface TimeTableSwiperProps {
     refreshTrigger: number;
     expiredCount?: number;
     onOpenExpired?: () => void;
+    googleEvents: TaskLocal[];
+    tasks: TaskLocal[];
 }
 
 // Range of virtual slides. 
@@ -37,7 +40,9 @@ export default function TimeTableSwiper({
     onEditTask,
     refreshTrigger,
     expiredCount,
-    onOpenExpired
+    onOpenExpired,
+    googleEvents,
+    tasks
 }: TimeTableSwiperProps) {
     const swiperRef = useRef<SwiperClass | null>(null);
     const [mounted, setMounted] = useState(false);
@@ -90,6 +95,8 @@ export default function TimeTableSwiper({
                      refreshTrigger={refreshTrigger}
                      expiredCount={expiredCount}
                      onOpenExpired={onOpenExpired}
+                     googleEvents={googleEvents}
+                     tasks={tasks}
                  />
             </Box>
         );
@@ -135,6 +142,8 @@ export default function TimeTableSwiper({
                                     refreshTrigger={refreshTrigger}
                                     expiredCount={expiredCount}
                                     onOpenExpired={onOpenExpired}
+                                    googleEvents={googleEvents}
+                                    tasks={tasks}
                                 />
                             </Box>
                         </SwiperSlide>

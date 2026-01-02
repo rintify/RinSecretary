@@ -1,8 +1,9 @@
 'use client'; 
 
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Event as EventIcon, TaskAlt as TaskIcon, Note as MemoIcon } from '@mui/icons-material';
-import { format, isSameDay, subDays } from 'date-fns';
+import { format, isSameDay, subDays, addDays, differenceInMinutes } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import TaskForm from './components/TaskForm';
 import EventForm from './components/EventForm';
@@ -15,6 +16,9 @@ import RegularTaskSettingsModal from './components/RegularTaskSettingsModal';
 import FreeTimeModal from './components/FreeTimeModal';
 import ExpiredTaskListModal from './components/ExpiredTaskListModal';
 import { getExpiredTaskCount } from '@/lib/task-actions';
+import { fetchGoogleEvents } from '@/lib/calendar-actions';
+import { getAlarms } from '@/lib/alarm-actions';
+import { TaskLocal } from './components/TimeTable';
 import { Suspense, useEffect } from 'react';
 import { 
     IconButton, Box, Fab, Dialog, DialogContent, 
@@ -151,6 +155,63 @@ export default function Home() {
     }
   }, [refreshTrigger, activeModal]);
 
+  // Google Events & Alarms Sync
+  const [googleEvents, setGoogleEvents] = useState<TaskLocal[]>([]);
+  const [tasks, setTasks] = useState<TaskLocal[]>([]); // Synched Local Tasks
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [now, setNow] = useState(new Date());
+
+  const loadEvents = async () => {
+      setIsSyncing(true);
+      const start = subDays(currentDate, 7);
+      const end = addDays(currentDate, 7);
+      
+      try {
+          const eventsPromise = fetchGoogleEvents(start, end);
+          const alarmsPromise = getAlarms(start, end);
+
+          const [events, alarms] = await Promise.all([eventsPromise, alarmsPromise]);
+          setGoogleEvents([...(events as TaskLocal[]), ...(alarms as TaskLocal[])]);
+          setLastSyncedAt(new Date());
+          setSyncError(false);
+      } catch (e: any) {
+          // AUTH_ERROR is expected when token is expired/revoked, so we don't log it as error
+          if (e?.message !== 'AUTH_ERROR' && !e?.message?.includes('AUTH_ERROR')) {
+            console.error("Failed to load events/alarms", e);
+          }
+          setSyncError(true);
+      } finally {
+          setIsSyncing(false);
+      }
+  };
+
+  const fetchTasks = async () => {
+      try {
+          const res = await fetch('/api/tasks');
+          if (res.ok) {
+              const data = await res.json();
+              setTasks(data);
+          }
+      } catch (e) { console.error("Failed to fetch tasks", e); }
+  };
+
+  useEffect(() => {
+      loadEvents();
+      fetchTasks();
+  }, [currentDate, refreshTrigger]);
+
+  // Update 'now' for sync status calculation
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000); // Every minute
+    return () => clearInterval(timer);
+  }, []);
+
+  const timeSinceSync = lastSyncedAt ? differenceInMinutes(now, lastSyncedAt) : 999;
+  const isSyncedRecently = !syncError && timeSinceSync < 5;
+
+
 
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => setAnchorEl(event.currentTarget);
@@ -211,6 +272,41 @@ export default function Home() {
                   value={currentDate}
                   onChange={setCurrentDate}
               />
+              
+              {/* Sync Status Indicator */}
+              <Tooltip title={isSyncing ? "同期中..." : (syncError ? "認証エラー：再ログインしてください" : `最終同期: ${lastSyncedAt ? format(lastSyncedAt, 'HH:mm') : '未同期'}`)}>
+                  <Box sx={{ ml: 1, display: 'flex', alignItems: 'center', height: 24, width: 24, justifyContent: 'center' }}>
+                      <AnimatePresence mode="wait">
+                          {isSyncing ? (
+                              <motion.div
+                                  key="syncing"
+                                  initial={{ opacity: 0, scale: 0.5 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.5 }}
+                                  transition={{ duration: 0.2 }}
+                              >
+                                  <CircularProgress size={12} thickness={5} color="inherit" sx={{ opacity: 0.6, display: 'block' }} />
+                              </motion.div>
+                          ) : (
+                              <motion.div
+                                  key="status-dot"
+                                  initial={{ scale: 0.8 }}
+                                  animate={{ 
+                                      scale: 1,
+                                      backgroundColor: syncError ? '#f44336' : (isSyncedRecently ? '#4caf50' : '#ffeb3b')
+                                  }}
+                                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                                  style={{
+                                      width: 8,
+                                      height: 8,
+                                      borderRadius: '50%',
+                                      boxShadow: '0 0 4px rgba(0,0,0,0.2)'
+                                  }}
+                              />
+                          )}
+                      </AnimatePresence>
+                  </Box>
+              </Tooltip>
           </Box>
 
           {/* Right: Menu */}
@@ -288,6 +384,8 @@ export default function Home() {
               refreshTrigger={refreshTrigger}
               expiredCount={expiredCount}
               onOpenExpired={() => setActiveModal('EXPIRED_TASKS')}
+              googleEvents={googleEvents}
+              tasks={tasks}
           />
           
           {/* FABs */}
