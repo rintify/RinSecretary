@@ -13,9 +13,27 @@ import AlarmDetailModal from './components/AlarmDetailModal';
 import SettingsModal from './components/SettingsModal';
 import RegularTaskSettingsModal from './components/RegularTaskSettingsModal';
 import FreeTimeModal from './components/FreeTimeModal';
-import { Suspense } from 'react';
-import { IconButton, Box, Fab, Dialog, DialogContent, useTheme, useMediaQuery, Tooltip, Button, Menu, MenuItem, ListItemIcon, ListItemText, CircularProgress, Divider } from '@mui/material';
-import { Settings as SettingsIcon, Notifications as AlarmIcon, Menu as MenuIcon, AccessTime as AccessTimeIcon, MyLocation as MyLocationIcon, DataUsage as DataUsageIcon } from '@mui/icons-material';
+import ExpiredTaskListModal from './components/ExpiredTaskListModal';
+import { getExpiredTaskCount } from '@/lib/task-actions';
+import { Suspense, useEffect } from 'react';
+import { 
+    IconButton, Box, Fab, Dialog, DialogContent, 
+    useTheme, useMediaQuery, Tooltip, Button, 
+    Menu, MenuItem, ListItemIcon, ListItemText, 
+    CircularProgress, Divider, Badge 
+} from '@mui/material';
+import { 
+    Menu as MenuIcon, 
+    Add as AddIcon, 
+    ChevronLeft, 
+    ChevronRight, 
+    MyLocation as MyLocationIcon,
+    AccessTime as AccessTimeIcon,
+    Settings as SettingsIcon,
+    Warning as WarningIcon,
+    Notifications as AlarmIcon,
+    DataUsage as DataUsageIcon
+} from '@mui/icons-material';
 import TimeTableSwiper from './components/TimeTableSwiper';
 import CustomDatePicker from './components/ui/CustomDatePicker';
 import { useRouter } from 'next/navigation';
@@ -45,7 +63,7 @@ export default function Home() {
 
   // Modal State
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE'>('NONE');
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS'>('NONE');
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
   const handleNewTask = () => {
@@ -116,6 +134,24 @@ export default function Home() {
     }
   };
 
+  // Expired Tasks Badge
+  const [expiredCount, setExpiredCount] = useState(0);
+
+  useEffect(() => {
+    // Initial fetch
+    const fetchCount = async () => {
+        const count = await getExpiredTaskCount();
+        setExpiredCount(count);
+    };
+    fetchCount();
+
+    // Re-fetch on refreshTrigger (e.g. when modal closes)
+    if (activeModal === 'NONE') {
+        fetchCount();
+    }
+  }, [refreshTrigger, activeModal]);
+
+
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => setAnchorEl(event.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
@@ -179,9 +215,7 @@ export default function Home() {
 
           {/* Right: Menu */}
           <Box>
-              <IconButton component={Link} href="/memos">
-                  <MemoIcon />
-              </IconButton>
+
               <IconButton onClick={handleMenuOpen}>
                   <MenuIcon />
               </IconButton>
@@ -190,6 +224,12 @@ export default function Home() {
                   open={Boolean(anchorEl)}
                   onClose={handleMenuClose}
               >
+                  <MenuItem onClick={() => { handleMenuClose(); setActiveModal('EXPIRED_TASKS'); }}>
+                      <ListItemIcon>
+                          <WarningIcon fontSize="small" color="error" />
+                      </ListItemIcon>
+                      <ListItemText sx={{ color: 'error.main' }}>期限切れタスク</ListItemText>
+                  </MenuItem>
                   <MenuItem onClick={() => { handleMenuClose(); setActiveModal('FREE_TIME'); }}>
                       <ListItemIcon>
                           <AccessTimeIcon fontSize="small" />
@@ -246,6 +286,8 @@ export default function Home() {
               onNewTask={(time) => handleNewEvent(time)} 
               onEditTask={handleTaskClick}
               refreshTrigger={refreshTrigger}
+              expiredCount={expiredCount}
+              onOpenExpired={() => setActiveModal('EXPIRED_TASKS')}
           />
           
           {/* FABs */}
@@ -408,6 +450,13 @@ export default function Home() {
                     <DataUsageModal
                         open={true}
                         onClose={handleCloseModal}
+                    />
+                )}
+                {activeModal === 'EXPIRED_TASKS' && (
+                    <ExpiredTaskListModal
+                        open={true}
+                        onClose={handleCloseModal}
+                        onEditTask={handleTaskClick} 
                     />
                 )}
             </Suspense>

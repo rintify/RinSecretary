@@ -37,7 +37,10 @@ const DayColumn = ({
     showHistory,
     onToggleHistory,
     hiddenCount,
-    isToday
+    isToday,
+    // Expired Tasks Banner Props
+    expiredCount,
+    onOpenExpired
 }: { 
     date: Date, 
     tasks: TaskLocal[], 
@@ -48,13 +51,15 @@ const DayColumn = ({
     onToggleHistory?: () => void;
     hiddenCount?: number;
     isToday?: boolean;
+    expiredCount?: number;
+    onOpenExpired?: () => void;
 }) => {
     
-    // Filter Tasks for this day
+    // ... (existing filter code)
     const dayStart = addHours(startOfDay(date), 4);
     const dayEnd = addHours(dayStart, 24);
 
-    const dayTasks = tasks.filter(task => {
+    const dayTasks = tasks.filter(task => { // ... existing filter logic
         // Event logic: must have startTime
         const tStart = task.startTime ? new Date(task.startTime) : null;
         const tEnd = task.endTime ? new Date(task.endTime) : null;
@@ -68,54 +73,35 @@ const DayColumn = ({
         return true;
     });
 
-    // Sort by start time
-    dayTasks.sort((a, b) => {
+    // ... (existing sort code)
+     dayTasks.sort((a, b) => {
         const tA = a.startTime ? new Date(a.startTime).getTime() : 0;
         const tB = b.startTime ? new Date(b.startTime).getTime() : 0;
         return tA - tB;
     });
 
-    const deadlineTasks = tasks.filter(task => {
-        // Task logic: must have deadline
+    const deadlineTasks = tasks.filter(task => { // ... existing filter logic
         if (!task.deadline) return false;
-        
-        // Filter out if deadline is strictly before the current date's start (00:00)
-        // User said "before the timetable date". 
-        // If date is Today (10th), and deadline was 9th, hide it.
-        // If deadline is 10th 10:00, show it.
-        
         const d = new Date(task.deadline);
-        // We compare against dayStart which is set to 00:00 of the view date.
-        // Actually, let's use dayStart for strict comparison.
         if (d < dayStart) return false;
-
-        // "Start Date after the TimeTable Day should not be displayed"
-        // If task.startDate exists and is strictly after the end of this day, hide it.
         if (task.startDate) {
             const s = new Date(task.startDate);
-            // dayEnd is 24 hours after dayStart (so start of next day)
-            // If start date is >= dayEnd, it is in the future relative to this view.
             if (s >= dayEnd) return false;
         }
-
         return true;
     });
 
-    // Sort Deadline Tasks:
-    // 1. Incomplete first
-    // 2. Deadline soonest
+    // ... (existing sort code)
     deadlineTasks.sort((a, b) => {
         const isDoneA = (a.progress || 0) >= (a.maxProgress || 100);
         const isDoneB = (b.progress || 0) >= (b.maxProgress || 100);
-        
-        if (isDoneA !== isDoneB) return isDoneA ? 1 : -1; // Done goes to bottom
-        
+        if (isDoneA !== isDoneB) return isDoneA ? 1 : -1; 
         const dA = a.deadline ? new Date(a.deadline).getTime() : 0;
         const dB = b.deadline ? new Date(b.deadline).getTime() : 0;
         return dA - dB;
     });
 
-    if (dayTasks.length === 0 && deadlineTasks.length === 0 && !hasDeadlineWarning && !(isToday && (hiddenCount || 0) > 0)) {
+    if (dayTasks.length === 0 && deadlineTasks.length === 0 && !hasDeadlineWarning && !(isToday && (hiddenCount || 0) > 0) && !(expiredCount && expiredCount > 0)) {
         if (isLoading) {
             return (
                 <Box sx={{ p: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', height: 200 }}>
@@ -133,6 +119,32 @@ const DayColumn = ({
     return (
         <Box sx={{ px: 2, pb: 2, pt: 2, height: '100%', overflowY: 'auto' }}>
             {/* Header / Warning Section inside scrollable area */}
+            
+            {/* Expired Tasks Banner - Only if expired tasks exist */}
+            {expiredCount !== undefined && expiredCount > 0 && (
+                 <Box 
+                    sx={{ 
+                        mb: 1, 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        cursor: 'pointer',
+                        bgcolor: '#fff5f5', // Light red background like notification
+                        p: 1,
+                        borderRadius: 1,
+                        border: 1,
+                        borderColor: 'error.light',
+                        '&:hover': { bgcolor: '#ffebee' }
+                    }}
+                    onClick={onOpenExpired}
+                 >
+                    <WarningIcon color="error" sx={{ mr: 1, fontSize: 20 }} />
+                    <Typography variant="body2" color="error" sx={{ fontWeight: 'bold' }}>
+                        期限切れタスクが{expiredCount}件あります
+                    </Typography>
+                    <ArrowForwardIos sx={{ ml: 'auto', fontSize: 14, color: 'error.main' }} />
+                 </Box>
+            )}
+
             {(hasDeadlineWarning || (isToday && (hiddenCount !== undefined || showHistory))) && (
                 <Box sx={{ 
                     mb: 1,
@@ -213,23 +225,20 @@ const DayColumn = ({
     );
 };
 
-// Update props to include onEditAlarm
-// Though onEditTask handles generic tasks/events, we should ensure it passes the type correctly.
-// Actually, TaskLocal has 'type', so generic handler is fine?
-// Let's see how page.tsx handles it. page.tsx handles `handleTaskClick`.
-// If task has deadline -> DETAIL_TASK, else DETAIL_EVENT.
-// We need to differentiate ALARM.
-
 export default function TimeTable({ 
     date,
     onNewTask,
     onEditTask,
-    refreshTrigger
+    refreshTrigger,
+    expiredCount,
+    onOpenExpired
 }: { 
     date: Date;
     onNewTask?: (startTime?: string) => void;
     onEditTask?: (task: TaskLocal) => void;
     refreshTrigger?: number;
+    expiredCount?: number;
+    onOpenExpired?: () => void;
 }) {
   const [tasks, setTasks] = useState<TaskLocal[]>([]);
   const [googleEvents, setGoogleEvents] = useState<TaskLocal[]>([]);
@@ -389,6 +398,8 @@ export default function TimeTable({
                 onToggleHistory={() => setShowHistory(!showHistory)}
                 hiddenCount={hiddenCount}
                 isToday={isToday && historyItems.length > 0} // Only show toggle if there are history items
+                expiredCount={expiredCount}
+                onOpenExpired={onOpenExpired}
              />
         </Box>
     </Box>

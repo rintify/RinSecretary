@@ -19,6 +19,8 @@ interface TimeTableSwiperProps {
     onNewTask: (time?: string) => void;
     onEditTask: (task: any) => void;
     refreshTrigger: number;
+    expiredCount?: number;
+    onOpenExpired?: () => void;
 }
 
 // Range of virtual slides. 
@@ -33,7 +35,9 @@ export default function TimeTableSwiper({
     onDateChange,
     onNewTask,
     onEditTask,
-    refreshTrigger
+    refreshTrigger,
+    expiredCount,
+    onOpenExpired
 }: TimeTableSwiperProps) {
     const swiperRef = useRef<SwiperClass | null>(null);
     const [mounted, setMounted] = useState(false);
@@ -84,6 +88,8 @@ export default function TimeTableSwiper({
                      onNewTask={onNewTask}
                      onEditTask={onEditTask}
                      refreshTrigger={refreshTrigger}
+                     expiredCount={expiredCount}
+                     onOpenExpired={onOpenExpired}
                  />
             </Box>
         );
@@ -127,6 +133,8 @@ export default function TimeTableSwiper({
                                     onNewTask={onNewTask}
                                     onEditTask={onEditTask}
                                     refreshTrigger={refreshTrigger}
+                                    expiredCount={expiredCount}
+                                    onOpenExpired={onOpenExpired}
                                 />
                             </Box>
                         </SwiperSlide>
