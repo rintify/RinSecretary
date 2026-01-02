@@ -16,6 +16,8 @@ import {
     TextSnippet as TextIcon,
     Download as DownloadIcon
 } from '@mui/icons-material';
+import FullImageModal from './FullImageModal';
+import SmartImage from './SmartImage';
 
 interface MarkdownDisplayProps {
     children: string;
@@ -23,6 +25,13 @@ interface MarkdownDisplayProps {
 }
 
 export default function MarkdownDisplay({ children, attachments = [] }: MarkdownDisplayProps) {
+    const [modalOpen, setModalOpen] = React.useState(false);
+    const [selectedImage, setSelectedImage] = React.useState<string | null>(null);
+
+    const handleImageClick = (src: string) => {
+        setSelectedImage(src);
+        setModalOpen(true);
+    };
 
     const renderAttachment = (url: string, originalNode: React.ReactNode, isImageTag: boolean) => {
         const file = attachments.find(a => a.filePath === url || encodeURI(a.filePath) === url);
@@ -36,19 +45,10 @@ export default function MarkdownDisplay({ children, attachments = [] }: Markdown
 
         if (isImage) {
              return (
-                 <img 
+                 <SmartImage 
                     src={file.filePath} 
                     alt={file.fileName}
-                    style={{ 
-                        maxWidth: '100%', 
-                        maxHeight: '80vh',
-                        objectFit: 'contain',
-                        display: 'block',
-                        marginRight: 'auto',
-                        marginLeft: 0,
-                        marginBlock: '0.5rem',
-                        borderRadius: '8px' 
-                    }} 
+                    onClick={() => handleImageClick(file.filePath)}
                  />
              );
         }
@@ -133,22 +133,14 @@ export default function MarkdownDisplay({ children, attachments = [] }: Markdown
                     },
                     img: (props) => {
                         const src = (props.src || '') as string;
-                        const original = (
-                             // eslint-disable-next-line @next/next/no-img-element
-                             <img 
-                                 {...props} 
-                                 style={{ 
-                                     maxWidth: '100%', 
-                                     maxHeight: '80vh',
-                                     objectFit: 'contain',
-                                     display: 'block',
-                                     marginRight: 'auto',
-                                     marginLeft: 0,
-                                     marginBlock: '0.5rem'
-                                 }} 
-                             />
+                        // For external or any image, use SmartImage for consistent behavior
+                        return (
+                            <SmartImage
+                                src={src}
+                                alt={props.alt || 'image'}
+                                onClick={() => src && handleImageClick(src)}
+                            />
                         );
-                        return renderAttachment(src, original, true);
                     },
                     p: ({node, ...props}) => <div {...props} style={{ margin: 0, marginBottom: '0.5em' }} />,
                     pre: ({node, ...props}) => (
@@ -196,6 +188,12 @@ export default function MarkdownDisplay({ children, attachments = [] }: Markdown
             >
                 {children}
             </ReactMarkdown>
+
+            <FullImageModal 
+                open={modalOpen} 
+                onClose={() => setModalOpen(false)} 
+                imageUrl={selectedImage} 
+            />
         </div>
     );
 }
