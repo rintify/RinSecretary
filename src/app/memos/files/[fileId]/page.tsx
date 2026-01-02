@@ -71,7 +71,7 @@ export default function FileViewerPage(props: { params: Promise<{ fileId: string
     }
 
     return (
-        <Box height="100dvh" display="flex" flexDirection="column" bgcolor="background.default" className="memo-page-transition">
+        <Box height="100dvh" display="flex" flexDirection="column" bgcolor="background.default" className="memo-page-transition" pt="60px">
             <MemoHeader 
                 title={fileName} 
                 actions={

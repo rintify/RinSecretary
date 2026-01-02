@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { 
     Box, List, ListItem, ListItemButton, ListItemText, 
     Checkbox, IconButton, Menu, MenuItem, Typography 
@@ -13,9 +13,10 @@ import {
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import MemoHeader from '../components/MemoHeader';
 import { MemoListFabs, MemoListEditButton, MemoListItemButton } from './MemoListClient';
-import { deleteMemos, createMemoWithFile } from './actions';
+import { deleteMemos, createMemoWithFile, createMemo } from './actions';
 import { MEMO_COLOR } from '../utils/colors';
 import { Folder as FolderIcon } from '@mui/icons-material';
 
@@ -42,6 +43,58 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
     const [isDragging, setIsDragging] = useState(false);
     const [uploading, setUploading] = useState(false);
     const dragCounter = useRef(0);
+    const router = useRouter();
+
+    useEffect(() => {
+        const handleGlobalPaste = async (e: ClipboardEvent) => {
+            // 入力フィールドなどにフォーカスがある場合は通常の挙動を優先
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+                return;
+            }
+
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            setUploading(true);
+            try {
+                let handled = false;
+                
+                // 1. ファイル（Finderからのコピーなど）
+                const files = e.clipboardData.files;
+                if (files && files.length > 0) {
+                    for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        await createMemoWithFile(formData);
+                    }
+                    handled = true;
+                }
+
+                // 2. テキスト（ファイルがない場合）
+                if (!handled) {
+                    const text = e.clipboardData.getData('text/plain');
+                    if (text) {
+                        await createMemo(text);
+                        handled = true;
+                    }
+                }
+
+                if (handled) {
+                    router.refresh();
+                }
+            } catch (err) {
+                console.error('Global paste failed', err);
+                alert('貼り付けに失敗しました');
+            } finally {
+                setUploading(false);
+            }
+        };
+
+        window.addEventListener('paste', handleGlobalPaste);
+        return () => window.removeEventListener('paste', handleGlobalPaste);
+    }, [router]);
 
     const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
         setAnchorEl(event.currentTarget);
@@ -129,7 +182,7 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
 
     return (
         <Box 
-            sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', position: 'relative' }} 
+            sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', position: 'relative', pt: '60px' }} 
             className="memo-page-transition"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}

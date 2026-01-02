@@ -36,5 +36,5 @@ export default async function MemoEditPage(props: {
 
     const isNew = searchParams?.new === 'true';
 
-    return <MemoEditClient memo={{ id: memo.id, content: memo.content }} isNew={isNew} />;
+    return <MemoEditClient memo={{ id: memo.id, content: memo.content, updatedAt: memo.updatedAt }} isNew={isNew} />;
 }

@@ -119,7 +119,7 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
     };
 
     return (
-        <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }} className="memo-page-transition">
+        <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', pt: '60px' }} className="memo-page-transition">
             <MemoHeader 
                 title="メモ詳細" 
                 actions={
@@ -171,20 +171,20 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
 
             <Box sx={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
                 <Fab 
-                    aria-label="back"
-                    component={Link}
-                    href="/memos"
-                    sx={{ bgcolor: 'background.paper', color: MEMO_COLOR, '&:hover': { bgcolor: 'action.hover' } }}
-                >
-                    <ArrowBackIcon />
-                </Fab>
-                <Fab 
                     color="primary" 
                     aria-label="edit" 
                     onClick={handleEditClick}
                     sx={{ bgcolor: MEMO_COLOR, '&:hover': { bgcolor: MEMO_COLOR, opacity: 0.9 } }}
                 >
                     <EditIcon />
+                </Fab>
+                <Fab 
+                    aria-label="back"
+                    component={Link}
+                    href="/memos"
+                    sx={{ bgcolor: 'background.paper', color: MEMO_COLOR, '&:hover': { bgcolor: 'action.hover' } }}
+                >
+                    <ArrowBackIcon />
                 </Fab>
             </Box>
         </Box>

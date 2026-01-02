@@ -22,8 +22,10 @@ export default function MemoHeader({ title = 'Memos', actions, sx }: MemoHeaderP
             bgcolor: '#f4eafa',
             flexShrink: 0,
             zIndex: 1100,
-            position: 'sticky',
+            position: 'fixed',
             top: 0,
+            left: 0,
+            right: 0,
             ...sx
         }}>
             <Typography 

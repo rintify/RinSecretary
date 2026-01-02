@@ -292,13 +292,13 @@ export default function Home() {
              <Tooltip title="New Memo" placement="left">
                 <Box>
                 <Fab 
-                    aria-label="add memo" 
-                    onClick={handleCreateMemo}
-                    disabled={memoLoading}
+                    aria-label="view memos" 
+                    component={Link}
+                    href="/memos"
                     size="medium" 
                     sx={{ bgcolor: MEMO_COLOR, color: '#fff', '&:hover': { bgcolor: MEMO_COLOR, opacity: 0.9 } }}
                 >
-                    {memoLoading ? <CircularProgress size={24} color="inherit" /> : <MemoIcon />}
+                    <MemoIcon />
                 </Fab>
                 </Box>
              </Tooltip>
