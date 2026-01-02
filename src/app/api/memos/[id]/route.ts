@@ -43,6 +43,18 @@ export async function PUT(
   if (existing.userId !== user?.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const content = json.content;
+  const lastUpdatedAt = json.lastUpdatedAt ? new Date(json.lastUpdatedAt) : undefined;
+  const force = json.force === true;
+
+  if (!force && lastUpdatedAt) {
+      const dbUpdatedAt = new Date(existing.updatedAt).getTime();
+      const clientUpdatedAt = lastUpdatedAt.getTime();
+      
+      if (dbUpdatedAt > clientUpdatedAt) {
+          return NextResponse.json({ error: 'Conflict', serverContent: existing.content, updatedAt: existing.updatedAt }, { status: 409 });
+      }
+  }
+
   const title = extractTitle(content);
   const thumbnailPath = extractThumbnail(content);
 

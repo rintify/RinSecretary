@@ -181,6 +181,7 @@ export default function MemoEditClient({ memo, isNew }: MemoEditClientProps) {
                         setSaveStatus(status);
                         if (date) setLastSavedAt(date);
                     }}
+                    lastUpdatedAt={memo.updatedAt}
                 />
             </Box>
             

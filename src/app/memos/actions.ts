@@ -83,7 +83,7 @@ export async function createMemo(content: string) {
   return memo;
 }
 
-export async function updateMemo(id: string, content: string) {
+export async function updateMemo(id: string, content: string, lastUpdatedAt?: Date, force: boolean = false) {
   const session = await devAuth();
   if (!session?.user?.email) throw new Error('Unauthorized');
 
@@ -92,13 +92,29 @@ export async function updateMemo(id: string, content: string) {
   });
   if (!user) throw new Error('User not found');
 
+  // Fetch current memo for conflict check
+  const currentMemo = await prisma.memo.findUnique({
+      where: { id, userId: user.id }
+  });
+
+  if (!currentMemo) throw new Error('Memo not found');
+
+  if (!force && lastUpdatedAt) {
+      const dbUpdatedAt = new Date(currentMemo.updatedAt).getTime();
+      const clientUpdatedAt = new Date(lastUpdatedAt).getTime();
+      
+      if (dbUpdatedAt > clientUpdatedAt) {
+          return { error: 'Conflict' };
+      }
+  }
+
   const title = extractTitle(content);
   const thumbnailPath = extractThumbnail(content);
 
   const memo = await prisma.memo.update({
     where: {
       id,
-      userId: user.id, // Ensure ownership
+      userId: user.id,
     },
     data: {
       title,

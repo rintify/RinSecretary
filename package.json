@@ -27,6 +27,7 @@
     "apexcharts": "^5.3.6",
     "bcryptjs": "^3.0.3",
     "date-fns": "latest",
+    "diff": "^8.0.2",
     "framer-motion": "^12.23.25",
     "googleapis": "^168.0.0",
     "katex": "^0.16.27",
@@ -45,6 +46,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
+    "@types/diff": "^8.0.0",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",

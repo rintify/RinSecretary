@@ -9,6 +9,7 @@ import { createMemo, updateMemo, deleteMemo, uploadAttachment } from '@/app/memo
 import { MEMO_COLOR } from '../utils/colors';
 import { OnMount } from '@monaco-editor/react';
 import SharedEditor from './SharedEditor';
+import ConflictDialog from './ConflictDialog';
 
 export type SaveStatus = 'unsaved' | 'saving' | 'saved';
 
@@ -23,6 +24,7 @@ interface MemoComposerProps {
     editorMode?: 'monaco' | 'plain';
     onBack?: () => void;
     onSaveStatusChange?: (status: SaveStatus, lastSavedAt?: Date) => void;
+    lastUpdatedAt?: Date;
 }
 
 export interface MemoComposerRef {
@@ -49,7 +51,8 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         onFileManagementOpen,
         editorMode = 'monaco',
         onBack,
-        onSaveStatusChange
+        onSaveStatusChange,
+        lastUpdatedAt: initialLastUpdatedAt
     } = props;
     const [content, setContent] = useState(initialContent);
     const [loading, setLoading] = useState(false);
@@ -59,7 +62,10 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     const dragCounter = useRef(0);
     
     const [status, setStatus] = useState<SaveStatus>('saved');
-    const [lastSavedAt, setLastSavedAt] = useState<Date | undefined>(undefined);
+    const [lastSavedAt, setLastSavedAt] = useState<Date | undefined>(initialLastUpdatedAt);
+    const [lastServerUpdatedAt, setLastServerUpdatedAt] = useState<Date | undefined>(initialLastUpdatedAt); // To track what we base our changes on
+
+    const [conflictState, setConflictState] = useState<{ open: boolean, serverContent: string, memoId: string } | null>(null);
     
     // Notify parent of status changes
     useEffect(() => {
@@ -129,9 +135,21 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
             const res = await fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, content: currentContent }),
+                body: JSON.stringify({ 
+                    title, 
+                    content: currentContent,
+                    lastUpdatedAt: lastServerUpdatedAt 
+                }),
                 keepalive: true
             });
+
+            if (res.status === 409) {
+                const data = await res.json();
+                isSavingRef.current = false;
+                setConflictState({ open: true, serverContent: data.serverContent || '', memoId: internalMemoId! });
+                setStatus('unsaved');
+                return internalMemoId;
+            }
 
             if (res.ok && !idToUse) {
                 const data = await res.json();
@@ -139,13 +157,21 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                     setInternalMemoId(data.id);
                     lastSavedContentRef.current = currentContent;
                     setStatus('saved');
-                    setLastSavedAt(new Date());
+                    const now = new Date();
+                    setLastSavedAt(now);
+                    setLastServerUpdatedAt(data.updatedAt ? new Date(data.updatedAt) : now);
                     return data.id;
                 }
             } else if (res.ok) {
                  lastSavedContentRef.current = currentContent;
                  setStatus('saved');
-                 setLastSavedAt(new Date());
+                 const now = new Date();
+                 setLastSavedAt(now);
+                 // We don't get new updatedAt from API unless we ask, but we assume "now" is close enough for next check
+                 // Ideally API should return it.
+                 // Let's rely on optimistic update or assume we hold the lock until someone else writes.
+                 // Actually, to be safe, we should update lastServerUpdatedAt to now.
+                 setLastServerUpdatedAt(now);
             }
             return idToUse;
         } catch (e) {
@@ -166,34 +192,57 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     };
 
     // 手動保存（Server Actions）
-    const handleManualSave = async () => {
-        if (status === 'saved' && content === lastSavedContentRef.current) return;
+    const handleManualSave = async (force: boolean = false) => {
+        if (!force && status === 'saved' && content === lastSavedContentRef.current) return;
         
         setLoading(true); 
         setStatus('saving');
         
         try {
             if (internalMemoId) {
-                await updateMemo(internalMemoId, content);
+                // If forcing, we don't pass lastUpdatedAt (or logic in actions handles it if we pass force=true)
+                const result = await updateMemo(internalMemoId, content, lastServerUpdatedAt, force);
+                if (result && 'error' in result && result.error === 'Conflict') {
+                    // Conflict detected - Handle gracefully without throwing
+                    try {
+                        const res = await fetch(`/api/memos/${internalMemoId}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            setConflictState({ open: true, serverContent: data.content, memoId: internalMemoId! });
+                        }
+                    } catch (fetchErr) {
+                         console.error('Failed to fetch conflict content', fetchErr);
+                    }
+                    setStatus('unsaved');
+                    setLoading(false);
+                    return; 
+                }
+                
+                const now = new Date();
+                setLastServerUpdatedAt(now); // Optimistic update
             } else {
                 const newMemo = await createMemo(content);
                 setInternalMemoId(newMemo.id); // For create case specifically
+                setLastServerUpdatedAt(newMemo.updatedAt);
             }
             
             lastSavedContentRef.current = content;
             setStatus('saved');
             setLastSavedAt(new Date());
 
-            if (onSuccess) {
-                onSuccess();
-            } else {
-                // If not navigating away (e.g. just saving), stay here
-                // router.back(); // Usually manual save implies "done" for some users, but maybe just "save"
-                // The original code navigated back or called onSuccess.
-                // Replicating original behavior:
-                router.back();
+            if (conflictState) {
+                setConflictState(null);
             }
-        } catch (e) {
+
+            if (onSuccess && !force) { 
+                onSuccess();
+            } else if (!force) {
+                router.back();
+            } else {
+                if (onSuccess) onSuccess();
+                else router.back();
+            }
+        } catch (e: any) {
             console.error('Manual save failed', e);
             setStatus('unsaved');
             setLoading(false);
@@ -245,7 +294,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
 
     useImperativeHandle(ref, () => ({
         handleDelete,
-        handleSave: handleManualSave,
+        handleSave: () => handleManualSave(false),
         insertContent: (text: string) => {
             if (editorMode === 'monaco' && editorInstanceRef.current) {
                 const editor = editorInstanceRef.current;
@@ -474,7 +523,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         // If saved, Back button behavior
         if (showBack) return onBack ? onBack() : router.back();
         // If unsaved, Save behavior
-        return handleManualSave();
+        return handleManualSave(false);
     };
 
     const handleEditorMountCallback: OnMount = (editor) => {
@@ -612,6 +661,25 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                     )}
                 </Fab>
             </Box>
+
+
+            {conflictState && (
+                <ConflictDialog 
+                    open={conflictState.open}
+                    localContent={content}
+                    serverContent={conflictState.serverContent}
+                    onOverwrite={() => {
+                        handleManualSave(true);
+                    }}
+                    onDiscard={() => {
+                        // Reload page to get fresh content
+                        window.location.reload();
+                    }}
+                    onCancel={() => {
+                        setConflictState(null);
+                    }}
+                />
+            )}
         </Box>
     );
 });
