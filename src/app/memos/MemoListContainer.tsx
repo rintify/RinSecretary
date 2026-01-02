@@ -5,6 +5,7 @@ import {
     Box, List, ListItem, ListItemButton, ListItemText, 
     Checkbox, IconButton, Menu, MenuItem, Typography 
 } from '@mui/material';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
     MoreVert as MoreVertIcon, 
     Delete as DeleteIcon, 
@@ -16,9 +17,10 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import MemoHeader from '../components/MemoHeader';
 import { MemoListFabs, MemoListEditButton, MemoListItemButton } from './MemoListClient';
-import { deleteMemos, createMemoWithFile, createMemo } from './actions';
+import { deleteMemos, createMemoWithFile, createMemo, getMemos } from './actions';
 import { MEMO_COLOR } from '../utils/colors';
 import { Folder as FolderIcon } from '@mui/icons-material';
+import CircularProgress from '@mui/material/CircularProgress';
 
 type Attachment = {
     id: string;
@@ -36,14 +38,179 @@ type Memo = {
     thumbnailPath?: string | null;
 };
 
-export default function MemoListContainer({ memos }: { memos: Memo[] }) {
+export default function MemoListContainer({ memos: initialMemos, initialQuery = '' }: { memos: Memo[], initialQuery?: string }) {
+    const [memos, setMemos] = useState<Memo[]>(initialMemos);
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [uploading, setUploading] = useState(false);
+    
+    // Search & Pagination
+    const [searchQuery, setSearchQuery] = useState(initialQuery);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [isSearching, setIsSearching] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const observerTarget = useRef(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+
     const dragCounter = useRef(0);
     const router = useRouter();
+
+    // Reset memos when initialMemos changes (e.g. after server action redirect)
+    useEffect(() => {
+        setMemos(initialMemos);
+        // We generally want to respect the initialMemos regarding hasMore check logic roughly,
+        // but explicit hasMore logic is better handled by checking count.
+        // If initialMemos is big (restored), hasMore can be derived.
+        // Simplified:
+        // setHasMore(initialMemos.length >= 20); // Not accurate if restored with 60 items.
+    }, [initialMemos]);
+
+    const [lastSearchedQuery, setLastSearchedQuery] = useState(initialQuery);
+
+    const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Update URL helper
+    const updateUrl = (query: string, count: number) => {
+        const url = new URL(window.location.href);
+        if (query) {
+            url.searchParams.set('q', query);
+        } else {
+            url.searchParams.delete('q');
+        }
+        if (count > 20) {
+            url.searchParams.set('take', count.toString());
+        } else {
+            url.searchParams.delete('take');
+        }
+        const newUrl = url.toString();
+        window.history.replaceState({}, '', newUrl);
+        // Save to sessionStorage for back navigation
+        sessionStorage.setItem('memoListUrl', url.pathname + url.search);
+    };
+
+    // Search Execution Logic
+    const executeSearch = async (query: string) => {
+        setIsSearching(true);
+        try {
+            const newMemos = await getMemos({ query, skip: 0, take: 20 });
+            setMemos(newMemos);
+            setHasMore(newMemos.length >= 20);
+            setLastSearchedQuery(query);
+            // updateUrl handled by useEffect
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    const isFirstRender = useRef(true);
+
+    // Debounced Search Effect
+    useEffect(() => {
+        if (isFirstRender.current) {
+            isFirstRender.current = false;
+            return;
+        }
+
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        searchTimeoutRef.current = setTimeout(() => {
+            executeSearch(searchQuery);
+        }, 1000);
+
+        return () => {
+            if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+            }
+        };
+    }, [searchQuery]);
+
+    // Immediate Search Handler
+    const handleImmediateSearch = () => {
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+        executeSearch(searchQuery);
+    };
+
+    const handleClearSearch = () => {
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+        setSearchQuery('');
+        setLastSearchedQuery('');
+        executeSearch('');
+    };
+    
+    // Derived state for Header
+    const isSearchExecuted = searchQuery && searchQuery === lastSearchedQuery;
+
+    // Infinite Scroll
+    const loadMore = async () => {
+        if (loadingMore || !hasMore) return;
+        setLoadingMore(true);
+        try {
+            const currentCount = memos.length;
+            const newMemos = await getMemos({ 
+                query: searchQuery, 
+                skip: currentCount, 
+                take: 20 
+            });
+            
+            if (newMemos.length < 20) {
+                setHasMore(false);
+            }
+            
+            setMemos(prev => [...prev, ...newMemos]);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoadingMore(false);
+        }
+    };
+    
+    // Sync URL with state
+    useEffect(() => {
+        updateUrl(searchQuery, memos.length);
+    }, [searchQuery, memos.length]);
+
+    // Scroll position restore on mount
+    useEffect(() => {
+        const savedScrollPosition = sessionStorage.getItem('memoListScrollPosition');
+        if (savedScrollPosition && scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = parseInt(savedScrollPosition, 10);
+        }
+    }, []);
+
+    // Save scroll position on scroll
+    const handleScroll = () => {
+        if (scrollContainerRef.current) {
+            sessionStorage.setItem('memoListScrollPosition', scrollContainerRef.current.scrollTop.toString());
+        }
+    };
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            entries => {
+                if (entries[0].isIntersecting && hasMore && !loadingMore && !isSearching) {
+                    loadMore();
+                }
+            },
+            { threshold: 0.1 } // Start loading when 10% visible
+        );
+
+        if (observerTarget.current) {
+            observer.observe(observerTarget.current);
+        }
+
+        return () => observer.disconnect();
+    }, [hasMore, loadingMore, isSearching, memos.length, searchQuery]);
+
 
     useEffect(() => {
         const handleGlobalPaste = async (e: ClipboardEvent) => {
@@ -227,7 +394,12 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                 </Box>
             )}
             <MemoHeader 
+                onSearchChange={!isSelectionMode ? setSearchQuery : undefined}
+                onSearchClick={handleImmediateSearch}
+                onClearClick={isSearchExecuted ? handleClearSearch : undefined}
+                value={searchQuery}
                 title={isSelectionMode ? `${selectedIds.size}件選択中` : "メモ一覧"} 
+                loading={isSearching}
                 actions={
                     isSelectionMode ? (
                         <Box>
@@ -240,7 +412,7 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                         </Box>
                     ) : (
                         <Box>
-                             <IconButton onClick={handleMenuOpen}>
+                            <IconButton onClick={handleMenuOpen}>
                                 <MoreVertIcon />
                             </IconButton>
                             <Menu
@@ -255,14 +427,15 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                 }
             />
             
-            <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
-                {memos.length === 0 ? (
+            <Box ref={scrollContainerRef} onScroll={handleScroll} sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
+                {!isSearching && memos.length === 0 ? (
                     <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="50vh" color="text.secondary">
                         <NoteIcon sx={{ fontSize: 60, mb: 2, opacity: 0.5 }} />
                         <Typography>メモはありません</Typography>
                     </Box>
                 ) : (
-                    <List>
+                    <List component={motion.ul} layout>
+                        <AnimatePresence mode='popLayout'>
                         {memos.map(memo => {
                             const isSelected = selectedIds.has(memo.id);
                             // TaskItem風のデザインを適用
@@ -271,6 +444,12 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                             
                             return (
                                 <ListItem 
+                                    component={motion.li}
+                                    layout
+                                    initial={{ opacity: 0, y: 15, scale: 0.98 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.95, height: 0, marginBottom: 0 }}
+                                    transition={{ type: 'spring', duration: 0.4, bounce: 0, layout: { duration: 0.3 } }}
                                     key={memo.id} 
                                     disablePadding 
                                     sx={{ 
@@ -278,7 +457,7 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                                         bgcolor: alpha(MEMO_COLOR, 0.1), 
                                         borderRadius: 3, 
                                         overflow: 'hidden',
-                                        transition: 'all 0.2s',
+                                        // transition: 'all 0.2s', // Conflict with framer-motion
                                         border: '1px solid',
                                         borderColor: borderColor,
                                         boxShadow: 'none',
@@ -380,8 +559,14 @@ export default function MemoListContainer({ memos }: { memos: Memo[] }) {
                                 </ListItem>
                             );
                         })}
+                        </AnimatePresence>
                     </List>
                 )}
+                
+                {/* Sentinel for infinite scroll */}
+                <Box ref={observerTarget} sx={{ height: '20px', display: 'flex', justifyContent: 'center', mt: 2 }}>
+                    {loadingMore && <CircularProgress size={24} />}
+                </Box>
             </Box>
 
             {!isSelectionMode && <MemoListFabs />}

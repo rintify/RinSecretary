@@ -180,8 +180,10 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
                 </Fab>
                 <Fab 
                     aria-label="back"
-                    component={Link}
-                    href="/memos"
+                    onClick={() => {
+                        const savedUrl = sessionStorage.getItem('memoListUrl');
+                        router.push(savedUrl || '/memos');
+                    }}
                     sx={{ bgcolor: 'background.paper', color: MEMO_COLOR, '&:hover': { bgcolor: 'action.hover' } }}
                 >
                     <ArrowBackIcon />

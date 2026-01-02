@@ -12,6 +12,52 @@ import { extractTitle, extractThumbnail } from '@/lib/memo-utils';
 const UPLOAD_DIR = process.env.UPLOADS_DIR || join(process.cwd(), 'data/uploads');
 const MAX_TOTAL_SIZE = 3 * 1024 * 1024 * 1024; // 3GB
 
+export async function getMemos({ 
+    skip = 0, 
+    take = 20, 
+    query = '' 
+}: { 
+    skip?: number; 
+    take?: number; 
+    query?: string; 
+}) {
+    const session = await devAuth();
+    if (!session?.user?.email) throw new Error('Unauthorized');
+    
+    const user = await prisma.user.findUnique({
+        where: { email: session.user.email },
+    });
+    if (!user) throw new Error('User not found');
+
+    const where: any = {
+        userId: user.id,
+    };
+
+    if (query) {
+        where.OR = [
+            { title: { contains: query } },
+            { content: { contains: query } }
+        ];
+    }
+
+    const memos = await prisma.memo.findMany({
+        where,
+        orderBy: { updatedAt: 'desc' },
+        skip,
+        take,
+        select: {
+            id: true,
+            title: true,
+            updatedAt: true,
+            thumbnailPath: true,
+            createdAt: true,
+            userId: true,
+        },
+    });
+
+    return memos;
+}
+
 
 
 const ensureDir = (dir: string) => {
