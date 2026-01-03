@@ -9,8 +9,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MEMO_COLOR } from '../utils/colors';
 import MemoFileManagement, { Attachment } from './MemoFileManagement';
+import FullImageModal from './FullImageModal';
 import { getAttachments } from '../memos/actions';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { 
     InsertDriveFile as FileIcon, 
@@ -36,14 +37,32 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
     const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
     const [isFileManagementOpen, setIsFileManagementOpen] = useState(false);
     const [attachments, setAttachments] = useState<Attachment[]>([]);
+    const [attachmentsChanged, setAttachmentsChanged] = useState(false);
+
+    const [imageModalOpen, setImageModalOpen] = useState(false);
+    const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+
+    const handleImageClick = useCallback((src: string) => {
+        setSelectedImageUrl(src);
+        setImageModalOpen(true);
+    }, []);
     
+    const handleFilesChange = useCallback(() => {
+        setAttachmentsChanged(true);
+    }, []);
+
+    useEffect(() => {
+        if (!isFileManagementOpen) {
+            if (attachmentsChanged || attachments.length === 0) {
+                loadAttachments();
+                setAttachmentsChanged(false);
+            }
+        }
+    }, [memo.id, isFileManagementOpen, attachmentsChanged, attachments.length]);
+
     // Long press logic
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const isLongPress = useRef(false);
-
-    useEffect(() => {
-        loadAttachments();
-    }, [memo.id, isFileManagementOpen]); // Reload when management modal closes to reflect changes
 
     const loadAttachments = async () => {
         try {
@@ -138,6 +157,7 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
                 memoId={memo.id}
                 open={isFileManagementOpen}
                 onClose={() => setIsFileManagementOpen(false)}
+                onFilesChange={handleFilesChange}
             />
             
             <Popover
@@ -164,7 +184,10 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
             </Popover>
 
             <Box sx={{ flex: 1, p: 2, overflow: 'auto', paddingBottom: '160px' }} className="selectable-text">
-                 <MarkdownDisplay attachments={attachments}>
+                 <MarkdownDisplay 
+                    attachments={attachments}
+                    onImageClick={handleImageClick}
+                  >
                     {memo.content}
                  </MarkdownDisplay>
             </Box>
@@ -189,6 +212,12 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
                     <ArrowBackIcon />
                 </Fab>
             </Box>
+
+            <FullImageModal 
+                open={imageModalOpen} 
+                onClose={() => setImageModalOpen(false)} 
+                imageUrl={selectedImageUrl} 
+            />
         </Box>
     );
 }

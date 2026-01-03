@@ -34,9 +34,10 @@ interface MemoFileManagementProps {
     open: boolean;
     onClose: () => void;
     onSelect?: (file: Attachment) => void;
+    onFilesChange?: () => void;
 }
 
-export default function MemoFileManagement({ memoId, open, onClose, onSelect }: MemoFileManagementProps) {
+export default function MemoFileManagement({ memoId, open, onClose, onSelect, onFilesChange }: MemoFileManagementProps) {
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [loading, setLoading] = useState(false);
     const [snackbarOpen, setSnackbarOpen] = useState(false);
@@ -81,6 +82,7 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect }: 
             formData.append('file', file);
             const newFile = await uploadAttachment(formData, memoId);
             setAttachments(prev => [newFile, ...prev]);
+            onFilesChange?.();
         } catch (e: any) {
             console.error(e);
             alert(e.message || 'アップロードに失敗しました');
@@ -117,6 +119,7 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect }: 
         try {
             await deleteAttachment(id);
             setAttachments(prev => prev.filter(f => f.id !== id));
+            onFilesChange?.();
         } catch (e) {
             alert('削除に失敗しました');
         }
@@ -156,7 +159,7 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect }: 
     };
 
     return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" disableScrollLock>
             <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 添付ファイル管理
                 <IconButton onClick={onClose} size="small">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, IconButton, Box } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -19,6 +19,10 @@ interface FullImageModalProps {
 export default function FullImageModal({ open, onClose, imageUrl }: FullImageModalProps) {
     const [isLoaded, setIsLoaded] = useState(false);
 
+    useEffect(() => {
+        setIsLoaded(false);
+    }, [imageUrl]);
+
     if (!imageUrl) return null;
 
     const handleImageLoad = () => {
@@ -30,7 +34,7 @@ export default function FullImageModal({ open, onClose, imageUrl }: FullImageMod
             open={open}
             onClose={onClose}
             maxWidth="xl"
-            fullScreen
+            fullScreen 
             disableScrollLock
             PaperProps={{
                 style: {

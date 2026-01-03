@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useCallback, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
@@ -22,18 +22,12 @@ import SmartImage from './SmartImage';
 interface MarkdownDisplayProps {
     children: string;
     attachments?: Attachment[];
+    onImageClick?: (src: string) => void;
 }
 
-export default function MarkdownDisplay({ children, attachments = [] }: MarkdownDisplayProps) {
-    const [modalOpen, setModalOpen] = React.useState(false);
-    const [selectedImage, setSelectedImage] = React.useState<string | null>(null);
+const MarkdownDisplay = memo(function MarkdownDisplay({ children, attachments = [], onImageClick }: MarkdownDisplayProps) {
 
-    const handleImageClick = (src: string) => {
-        setSelectedImage(src);
-        setModalOpen(true);
-    };
-
-    const renderAttachment = (url: string, originalNode: React.ReactNode, isImageTag: boolean) => {
+    const renderAttachment = useCallback((url: string, originalNode: React.ReactNode, isImageTag: boolean) => {
         const file = attachments.find(a => a.filePath === url || encodeURI(a.filePath) === url);
         
         if (!file) return originalNode;
@@ -45,10 +39,10 @@ export default function MarkdownDisplay({ children, attachments = [] }: Markdown
 
         if (isImage) {
              return (
-                 <SmartImage 
-                    src={file.filePath} 
+                 <SmartImage
+                    src={file.filePath}
                     alt={file.fileName}
-                    onClick={() => handleImageClick(file.filePath)}
+                    onClick={() => onImageClick?.(file.filePath)}
                  />
              );
         }
@@ -118,82 +112,84 @@ export default function MarkdownDisplay({ children, attachments = [] }: Markdown
                 </Box>
             </Link>
         );
-    };
+    }, [attachments, onImageClick]);
+
+    const markdownComponents = useMemo(() => ({
+        a: ({node, ...props}: any) => {
+            const href = (props.href || '') as string;
+            const original = <a {...props} href={href} style={{ color: '#1976d2', textDecoration: 'underline' }} target="_blank" rel="noopener noreferrer" />;
+            return renderAttachment(href, original, false);
+        },
+        img: (props: any) => {
+            const src = (props.src || '') as string;
+            // For external or any image, use SmartImage for consistent behavior
+            return (
+                <SmartImage
+                    src={src}
+                    alt={props.alt || 'image'}
+                    onClick={() => src && onImageClick?.(src)}
+                />
+            );
+        },
+        p: ({node, ...props}: any) => <div {...props} style={{ margin: 0, marginBottom: '0.5em' }} />,
+        pre: ({node, ...props}: any) => (
+            <pre 
+                {...props} 
+                style={{ 
+                    backgroundColor: '#0d0d0d', 
+                    color: '#fff', 
+                    padding: '1rem', 
+                    borderRadius: '0.5rem', 
+                    overflowX: 'auto',
+                    marginBlock: '0.5rem',
+                    fontFamily: 'monospace'
+                }} 
+            />
+        ),
+        code: ({node, className, children, ...props}: any) => {
+            const match = /language-(\w+)/.exec(className || '')
+            const isInline = !match && !String(children).includes('\n')
+            return isInline ? (
+                <code 
+                    {...props} 
+                    className={className} 
+                    style={{ 
+                        backgroundColor: '#f3f3f3', 
+                        color: '#333',
+                        borderRadius: '0.2rem',
+                        padding: '0.2em 0.4em',
+                        fontFamily: 'monospace',
+                        fontSize: '0.9em'
+                    }}
+                >
+                    {children}
+                </code>
+            ) : (
+                <code {...props} className={className} style={{ fontFamily: 'monospace', fontSize: '0.9em' }}>
+                    {children}
+                </code>
+            )
+        },
+        ol: ({node, ...props}: any) => <ol {...props} style={{ paddingLeft: '1.2rem', marginBlock: '0.5rem' }} />,
+        ul: ({node, ...props}: any) => <ul {...props} style={{ paddingLeft: '1.2rem', marginBlock: '0.5rem' }} />,
+        li: ({node, ...props}: any) => <li {...props} style={{ marginBottom: '0.2rem' }} />
+    }), [onImageClick, renderAttachment]);
+
+    const markdownContent = useMemo(() => (
+        <ReactMarkdown
+            remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
+            rehypePlugins={[rehypeKatex]}
+            components={markdownComponents}
+        >
+            {children}
+        </ReactMarkdown>
+    ), [children, markdownComponents]);
 
     return (
         <div className="selectable-text" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word', lineHeight: 1.6 }}>
-            <ReactMarkdown
-                remarkPlugins={[remarkMath, remarkGfm, remarkBreaks]}
-                rehypePlugins={[rehypeKatex]}
-                components={{
-                    a: ({node, ...props}) => {
-                        const href = (props.href || '') as string;
-                        const original = <a {...props} href={href} style={{ color: '#1976d2', textDecoration: 'underline' }} target="_blank" rel="noopener noreferrer" />;
-                        return renderAttachment(href, original, false);
-                    },
-                    img: (props) => {
-                        const src = (props.src || '') as string;
-                        // For external or any image, use SmartImage for consistent behavior
-                        return (
-                            <SmartImage
-                                src={src}
-                                alt={props.alt || 'image'}
-                                onClick={() => src && handleImageClick(src)}
-                            />
-                        );
-                    },
-                    p: ({node, ...props}) => <div {...props} style={{ margin: 0, marginBottom: '0.5em' }} />,
-                    pre: ({node, ...props}) => (
-                        <pre 
-                            {...props} 
-                            style={{ 
-                                backgroundColor: '#0d0d0d', 
-                                color: '#fff', 
-                                padding: '1rem', 
-                                borderRadius: '0.5rem', 
-                                overflowX: 'auto',
-                                marginBlock: '0.5rem',
-                                fontFamily: 'monospace'
-                            }} 
-                        />
-                    ),
-                    code: ({node, className, children, ...props}) => {
-                        const match = /language-(\w+)/.exec(className || '')
-                        const isInline = !match && !String(children).includes('\n')
-                        return isInline ? (
-                            <code 
-                                {...props} 
-                                className={className} 
-                                style={{ 
-                                    backgroundColor: '#f3f3f3', 
-                                    color: '#333',
-                                    borderRadius: '0.2rem',
-                                    padding: '0.2em 0.4em',
-                                    fontFamily: 'monospace',
-                                    fontSize: '0.9em'
-                                }}
-                            >
-                                {children}
-                            </code>
-                        ) : (
-                            <code {...props} className={className} style={{ fontFamily: 'monospace', fontSize: '0.9em' }}>
-                                {children}
-                            </code>
-                        )
-                    },
-                    ol: ({node, ...props}) => <ol {...props} style={{ paddingLeft: '1.2rem', marginBlock: '0.5rem' }} />,
-                    ul: ({node, ...props}) => <ul {...props} style={{ paddingLeft: '1.2rem', marginBlock: '0.5rem' }} />,
-                    li: ({node, ...props}) => <li {...props} style={{ marginBottom: '0.2rem' }} />
-                }}
-            >
-                {children}
-            </ReactMarkdown>
-
-            <FullImageModal 
-                open={modalOpen} 
-                onClose={() => setModalOpen(false)} 
-                imageUrl={selectedImage} 
-            />
+            {markdownContent}
         </div>
     );
-}
+});
+
+export default MarkdownDisplay;

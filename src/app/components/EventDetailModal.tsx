@@ -3,6 +3,8 @@ import { Edit as EditIcon, Close as CloseIcon, AccessTime as TimeIcon, Notificat
 import { format, subMinutes } from 'date-fns';
 import { createAlarm } from '@/lib/alarm-actions';
 import MarkdownDisplay from './MarkdownDisplay';
+import { useState, useCallback } from 'react';
+import FullImageModal from './FullImageModal';
 
 interface EventLocal {
     id: string;
@@ -20,6 +22,14 @@ interface EventDetailModalProps {
 }
 
 export default function EventDetailModal({ event, onClose, onEdit }: EventDetailModalProps) {
+    const [imageModalOpen, setImageModalOpen] = useState(false);
+    const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+
+    const handleImageClick = useCallback((src: string) => {
+        setSelectedImageUrl(src);
+        setImageModalOpen(true);
+    }, []);
+
     return (
         <Box sx={{ p: 3 }}>
              <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
@@ -63,11 +73,16 @@ export default function EventDetailModal({ event, onClose, onEdit }: EventDetail
 
              {event.memo && (
                  <Box className="selectable-text" sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 2, mb: 1, '& p': { m: 0 } }}>
-                     <MarkdownDisplay>
+                     <MarkdownDisplay onImageClick={handleImageClick}>
                          {event.memo}
                      </MarkdownDisplay>
                  </Box>
              )}
+             <FullImageModal 
+                open={imageModalOpen} 
+                onClose={() => setImageModalOpen(false)} 
+                imageUrl={selectedImageUrl} 
+            />
         </Box>
     );
 }
