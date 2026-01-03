@@ -21,6 +21,13 @@ model User {
   pushoverUserKey String?
   pushoverToken   String?
   discordWebhookUrl String?
+  
+  aiProvider      String? // openai, gemini, anthropic, other
+  aiApiKey        String?
+  aiModel         String? // e.g. gpt-4, claude-3-5-sonnet
+  aiBaseUrl       String? // for OpenAI Compatible endpoint
+
+
 
   createdAt DateTime @default(now())
   tasks     Task[]

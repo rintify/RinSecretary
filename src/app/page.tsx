@@ -1,12 +1,24 @@
 'use client'; 
 
-import { useState } from 'react';
+import React, { useState, useRef, Suspense, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Event as EventIcon, TaskAlt as TaskIcon, Note as MemoIcon } from '@mui/icons-material';
 import { format, isSameDay, subDays, addDays, differenceInMinutes } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { useRef } from 'react';
+import Slide from '@mui/material/Slide';
+import { TransitionProps } from '@mui/material/transitions';
+
+const SlideTransition = React.forwardRef(function Transition(
+  props: TransitionProps & {
+    children: React.ReactElement<any, any>;
+  },
+  ref: React.Ref<unknown>,
+) {
+  return <Slide direction="up" ref={ref} {...props} />;
+});
+
 import TaskForm from './components/TaskForm';
+
 import EventForm from './components/EventForm';
 import TaskDetailModal from './components/TaskDetailModal';
 import EventDetailModal from './components/EventDetailModal';
@@ -16,11 +28,13 @@ import SettingsModal from './components/SettingsModal';
 import RegularTaskSettingsModal from './components/RegularTaskSettingsModal';
 import FreeTimeModal from './components/FreeTimeModal';
 import ExpiredTaskListModal from './components/ExpiredTaskListModal';
+import AIChatModal from './components/AIChatModal';
+
 import { getExpiredTaskCount } from '@/lib/task-actions';
 import { fetchGoogleEvents } from '@/lib/calendar-actions';
 import { getAlarms } from '@/lib/alarm-actions';
 import { TaskLocal } from './components/TimeTable';
-import { Suspense, useEffect } from 'react';
+
 import { 
     IconButton, Box, Fab, Dialog, DialogContent, DialogTitle, DialogActions, Typography,
     useTheme, useMediaQuery, Tooltip, Button, 
@@ -37,8 +51,10 @@ import {
     Settings as SettingsIcon,
     Warning as WarningIcon,
     Notifications as AlarmIcon,
-    DataUsage as DataUsageIcon
+    DataUsage as DataUsageIcon,
+    Chat as ChatIcon
 } from '@mui/icons-material';
+
 import TimeTableSwiper from './components/TimeTableSwiper';
 import CustomDatePicker from './components/ui/CustomDatePicker';
 import { useRouter } from 'next/navigation';
@@ -70,7 +86,8 @@ export default function Home() {
 
   // Modal State
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS'>('NONE');
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS' | 'AI_CHAT'>('NONE');
+
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
 
@@ -112,6 +129,9 @@ export default function Home() {
       // Update logic: Only refresh what's needed
       const isCalendar = closingModal.includes('EVENT') || closingModal.includes('ALARM') || closingModal === 'SETTINGS' || closingModal === 'FREE_TIME';
       const isTask = closingModal.includes('TASK') || closingModal === 'BULK_CREATE' || closingModal === 'SETTINGS' || closingModal === 'FREE_TIME' || closingModal === 'EXPIRED_TASKS' || closingModal === 'REGULAR_TASK_SETTINGS';
+      // AI Chat doesn't need refresh trigger usually, but if it saves memo, memo list might need refresh? 
+      // Current logic is for task/calendar refresh. Memo is separate.
+
 
       if (isCalendar) {
           setCalendarRefreshTrigger(prev => prev + 1);
@@ -485,14 +505,30 @@ export default function Home() {
                 </Fab>
                 </Box>
              </Tooltip>
+
+             <Tooltip title="AI Chat" placement="left">
+                <Box>
+                <Fab 
+                    aria-label="ai chat" 
+                    onClick={() => setActiveModal('AI_CHAT')}
+                    size="medium" 
+                    sx={{ bgcolor: '#f44336', color: '#fff', '&:hover': { bgcolor: '#d32f2f', opacity: 0.9 } }}
+                >
+                    <ChatIcon />
+                </Fab>
+                </Box>
+             </Tooltip>
           </Box>
+
       </Box>
 
-      {/* Dialog */}
+      {/* Dialog - Shared Wrapper for non-standalone modals */}
       <Dialog
-        open={activeModal !== 'NONE' && !activeModal.startsWith('IMMEDIATE') && activeModal !== 'BULK_CREATE'}
+        open={['NEW_EVENT', 'EDIT_TASK', 'EDIT_EVENT', 'DETAIL_TASK', 'DETAIL_EVENT', 'EDIT_ALARM', 'DETAIL_ALARM', 'REGULAR_TASK_SETTINGS'].includes(activeModal)}
         onClose={handleCloseModal}
+        fullScreen={false}
         maxWidth={false}
+
         PaperProps={{
             sx: {
                 width: '92%', // 4% margin x 2
@@ -560,16 +596,25 @@ export default function Home() {
                         onEdit={handleEditFromDetail}
                     />
                 )}
-                {activeModal === 'SETTINGS' && (
-                    <SettingsModal
-                        onClose={handleCloseModal}
-                    />
-                )}
-                {activeModal === 'REGULAR_TASK_SETTINGS' && (
-                    <RegularTaskSettingsModal
-                        onClose={handleCloseModal}
-                    />
-                )}
+            {/* Other Modals Logic inside main Dialog... */}
+            {activeModal === 'REGULAR_TASK_SETTINGS' && (
+                <RegularTaskSettingsModal onClose={handleCloseModal} />
+            )}
+        </Suspense>
+    </DialogContent>
+</Dialog>
+
+{/* Dedicated Settings Dialog for FullScreen */}
+<Dialog
+    open={activeModal === 'SETTINGS'}
+    onClose={handleCloseModal}
+    fullScreen
+    TransitionComponent={SlideTransition}
+>
+   <SettingsModal onClose={handleCloseModal} />
+</Dialog>
+
+
                 {activeModal === 'FREE_TIME' && (
                     <FreeTimeModal
                         onClose={handleCloseModal}
@@ -588,9 +633,19 @@ export default function Home() {
                         onEditTask={handleTaskClick} 
                     />
                 )}
-            </Suspense>
-        </DialogContent>
-      </Dialog>
+                {activeModal === 'AI_CHAT' && (
+                    <AIChatModal
+                        open={true}
+                        onClose={handleCloseModal}
+                    />
+                )}
+                {activeModal === 'AI_CHAT' && (
+                    <AIChatModal
+                        open={true}
+                        onClose={handleCloseModal}
+                    />
+                )}
+
 
     {/* Immediate Action Flows */}
     {activeModal === 'IMMEDIATE_TASK' && (
