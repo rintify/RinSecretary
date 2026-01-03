@@ -63,7 +63,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     
     const [status, setStatus] = useState<SaveStatus>('saved');
     const [lastSavedAt, setLastSavedAt] = useState<Date | undefined>(initialLastUpdatedAt);
-    const [lastServerUpdatedAt, setLastServerUpdatedAt] = useState<Date | undefined>(initialLastUpdatedAt); // To track what we base our changes on
+    const lastServerUpdatedAtRef = useRef<Date | undefined>(initialLastUpdatedAt); // Use ref to avoid stale closure issues
 
     const [conflictState, setConflictState] = useState<{ open: boolean, serverContent: string, memoId: string } | null>(null);
     
@@ -138,7 +138,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                 body: JSON.stringify({ 
                     title, 
                     content: currentContent,
-                    lastUpdatedAt: lastServerUpdatedAt 
+                    lastUpdatedAt: lastServerUpdatedAtRef.current 
                 }),
                 keepalive: true
             });
@@ -159,19 +159,17 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                     setStatus('saved');
                     const now = new Date();
                     setLastSavedAt(now);
-                    setLastServerUpdatedAt(data.updatedAt ? new Date(data.updatedAt) : now);
+                    lastServerUpdatedAtRef.current = data.updatedAt ? new Date(data.updatedAt) : now;
                     return data.id;
                 }
             } else if (res.ok) {
+                 const data = await res.json();
                  lastSavedContentRef.current = currentContent;
                  setStatus('saved');
                  const now = new Date();
                  setLastSavedAt(now);
-                 // We don't get new updatedAt from API unless we ask, but we assume "now" is close enough for next check
-                 // Ideally API should return it.
-                 // Let's rely on optimistic update or assume we hold the lock until someone else writes.
-                 // Actually, to be safe, we should update lastServerUpdatedAt to now.
-                 setLastServerUpdatedAt(now);
+                 // Use the actual updatedAt from server response to prevent false conflict detection
+                 lastServerUpdatedAtRef.current = data.updatedAt ? new Date(data.updatedAt) : now;
             }
             return idToUse;
         } catch (e) {
@@ -201,7 +199,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         try {
             if (internalMemoId) {
                 // If forcing, we don't pass lastUpdatedAt (or logic in actions handles it if we pass force=true)
-                const result = await updateMemo(internalMemoId, content, lastServerUpdatedAt, force);
+                const result = await updateMemo(internalMemoId, content, lastServerUpdatedAtRef.current, force);
                 if (result && 'error' in result && result.error === 'Conflict') {
                     // Conflict detected - Handle gracefully without throwing
                     try {
@@ -219,11 +217,11 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                 }
                 
                 const now = new Date();
-                setLastServerUpdatedAt(now); // Optimistic update
+                lastServerUpdatedAtRef.current = now; // Optimistic update
             } else {
                 const newMemo = await createMemo(content);
                 setInternalMemoId(newMemo.id); // For create case specifically
-                setLastServerUpdatedAt(newMemo.updatedAt);
+                lastServerUpdatedAtRef.current = newMemo.updatedAt;
             }
             
             lastSavedContentRef.current = content;
