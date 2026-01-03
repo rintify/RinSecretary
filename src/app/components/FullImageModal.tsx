@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dialog, DialogContent, IconButton, Box } from '@mui/material';
+import { Dialog, IconButton, Box } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Zoom, Navigation, Pagination } from 'swiper/modules';
@@ -24,6 +24,7 @@ export default function FullImageModal({ open, onClose, imageUrl }: FullImageMod
             onClose={onClose}
             maxWidth="xl"
             fullScreen
+            disableScrollLock
             PaperProps={{
                 style: {
                     backgroundColor: 'rgba(0, 0, 0, 0.95)',
