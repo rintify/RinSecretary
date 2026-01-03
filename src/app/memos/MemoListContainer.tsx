@@ -50,6 +50,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
     const [searchQuery, setSearchQuery] = useState(initialQuery);
     const [loadingMore, setLoadingMore] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const observerTarget = useRef(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -108,10 +109,15 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
 
     const isFirstRender = useRef(true);
 
-    // Debounced Search Effect
+    // Debounced Search Effect (only when search bar is focused)
     useEffect(() => {
         if (isFirstRender.current) {
             isFirstRender.current = false;
+            return;
+        }
+
+        // Only execute debounced search when search bar is focused
+        if (!isSearchFocused) {
             return;
         }
 
@@ -128,7 +134,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 clearTimeout(searchTimeoutRef.current);
             }
         };
-    }, [searchQuery]);
+    }, [searchQuery, isSearchFocused]);
 
     // Immediate Search Handler
     const handleImmediateSearch = () => {
@@ -397,6 +403,8 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 onSearchChange={!isSelectionMode ? setSearchQuery : undefined}
                 onSearchClick={handleImmediateSearch}
                 onClearClick={isSearchExecuted ? handleClearSearch : undefined}
+                onSearchFocus={() => setIsSearchFocused(true)}
+                onSearchBlur={() => setIsSearchFocused(false)}
                 value={searchQuery}
                 title={isSelectionMode ? `${selectedIds.size}件選択中` : "メモ一覧"} 
                 loading={isSearching}

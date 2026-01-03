@@ -11,6 +11,8 @@ interface MemoHeaderProps {
     onSearchChange?: (value: string) => void;
     onSearchClick?: () => void;
     onClearClick?: () => void;
+    onSearchFocus?: () => void;
+    onSearchBlur?: () => void;
     value?: string;
     loading?: boolean;
 }
@@ -21,7 +23,9 @@ export default function MemoHeader({
     sx, 
     onSearchChange, 
     onSearchClick, 
-    onClearClick, 
+    onClearClick,
+    onSearchFocus,
+    onSearchBlur,
     value = '',
     loading = false
 }: MemoHeaderProps) {
@@ -71,6 +75,8 @@ export default function MemoHeader({
                             inputProps={{ 'aria-label': 'search google maps' }}
                             value={value}
                             onChange={(e) => onSearchChange(e.target.value)}
+                            onFocus={onSearchFocus}
+                            onBlur={onSearchBlur}
                         />
                         {onClearClick && value ? (
                             <IconButton type="button" sx={{ p: '10px' }} aria-label="clear" onClick={onClearClick}>
