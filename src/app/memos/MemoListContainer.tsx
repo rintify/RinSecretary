@@ -38,15 +38,7 @@ type Memo = {
     thumbnailPath?: string | null;
 };
 
-export default function MemoListContainer({ 
-    memos: initialMemos, 
-    initialQuery = '', 
-    initialTake = 20 
-}: { 
-    memos: Memo[], 
-    initialQuery?: string,
-    initialTake?: number
-}) {
+export default function MemoListContainer({ memos: initialMemos, initialQuery = '' }: { memos: Memo[], initialQuery?: string }) {
     const [memos, setMemos] = useState<Memo[]>(initialMemos);
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -57,7 +49,7 @@ export default function MemoListContainer({
     // Search & Pagination
     const [searchQuery, setSearchQuery] = useState(initialQuery);
     const [loadingMore, setLoadingMore] = useState(false);
-    const [isSearching, setIsSearching] = useState(initialMemos.length === 0);
+    const [isSearching, setIsSearching] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const observerTarget = useRef(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -116,18 +108,10 @@ export default function MemoListContainer({
 
     const isFirstRender = useRef(true);
 
-    // Initial Load Effect
-    useEffect(() => {
-        if (memos.length === 0) {
-            executeSearch(searchQuery);
-        }
-    }, []);
-
     // Debounced Search Effect
     useEffect(() => {
         if (isFirstRender.current) {
             isFirstRender.current = false;
-            // Skip initial render as it's handled by Initial Load Effect or SSR
             return;
         }
 

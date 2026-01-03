@@ -36,7 +36,19 @@ export default async function MemoListPage({
     ];
   }
 
-  const memos: any[] = []; // Remove server-side fetch
+  const memos = await prisma.memo.findMany({
+    where,
+    orderBy: { updatedAt: 'desc' },
+    take,
+    select: {
+      id: true,
+      title: true,
+      updatedAt: true,
+      thumbnailPath: true,
+      createdAt: true,
+      userId: true,
+    },
+  });
 
-  return <MemoListContainer memos={memos} initialQuery={query || ''} initialTake={take} />;
+  return <MemoListContainer memos={memos} initialQuery={query || ''} />;
 }
