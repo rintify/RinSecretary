@@ -3,14 +3,49 @@ import { google } from 'googleapis';
 import { prisma } from './prisma';
 import { decode } from 'js-base64';
 
+// Helper to get the primary Google account (matching user email)
+async function getPrimaryGoogleAccount(userId: string) {
+    const accounts = await prisma.account.findMany({
+        where: { userId, provider: 'google' }
+    });
+    
+    if (!accounts || accounts.length === 0) return null;
+    
+    // If only one, just return it (saving API calls)
+    if (accounts.length === 1) return accounts[0];
+
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true }
+    });
+
+    if (!user?.email) return accounts[0]; // Fallback
+
+    // Check which account matches using tokens
+    for (const account of accounts) {
+        if (!account.access_token) continue;
+        try {
+            const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+                headers: { Authorization: `Bearer ${account.access_token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.email && data.email.toLowerCase() === user.email.toLowerCase()) {
+                    return account;
+                }
+            }
+        } catch (e) {
+            console.error('getPrimaryGoogleAccount: check failed for account', account.id);
+        }
+    }
+
+    // Default to first if no match found (or all failed)
+    return accounts[0];
+}
+
 export async function getGoogleCalendarEvents(userId: string, timeMin: Date, timeMax: Date) {
   try {
-    const account = await prisma.account.findFirst({
-      where: {
-        userId: userId,
-        provider: 'google',
-      },
-    });
+    const account = await getPrimaryGoogleAccount(userId);
 
     if (!account) {
       console.warn('getGoogleCalendarEvents: Account not found for user', userId);
@@ -58,8 +93,6 @@ export async function getGoogleCalendarEvents(userId: string, timeMin: Date, tim
 
     const calendar = google.calendar({ version: 'v3', auth });
     
-
-    
     const response = await calendar.events.list({
       calendarId: 'primary',
       timeMin: timeMin.toISOString(),
@@ -73,12 +106,18 @@ export async function getGoogleCalendarEvents(userId: string, timeMin: Date, tim
   } catch (error: any) {
     if (error?.message?.includes('invalid_grant')) {
       console.warn('getGoogleCalendarEvents: Invalid grant (token expired/revoked). Clearing account to force re-login.');
-      await prisma.account.deleteMany({
-        where: {
-          userId: userId,
-          provider: 'google',
-        },
-      });
+      // Logic for deleting account on auth error
+      // Ideally we only delete if we are SURE which one caused it. 
+      // With getPrimaryGoogleAccount, we retrieved specific `account`.
+      // We should probably pass account ID to delete query if possible, or just re-fetch to delete.
+      // But `account` variable scope is inside try... wait block.
+      // Actually, error handling here assumes single account logic.
+      // If we have multiple accounts, deleting ALL might be annoying.
+      // Let's rely on the user to fix auth via settings if possible, or just throw AUTH_ERROR.
+      // But old logic deleted it. Let's keep strict "clean up bad tokens" logic but maybe safer?
+      // Since we don't have reference to `account` within catch block easily (unless we move definition out),
+      // let's just throw AUTH_ERROR for now and let user handle in Google Settings.
+      // Deleting automatically is aggressive if transient.
       // Re-throw so UI knows it failed
       throw new Error("AUTH_ERROR");
     }
@@ -91,9 +130,7 @@ export async function getGoogleCalendarEvents(userId: string, timeMin: Date, tim
 
 export async function createGoogleCalendarEvent(userId: string, eventData: any) {
     try {
-        const account = await prisma.account.findFirst({
-            where: { userId, provider: 'google' }
-        });
+        const account = await getPrimaryGoogleAccount(userId);
         if (!account?.access_token) return null;
 
         const auth = new google.auth.OAuth2(
@@ -116,9 +153,7 @@ export async function createGoogleCalendarEvent(userId: string, eventData: any) 
 
 export async function updateGoogleCalendarEvent(userId: string, eventId: string, eventData: any) {
      try {
-        const account = await prisma.account.findFirst({
-            where: { userId, provider: 'google' }
-        });
+        const account = await getPrimaryGoogleAccount(userId);
         if (!account?.access_token) return null;
 
         const auth = new google.auth.OAuth2(
@@ -142,9 +177,7 @@ export async function updateGoogleCalendarEvent(userId: string, eventId: string,
 
 export async function deleteGoogleCalendarEvent(userId: string, eventId: string) {
      try {
-        const account = await prisma.account.findFirst({
-            where: { userId, provider: 'google' }
-        });
+        const account = await getPrimaryGoogleAccount(userId);
         if (!account?.access_token) return null;
 
         const auth = new google.auth.OAuth2(
@@ -167,114 +200,120 @@ export async function deleteGoogleCalendarEvent(userId: string, eventId: string)
 
 export async function getGmailMessages(userId: string, timeMin: Date) {
     try {
-        const account = await prisma.account.findFirst({
+        const accounts = await prisma.account.findMany({
             where: { userId, provider: 'google' }
         });
 
-        if (!account?.access_token) {
+        if (!accounts || accounts.length === 0) {
              throw new Error("AUTH_ERROR");
         }
 
-        const auth = new google.auth.OAuth2(
-            process.env.GOOGLE_CLIENT_ID,
-            process.env.GOOGLE_CLIENT_SECRET
-        );
-        auth.setCredentials({ access_token: account.access_token, refresh_token: account.refresh_token });
-        
-        // Auto-refresh token hook (same as calendar)
-        auth.on('tokens', async (tokens) => {
-            if (tokens.access_token) {
-                await prisma.account.update({
-                    where: { id: account.id },
-                    data: {
-                        access_token: tokens.access_token,
-                        expires_at: Math.floor((tokens.expiry_date || 0) / 1000),
-                        refresh_token: tokens.refresh_token ?? account.refresh_token
+        const allMessages: any[] = [];
+
+        for (const account of accounts) {
+            try {
+                if (!account.access_token) continue;
+
+                const auth = new google.auth.OAuth2(
+                    process.env.GOOGLE_CLIENT_ID,
+                    process.env.GOOGLE_CLIENT_SECRET
+                );
+                auth.setCredentials({ access_token: account.access_token, refresh_token: account.refresh_token });
+                
+                // Auto-refresh token hook
+                auth.on('tokens', async (tokens) => {
+                    if (tokens.access_token) {
+                        await prisma.account.update({
+                            where: { id: account.id },
+                            data: {
+                                access_token: tokens.access_token,
+                                expires_at: Math.floor((tokens.expiry_date || 0) / 1000),
+                                refresh_token: tokens.refresh_token ?? account.refresh_token
+                            }
+                        });
                     }
                 });
-            }
-        });
 
-        const gmail = google.gmail({ version: 'v1', auth });
+                const gmail = google.gmail({ version: 'v1', auth });
 
-        // List messages
-        // q parameter for filtering? 'category:primary' might be good to filter spam immediately but user asked for logic.
-        // Let's just filter by time first.
-        const res = await gmail.users.messages.list({
-            userId: 'me',
-            q: `after:${Math.floor(timeMin.getTime() / 1000)}`,
-            maxResults: 50 // Limit to avoid hitting limits too hard
-        });
+                const res = await gmail.users.messages.list({
+                    userId: 'me',
+                    q: `after:${Math.floor(timeMin.getTime() / 1000)}`,
+                    maxResults: 50
+                });
 
-        const messages = res.data.messages || [];
-        if (messages.length === 0) return [];
+                const messages = res.data.messages || [];
+                if (messages.length === 0) continue;
 
-        // Batch get details
-        const emailDetails = await Promise.all(messages.map(async (msg) => {
-             const detail = await gmail.users.messages.get({
-                 userId: 'me',
-                 id: msg.id!,
-                 format: 'full'
-             });
-             
-             const payload = detail.data.payload;
-             const headers = payload?.headers;
-             
-             const from = headers?.find(h => h.name === 'From')?.value || 'Unknown';
-             const subject = headers?.find(h => h.name === 'Subject')?.value || '(No Subject)';
-             const date = headers?.find(h => h.name === 'Date')?.value;
-             
-             // Extract body
-             let body = detail.data.snippet || '';
-             // Try to find cleaner body if needed, but snippet is usually good enough for "broad" summary.
-             // If we want more detail, we can decode parts.
-             // Let's stick to snippet + a bit of body if possible.
-             // Actually, snippet is safer for token limits. User asked for "contents", so maybe full body is better but heavy.
-             // Let's try to get text/plain part.
-             
-             // Helper to find part
-            const findBody = (parts: any[]): string => {
-                for (const part of parts) {
-                    if (part.mimeType === 'text/plain' && part.body?.data) {
-                        return decode(part.body.data);
-                    }
-                    if (part.parts) {
-                        const found = findBody(part.parts);
-                        if (found) return found;
-                    }
+                // Batch get details
+                const emailDetails = await Promise.all(messages.map(async (msg) => {
+                     try {
+                        const detail = await gmail.users.messages.get({
+                            userId: 'me',
+                            id: msg.id!,
+                            format: 'full'
+                        });
+                        
+                        const payload = detail.data.payload;
+                        const headers = payload?.headers;
+                        
+                        const from = headers?.find(h => h.name === 'From')?.value || 'Unknown';
+                        const subject = headers?.find(h => h.name === 'Subject')?.value || '(No Subject)';
+                        const date = headers?.find(h => h.name === 'Date')?.value;
+                        
+                        const findBody = (parts: any[]): string => {
+                            for (const part of parts) {
+                                if (part.mimeType === 'text/plain' && part.body?.data) {
+                                    return decode(part.body.data);
+                                }
+                                if (part.parts) {
+                                    const found = findBody(part.parts);
+                                    if (found) return found;
+                                }
+                            }
+                            return '';
+                        };
+
+                        let fullBody = '';
+                        if (payload?.body?.data) {
+                            fullBody = decode(payload.body.data);
+                        } else if (payload?.parts) {
+                            fullBody = findBody(payload.parts);
+                        }
+                        
+                        const content = fullBody || detail.data.snippet || '';
+
+                        return {
+                            id: msg.id,
+                            from,
+                            subject,
+                            date,
+                            content: content.substring(0, 2000)
+                        };
+                     } catch(e) {
+                         console.error(`Failed to fetch message ${msg.id} for account ${account.id}`, e);
+                         return null;
+                     }
+                }));
+                
+                allMessages.push(...emailDetails.filter(e => e !== null));
+
+            } catch (e: any) {
+                console.error(`Failed to fetch gmail for account ${account.id}`, e);
+                if (e?.message?.includes('invalid_grant')) {
+                    // Maybe we shouldn't delete immediately if transient, but consistency with old logic:
+                     await prisma.account.delete({
+                         where: { id: account.id }
+                    });
                 }
-                return '';
-            };
-
-            let fullBody = '';
-            if (payload?.body?.data) {
-                fullBody = decode(payload.body.data);
-            } else if (payload?.parts) {
-                fullBody = findBody(payload.parts);
+                // Continue to next account
             }
-            
-            // Fallback to snippet if fullBody is empty or too complex
-            const content = fullBody || detail.data.snippet || '';
+        }
 
-             return {
-                 id: msg.id,
-                 from,
-                 subject,
-                 date,
-                 content: content.substring(0, 2000) // Truncate to safe limit per email
-             };
-        }));
-        
-        return emailDetails;
+        return allMessages;
 
     } catch (e: any) {
-        if (e?.message?.includes('invalid_grant')) {
-             await prisma.account.deleteMany({
-                where: { userId: userId, provider: 'google' }
-            });
-            throw new Error("AUTH_ERROR");
-        }
-        console.error("Failed to fetch gmail", e);
+        // If critical outer error
         throw e;
     }
 }

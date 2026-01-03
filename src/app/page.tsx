@@ -55,7 +55,8 @@ import {
     Notifications as AlarmIcon,
     DataUsage as DataUsageIcon,
     Chat as ChatIcon,
-    Email as MailIcon
+    Email as MailIcon,
+    Google as GoogleIcon
 } from '@mui/icons-material';
 
 import TimeTableSwiper from './components/TimeTableSwiper';
@@ -67,6 +68,7 @@ import BulkEventCreator from './components/BulkEventCreator';
 import ImmediateTaskFlow from './components/immediate/ImmediateTaskFlow';
 import ImmediateEventFlow from './components/immediate/ImmediateEventFlow';
 import ImmediateAlarmFlow from './components/immediate/ImmediateAlarmFlow';
+import GoogleSettingsModal from './components/GoogleSettingsModal';
 // import LongPressFab from './components/ui/LongPressFab'; // Unused
 
 import DataUsageModal from './components/DataUsageModal';
@@ -90,7 +92,8 @@ export default function Home() {
   // Modal State
   // Modal State
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS' | 'AI_CHAT' | 'MAIL_SUMMARY' | 'MAIL_SETTINGS'>('NONE');
+  // Modal State
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS' | 'AI_CHAT' | 'MAIL_SUMMARY' | 'MAIL_SETTINGS' | 'GOOGLE_SETTINGS'>('NONE');
 
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
@@ -436,6 +439,12 @@ export default function Home() {
                        </ListItemIcon>
                        <ListItemText>メール設定</ListItemText>
                    </MenuItem>
+                   <MenuItem onClick={() => { handleMenuClose(); setActiveModal('GOOGLE_SETTINGS'); }}>
+                       <ListItemIcon>
+                           <GoogleIcon fontSize="small" />
+                       </ListItemIcon>
+                       <ListItemText>Google設定</ListItemText>
+                   </MenuItem>
                   <MenuItem onClick={async () => { 
                       handleMenuClose(); 
                       const { logout } = await import('@/lib/actions');
@@ -635,6 +644,11 @@ export default function Home() {
 >
    <MailSettingsModal onClose={handleCloseModal} />
 </Dialog>
+
+<GoogleSettingsModal 
+    open={activeModal === 'GOOGLE_SETTINGS'}
+    onClose={handleCloseModal}
+/>
 
 
                 {activeModal === 'FREE_TIME' && (
