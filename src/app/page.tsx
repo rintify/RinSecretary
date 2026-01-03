@@ -30,6 +30,7 @@ import FreeTimeModal from './components/FreeTimeModal';
 import ExpiredTaskListModal from './components/ExpiredTaskListModal';
 import AIChatModal from './components/AIChatModal';
 import MailSummaryModal from './components/MailSummaryModal';
+import MailSettingsModal from './components/MailSettingsModal';
 
 import { getExpiredTaskCount } from '@/lib/task-actions';
 import { fetchGoogleEvents } from '@/lib/calendar-actions';
@@ -89,7 +90,7 @@ export default function Home() {
   // Modal State
   // Modal State
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS' | 'AI_CHAT' | 'MAIL_SUMMARY'>('NONE');
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS' | 'AI_CHAT' | 'MAIL_SUMMARY' | 'MAIL_SETTINGS'>('NONE');
 
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
@@ -429,6 +430,12 @@ export default function Home() {
                        </ListItemIcon>
                        <ListItemText>通信量</ListItemText>
                    </MenuItem>
+                   <MenuItem onClick={() => { handleMenuClose(); setActiveModal('MAIL_SETTINGS'); }}>
+                       <ListItemIcon>
+                           <MailIcon fontSize="small" />
+                       </ListItemIcon>
+                       <ListItemText>メール設定</ListItemText>
+                   </MenuItem>
                   <MenuItem onClick={async () => { 
                       handleMenuClose(); 
                       const { logout } = await import('@/lib/actions');
@@ -618,6 +625,15 @@ export default function Home() {
     TransitionComponent={SlideTransition}
 >
    <SettingsModal onClose={handleCloseModal} />
+</Dialog>
+
+<Dialog
+    open={activeModal === 'MAIL_SETTINGS'}
+    onClose={handleCloseModal}
+    fullScreen
+    TransitionComponent={SlideTransition}
+>
+   <MailSettingsModal onClose={handleCloseModal} />
 </Dialog>
 
 

@@ -40,6 +40,17 @@ model User {
   memos     Memo[]
   
   aiConfigs AiConfig[]
+  mailBlockedSenders MailBlockedSender[]
+}
+
+model MailBlockedSender {
+  id        String   @id @default(cuid())
+  email     String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, email])
 }
 
 model AiConfig {
