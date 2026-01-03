@@ -48,7 +48,8 @@ import BulkEventCreator from './components/BulkEventCreator';
 import ImmediateTaskFlow from './components/immediate/ImmediateTaskFlow';
 import ImmediateEventFlow from './components/immediate/ImmediateEventFlow';
 import ImmediateAlarmFlow from './components/immediate/ImmediateAlarmFlow';
-import LongPressFab from './components/ui/LongPressFab';
+// import LongPressFab from './components/ui/LongPressFab'; // Unused
+
 import DataUsageModal from './components/DataUsageModal';
 
 import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR, MEMO_COLOR } from './utils/colors';
@@ -69,23 +70,17 @@ export default function Home() {
 
   // Modal State
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_TASK' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'NEW_ALARM' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS'>('NONE');
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS'>('NONE');
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
-  const handleNewTask = () => {
-      setModalData(null);
-      setActiveModal('NEW_TASK');
-  };
+
 
   const handleNewEvent = (startTime?: string) => {
     setModalData({ startTime });
     setActiveModal('NEW_EVENT');
   };
 
-  const handleNewAlarm = () => {
-      setModalData(null);
-      setActiveModal('NEW_ALARM');
-  };
+
 
   const handleTaskClick = (task: any) => {
       setModalData(task);
@@ -443,41 +438,38 @@ export default function Home() {
           <Box sx={{ position: 'absolute', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center', zIndex: 100 }}>
              <Tooltip title="New Task" placement="left">
                 <Box>
-                <LongPressFab 
+                <Fab 
                     aria-label="add task" 
                     onClick={() => { setModalData(null); setActiveModal('IMMEDIATE_TASK'); }}
-                    onLongPress={handleNewTask}
                     size="medium"
                     sx={{ bgcolor: TASK_COLOR, color: '#fff', '&:hover': { bgcolor: TASK_COLOR, opacity: 0.9 } }}
                 >
                     <TaskIcon />
-                </LongPressFab>
+                </Fab>
                 </Box>
              </Tooltip>
              <Tooltip title="New Event" placement="left">
                 <Box>
-                <LongPressFab 
+                <Fab 
                     aria-label="add event" 
                     onClick={() => { setModalData({ startTime: undefined }); setActiveModal('IMMEDIATE_EVENT'); }}
-                    onLongPress={() => handleNewEvent()} 
                     size="medium" 
                     sx={{ bgcolor: EVENT_COLOR, color: '#fff', '&:hover': { bgcolor: EVENT_COLOR, opacity: 0.9 } }}
                 >
                     <EventIcon />
-                </LongPressFab>
+                </Fab>
                 </Box>
              </Tooltip>
              <Tooltip title="New Alarm" placement="left">
                 <Box>
-                <LongPressFab 
+                <Fab 
                     aria-label="add alarm" 
                     onClick={() => { setModalData(null); setActiveModal('IMMEDIATE_ALARM'); }}
-                    onLongPress={handleNewAlarm}
                     size="medium" 
                     sx={{ bgcolor: ALARM_COLOR, color: '#fff', '&:hover': { bgcolor: ALARM_COLOR, opacity: 0.9 } }}
                 >
                     <AlarmIcon />
-                </LongPressFab>
+                </Fab>
                 </Box>
              </Tooltip>
              <Tooltip title="New Memo" placement="left">
@@ -512,13 +504,7 @@ export default function Home() {
       >
         <DialogContent sx={{ p: 0 }}>
              <Suspense fallback={<Box p={4}>Loading...</Box>}>
-                {activeModal === 'NEW_TASK' && (
-                    <TaskForm 
-                        onSuccess={handleCloseModal} 
-                        isModal
-                        initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
-                    />
-                )}
+
                  {activeModal === 'EDIT_TASK' && (
                     <TaskForm 
                         taskId={modalData?.id} 
@@ -558,13 +544,7 @@ export default function Home() {
                         onEdit={handleEditFromDetail}
                     />
                 )}
-                {activeModal === 'NEW_ALARM' && (
-                    <AlarmForm
-                        onSuccess={handleCloseModal}
-                        isModal
-                        initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
-                    />
-                )}
+
                 {activeModal === 'EDIT_ALARM' && (
                     <AlarmForm
                         alarmId={modalData?.id}
