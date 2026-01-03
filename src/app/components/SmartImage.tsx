@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { Box } from '@mui/material';
+import { motion } from 'framer-motion';
 
 interface SmartImageProps {
     src: string;
@@ -9,7 +10,10 @@ interface SmartImageProps {
     priority?: boolean;
 }
 
+const MotionImage = motion(Image);
+
 export default function SmartImage({ src, alt, onClick, priority = false }: SmartImageProps) {
+    const [isLoaded, setIsLoaded] = useState(false);
     // Default to 'safe' style that respects limits but might not upscale small images perfectly tight
     // or might leave gaps. We render this initially.
     const [style, setStyle] = useState<React.CSSProperties>({
@@ -48,8 +52,6 @@ export default function SmartImage({ src, alt, onClick, priority = false }: Smar
         let containerWidth = window.innerWidth; 
         // Best effort: usage context often has padding. 
         // But comparing aspect ratios is relative.
-        // If we are in a narrow column, width constraint is tight.
-        // If we uses img.parentElement.clientWidth, it is accurate.
         if (img.parentElement) {
             containerWidth = img.parentElement.clientWidth;
         }
@@ -59,30 +61,23 @@ export default function SmartImage({ src, alt, onClick, priority = false }: Smar
 
         if (imgAspect < containerAspect) {
             // Image is "Taller" than the available box.
-            // Limiting factor is HEIGHT.
-            // We should set Height to Max (80vh), and let Width be auto (which will be < ContainerWidth).
-            // This ensures tight fit vertical, and valid width.
             setStyle({
                 height: '80vh',
                 width: 'auto',
-                // Reset others
-                maxWidth: '100%', // Safety
+                maxWidth: '100%',
                 objectFit: 'contain',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 display: 'block',
-                marginRight: 'auto', // Left align
+                marginRight: 'auto',
                 marginLeft: 0,
             });
         } else {
             // Image is "Wider" than the available box.
-            // Limiting factor is WIDTH.
-            // We should set Width to Max (100%), and let Height be auto (which will be < 80vh).
             setStyle({
                 width: '100%',
                 height: 'auto',
-                // Reset others
-                maxHeight: '80vh', // Safety
+                maxHeight: '80vh',
                 objectFit: 'contain',
                 borderRadius: '8px',
                 cursor: 'pointer',
@@ -91,13 +86,20 @@ export default function SmartImage({ src, alt, onClick, priority = false }: Smar
                 marginLeft: 0,
             });
         }
+        setIsLoaded(true);
+    };
+
+    const imageMotionProps: any = {
+        initial: { opacity: 0 },
+        animate: { opacity: isLoaded ? 1 : 0 },
+        transition: { duration: 0.4, ease: "easeOut" }
     };
 
     // For external images, use Next.js Image
     if (src.startsWith('http')) {
         return (
              <Box sx={{ position: 'relative', width: 'fit-content', my: 2 }}>
-                <Image
+                <MotionImage
                     src={src}
                     alt={alt}
                     width={0}
@@ -107,16 +109,15 @@ export default function SmartImage({ src, alt, onClick, priority = false }: Smar
                     onLoad={handleLoad}
                     onClick={onClick}
                     style={style}
+                    {...imageMotionProps}
                 />
              </Box>
         );
     }
 
     // Use Next.js Image for ALL images (external AND local) to enable optimization/bandwidth reduction.
-    // We use width={0} height={0} sizes="100vw" to allow CSS (in style prop) to control dimensions
-    // while Next.js generates an optimized image based on the sizes prop.
     return (
-        <Image
+        <MotionImage
             src={src}
             alt={alt}
             width={0}
@@ -127,6 +128,7 @@ export default function SmartImage({ src, alt, onClick, priority = false }: Smar
             onLoad={handleLoad}
             onClick={onClick}
             style={style}
+            {...imageMotionProps}
         />
     );
 }

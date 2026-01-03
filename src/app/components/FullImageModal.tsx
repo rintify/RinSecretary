@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Dialog, IconButton, Box } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Zoom, Navigation, Pagination } from 'swiper/modules';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import 'swiper/css';
 import 'swiper/css/zoom';
@@ -16,7 +17,13 @@ interface FullImageModalProps {
 }
 
 export default function FullImageModal({ open, onClose, imageUrl }: FullImageModalProps) {
+    const [isLoaded, setIsLoaded] = useState(false);
+
     if (!imageUrl) return null;
+
+    const handleImageLoad = () => {
+        setIsLoaded(true);
+    };
 
     return (
         <Dialog
@@ -60,16 +67,23 @@ export default function FullImageModal({ open, onClose, imageUrl }: FullImageMod
             >
                 <SwiperSlide>
                     <div className="swiper-zoom-container">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img 
-                            src={imageUrl} 
-                            alt="Full Screen" 
-                            style={{ 
-                                maxWidth: '100%', 
-                                maxHeight: '100%', 
-                                objectFit: 'contain' 
-                            }} 
-                        />
+                        <AnimatePresence>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <motion.img 
+                                key={imageUrl}
+                                src={imageUrl} 
+                                alt="Full Screen" 
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: isLoaded ? 1 : 0 }}
+                                transition={{ duration: 0.4, ease: "easeOut" }}
+                                onLoad={handleImageLoad}
+                                style={{ 
+                                    maxWidth: '100%', 
+                                    maxHeight: '100%', 
+                                    objectFit: 'contain' 
+                                }} 
+                            />
+                        </AnimatePresence>
                     </div>
                 </SwiperSlide>
             </Swiper>
