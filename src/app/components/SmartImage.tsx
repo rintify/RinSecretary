@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { Box } from '@mui/material';
 
@@ -25,6 +25,8 @@ export default function SmartImage({ src, alt, onClick, priority = false }: Smar
         marginLeft: 0,
     });
 
+    const imgRef = useRef<HTMLImageElement>(null);
+
     const handleLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
         const img = e.currentTarget;
         const naturalWidth = img.naturalWidth;
@@ -35,7 +37,19 @@ export default function SmartImage({ src, alt, onClick, priority = false }: Smar
 
         const imgAspect = naturalWidth / naturalHeight;
         
+        // Estimate container aspect.
+        // We use viewport height * 0.8 as the height constraint.
+        // We use the image's parent width (or approximate) as width constraint.
+        // Since we can't easily get parent width during onLoad without ref specific logic,
+        // we can rely on the fact that if we set width: 100%, it fills parent.
+        // If we set height: 80vh, it fills height.
+        // We want to fill the "Tighter" dimension to maximize size without overflow/cropping.
+        
         let containerWidth = window.innerWidth; 
+        // Best effort: usage context often has padding. 
+        // But comparing aspect ratios is relative.
+        // If we are in a narrow column, width constraint is tight.
+        // If we uses img.parentElement.clientWidth, it is accurate.
         if (img.parentElement) {
             containerWidth = img.parentElement.clientWidth;
         }
@@ -45,23 +59,30 @@ export default function SmartImage({ src, alt, onClick, priority = false }: Smar
 
         if (imgAspect < containerAspect) {
             // Image is "Taller" than the available box.
+            // Limiting factor is HEIGHT.
+            // We should set Height to Max (80vh), and let Width be auto (which will be < ContainerWidth).
+            // This ensures tight fit vertical, and valid width.
             setStyle({
                 height: '80vh',
                 width: 'auto',
-                maxWidth: '100%', 
+                // Reset others
+                maxWidth: '100%', // Safety
                 objectFit: 'contain',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 display: 'block',
-                marginRight: 'auto', 
+                marginRight: 'auto', // Left align
                 marginLeft: 0,
             });
         } else {
-            // Image is "Wider" or fits.
+            // Image is "Wider" than the available box.
+            // Limiting factor is WIDTH.
+            // We should set Width to Max (100%), and let Height be auto (which will be < 80vh).
             setStyle({
                 width: '100%',
                 height: 'auto',
-                maxHeight: '80vh', 
+                // Reset others
+                maxHeight: '80vh', // Safety
                 objectFit: 'contain',
                 borderRadius: '8px',
                 cursor: 'pointer',
@@ -72,24 +93,44 @@ export default function SmartImage({ src, alt, onClick, priority = false }: Smar
         }
     };
 
+    // For external images, use Next.js Image
+    if (src.startsWith('http')) {
+        return (
+             <Box sx={{ position: 'relative', width: 'fit-content', my: 2 }}>
+                <Image
+                    src={src}
+                    alt={alt}
+                    width={0}
+                    height={0}
+                    sizes="100vw"
+                    quality={60}
+                    onLoad={handleLoad}
+                    onClick={onClick}
+                    style={style}
+                />
+             </Box>
+        );
+    }
+
     // Use Next.js Image for ALL images (external AND local) to enable optimization/bandwidth reduction.
     // We use width={0} height={0} sizes="100vw" to allow CSS (in style prop) to control dimensions
     // while Next.js generates an optimized image based on the sizes prop.
     return (
-            <Box sx={{ position: 'relative', width: 'fit-content', my: 2 }}>
-            <Image
-                src={src}
-                alt={alt}
-                width={0}
-                height={0}
-                sizes="(max-width: 768px) 100vw, 800px" 
-                quality={75}
-                priority={priority}
-                onLoad={handleLoad}
-                onClick={onClick}
-                style={style}
-            />
-            </Box>
+        <Image
+            src={src}
+            alt={alt}
+            width={0}
+            height={0}
+            sizes="(max-width: 768px) 100vw, 800px" 
+            quality={75}
+            priority={priority}
+            onLoad={handleLoad}
+            onClick={onClick}
+            style={style}
+        />
     );
 }
+
+
+
 
