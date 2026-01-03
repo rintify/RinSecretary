@@ -10,7 +10,8 @@ import {
     MoreVert as MoreVertIcon, 
     Delete as DeleteIcon, 
     Close as CloseIcon, 
-    Note as NoteIcon 
+    Note as NoteIcon,
+    Refresh as RefreshIcon
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import Image from 'next/image';
@@ -58,15 +59,24 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
     const dragCounter = useRef(0);
     const router = useRouter();
 
+    // Pull to Refresh State
+    const [pullStartY, setPullStartY] = useState(0);
+    const [pullDistance, setPullDistance] = useState(0);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const PULL_THRESHOLD = 80; // 更新トリガーとなる距離
+    const MAX_PULL_DISTANCE = 120; // 最大引き下げ距離
+
+    // Reset memos when initialMemos changes (e.g. after server action redirect)
     // Reset memos when initialMemos changes (e.g. after server action redirect)
     useEffect(() => {
         setMemos(initialMemos);
-        // We generally want to respect the initialMemos regarding hasMore check logic roughly,
-        // but explicit hasMore logic is better handled by checking count.
-        // If initialMemos is big (restored), hasMore can be derived.
-        // Simplified:
-        // setHasMore(initialMemos.length >= 20); // Not accurate if restored with 60 items.
-    }, [initialMemos]);
+        if (isRefreshing) {
+            setIsRefreshing(false);
+            setPullDistance(0);
+        }
+        // Simplified hasMore logic
+        // setHasMore(initialMemos.length >= 20); 
+    }, [initialMemos, isRefreshing]);
 
     const [lastSearchedQuery, setLastSearchedQuery] = useState(initialQuery);
 
@@ -353,6 +363,42 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
         }
     };
 
+    // Pull to Refresh Handlers
+    const handleTouchStart = (e: React.TouchEvent) => {
+        if (scrollContainerRef.current && scrollContainerRef.current.scrollTop === 0 && !isRefreshing && !isSelectionMode) {
+            setPullStartY(e.touches[0].clientY);
+        } else {
+            setPullStartY(0);
+        }
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (pullStartY === 0 || isRefreshing || isSelectionMode) return;
+
+        const currentY = e.touches[0].clientY;
+        const diff = currentY - pullStartY;
+
+        if (diff > 0 && scrollContainerRef.current?.scrollTop === 0) {
+            // スクロールをキャンセルしてPull動作を有効にする
+            // 注意: これを過度に行うと通常のスクロールが阻害される可能性があるため、scrollTop === 0 の時のみ
+            const newDistance = Math.min(diff * 0.5, MAX_PULL_DISTANCE); // 抵抗係数 0.5
+            setPullDistance(newDistance);
+        }
+    };
+
+    const handleTouchEnd = () => {
+        if (pullStartY === 0 || isRefreshing) return;
+
+        if (pullDistance > PULL_THRESHOLD) {
+            setIsRefreshing(true);
+            setPullDistance(PULL_THRESHOLD); // 更新中は閾値の位置で固定
+            router.refresh();
+        } else {
+            setPullDistance(0);
+        }
+        setPullStartY(0);
+    };
+
     return (
         <Box 
             sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', position: 'relative', pt: '60px' }} 
@@ -435,7 +481,67 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 }
             />
             
-            <Box ref={scrollContainerRef} onScroll={handleScroll} sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
+            
+            <Box 
+                ref={scrollContainerRef} 
+                onScroll={handleScroll} 
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                sx={{ flex: 1, overflowY: 'auto', p: 2, position: 'relative' }}
+            >
+                {/* Pull to refresh indicator */}
+                <Box
+                    sx={{
+                        position: 'absolute',
+                        top: 20, // 固定位置（上部）
+                        left: 0,
+                        right: 0,
+                        display: 'flex',
+                        justifyContent: 'center',
+                        pointerEvents: 'none',
+                        zIndex: 10, // リストの上に表示
+                    }}
+                >
+                     <motion.div
+                        style={{
+                            background: 'white',
+                            borderRadius: '50%',
+                            boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+                            width: 40,
+                            height: 40,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                        }}
+                        initial={{ y: -60, opacity: 0 }}
+                        animate={{ 
+                            y: isRefreshing ? 0 : (pullDistance > 0 ? Math.min(pullDistance - 40, 0) : -60),
+                            opacity: isRefreshing || pullDistance > 0 ? 1 : 0
+                        }}
+                        transition={isRefreshing ? { type: "spring", stiffness: 300, damping: 30 } : { duration: 0 }}
+                    >
+                        <motion.div
+                             animate={isRefreshing ? { rotate: 360 } : { rotate: (pullDistance / PULL_THRESHOLD) * 360 }}
+                             transition={isRefreshing ? { repeat: Infinity, duration: 1, ease: "linear" } : { duration: 0 }}
+                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                            {isRefreshing ? (
+                                <CircularProgress size={24} thickness={5} sx={{ color: 'primary.main' }} />
+                            ) : (
+                                <RefreshIcon sx={{ 
+                                    transform: `rotate(${Math.min(pullDistance * 2, 180)}deg)`,
+                                    color: pullDistance > PULL_THRESHOLD ? 'primary.main' : 'text.secondary' 
+                                }} />
+                            )}
+                        </motion.div>
+                    </motion.div>
+                </Box>
+                
+                <Box sx={{ 
+                    // コンテンツ自体の押し下げは削除
+                    transition: 'none'
+                }}>
                 {!isSearching && memos.length === 0 ? (
                     <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="50vh" color="text.secondary">
                         <NoteIcon sx={{ fontSize: 60, mb: 2, opacity: 0.5 }} />
@@ -574,6 +680,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 {/* Sentinel for infinite scroll */}
                 <Box ref={observerTarget} sx={{ height: '20px', display: 'flex', justifyContent: 'center', mt: 2 }}>
                     {loadingMore && <CircularProgress size={24} />}
+                </Box>
                 </Box>
             </Box>
 

@@ -6,6 +6,7 @@ import {
     DialogContent, 
     Typography, 
     Box, 
+    Button,
     useTheme
 } from '@mui/material';
 import { format, addDays, subDays } from 'date-fns';
@@ -420,9 +421,31 @@ export default function CustomTimePicker({ open, onClose, value, onChange, showD
                     </Box>
                 </Box>
                 
-                <Typography variant="caption" color="text.disabled" sx={{ mt: 3 }}>
-                    スライダーを回して時刻を変更
-                </Typography>
+                <Box sx={{ width: '100%', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 40, mt: 3 }}>
+                    <Typography variant="caption" color="text.disabled">
+                        スライダーを回して時刻を変更
+                    </Typography>
+                    <Button 
+                        variant="text" 
+                        onClick={() => {
+                            onChange(currentDate);
+                            onClose();
+                        }} 
+                        size="small"
+                        sx={{
+                            color: mainColor,
+                            minWidth: 60,
+                            fontWeight: 'bold',
+                            position: 'absolute',
+                            right: 0,
+                            '&:hover': {
+                                bgcolor: accentColor ? accentColor + '10' : 'rgba(0,0,0,0.05)',
+                            }
+                        }}
+                    >
+                        OK
+                    </Button>
+                </Box>
 
                 {/* Internal DatePicker */}
                 <CustomDatePicker
