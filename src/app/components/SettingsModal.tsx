@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import {
     Box, Button, TextField, Typography, Alert, CircularProgress,
     IconButton, Divider, MenuItem, Select, FormControl, InputLabel,
-    AppBar, Toolbar, Container, List, ListItem, ListItemText, ListSubheader,
+    AppBar, Toolbar, Container, List, ListItem, ListItemText,
     ListItemSecondaryAction, Paper, Stack, Checkbox, FormControlLabel,
     Dialog, DialogContent, Avatar, Tooltip
 } from '@mui/material';
@@ -14,16 +14,15 @@ import {
     Save as SaveIcon,
     SmartToy as AiIcon,
     Notifications as NotifIcon,
-    Settings as SystemIcon,
+    Delete as DeleteIcon, 
+    Edit as EditIcon, 
+    Add as AddIcon,
+    Email as MailIcon,
     Send as SendIcon
 } from '@mui/icons-material';
 import { getPushoverSettings, updatePushoverSettings, sendTestPushoverNotification, sendTestDiscordNotification } from '@/lib/user-actions';
 import { getAIConfigs, saveAIConfig, deleteAIConfig } from '@/lib/ai-actions';
-import { 
-    Delete as DeleteIcon, 
-    Edit as EditIcon, 
-    Add as AddIcon 
-} from '@mui/icons-material';
+import { getMailSettings, saveMailSettings } from '@/lib/mail-actions';
 
 interface AIConfig {
     id: string;
@@ -32,8 +31,8 @@ interface AIConfig {
     apiKey: string;
     model: string | null;
     baseUrl: string | null;
+    includeThoughts?: boolean;
 }
-
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -58,6 +57,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     const [configBaseUrl, setConfigBaseUrl] = useState('');
     const [configIncludeThoughts, setConfigIncludeThoughts] = useState(false);
 
+    // Mail Settings
+    const [mailModelId, setMailModelId] = useState<string>('');
+    const [mailPrompt, setMailPrompt] = useState<string>('');
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -67,7 +69,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     const loadConfigs = async () => {
         try {
             const configs = await getAIConfigs();
-            setAiConfigs(configs as any); // Cast if needed due to loose typing in this file
+            setAiConfigs(configs as any); 
         } catch(e) {
             console.error("Failed to load AI configs", e);
         }
@@ -83,7 +85,6 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         
         loadConfigs();
 
-
         getPushoverSettings().then(settings => {
             if (settings) {
                 settingsCache = settings;
@@ -91,7 +92,14 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 setToken(settings.pushoverToken || '');
                 setDiscordWebhookUrl(settings.discordWebhookUrl || '');
             }
-            setLoading(false);
+            // Load mail settings
+            getMailSettings().then(ms => {
+                if (ms) {
+                    setMailModelId((ms as any).mailSummaryModelId || '');
+                    setMailPrompt((ms as any).mailSummaryPrompt || '');
+                }
+                setLoading(false);
+            });
         });
     }, []);
 
@@ -136,7 +144,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         }
     };
 
-    const startEdit = (config: AIConfig & { includeThoughts?: boolean }) => {
+    const startEdit = (config: AIConfig) => {
         setEditingConfigId(config.id);
         setConfigName(config.name);
         setConfigProvider(config.provider);
@@ -162,17 +170,22 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         setConfigIncludeThoughts(false);
     };
 
-    const handleSubmit = async () => {
+    const handleSaveAll = async () => {
         setSaving(true);
         setMessage(null);
         try {
+            // Save Pushover/Discord
             await updatePushoverSettings(userKey, token, discordWebhookUrl);
             settingsCache = { pushoverUserKey: userKey, pushoverToken: token, discordWebhookUrl: discordWebhookUrl };
-            setMessage({ text: '通知設定を保存しました', type: 'success' });
+            
+            // Save Mail Settings
+            await saveMailSettings(mailModelId, mailPrompt);
+            
+            setMessage({ text: '設定を保存しました', type: 'success' });
             setTimeout(onClose, 800);
-        } catch (e) {
-            console.error(e);
-            setMessage({ text: '保存に失敗しました', type: 'error' });
+        } catch(e) {
+             console.error(e);
+             setMessage({ text: '保存に失敗しました', type: 'error' });
         } finally {
             setSaving(false);
         }
@@ -225,7 +238,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                         autoFocus 
                         color="primary" 
                         variant="contained"
-                        onClick={handleSubmit} 
+                        onClick={handleSaveAll} 
                         disabled={saving}
                         startIcon={<SaveIcon />}
                     >
@@ -354,6 +367,45 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                                     ))}
                                 </List>
                             )}
+                        </Paper>
+                    </Box>
+
+                    {/* Mail Summary Settings */}
+                    <Box>
+                        <Typography variant="h6" color="primary" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <MailIcon /> メール要約設定
+                        </Typography>
+                        <Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
+                            <Stack spacing={3}>
+                                <Alert severity="info" sx={{ py: 0 }}>
+                                    Gmailから直近1週間のメールを取得・要約します。
+                                </Alert>
+                                <FormControl fullWidth size="small">
+                                    <InputLabel>使用するAIモデル</InputLabel>
+                                    <Select
+                                        value={mailModelId}
+                                        label="使用するAIモデル"
+                                        onChange={(e) => setMailModelId(e.target.value)}
+                                    >
+                                        <MenuItem value="">未選択</MenuItem>
+                                        {aiConfigs.map(c => (
+                                            <MenuItem key={c.id} value={c.id}>
+                                                {c.name} ({c.model})
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                                <TextField
+                                    label="カスタム指示プロンプト"
+                                    multiline
+                                    rows={4}
+                                    value={mailPrompt}
+                                    onChange={(e) => setMailPrompt(e.target.value)}
+                                    placeholder="例: 請求書、支払い関連、友人の名前が含まれるメールのみをピックアップしてください。宣伝は無視してください。"
+                                    helperText="AIに渡すフィルタリングと要約の指示を記述します。"
+                                    fullWidth
+                                />
+                            </Stack>
                         </Paper>
                     </Box>
 

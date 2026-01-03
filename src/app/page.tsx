@@ -29,6 +29,7 @@ import RegularTaskSettingsModal from './components/RegularTaskSettingsModal';
 import FreeTimeModal from './components/FreeTimeModal';
 import ExpiredTaskListModal from './components/ExpiredTaskListModal';
 import AIChatModal from './components/AIChatModal';
+import MailSummaryModal from './components/MailSummaryModal';
 
 import { getExpiredTaskCount } from '@/lib/task-actions';
 import { fetchGoogleEvents } from '@/lib/calendar-actions';
@@ -52,7 +53,8 @@ import {
     Warning as WarningIcon,
     Notifications as AlarmIcon,
     DataUsage as DataUsageIcon,
-    Chat as ChatIcon
+    Chat as ChatIcon,
+    Email as MailIcon
 } from '@mui/icons-material';
 
 import TimeTableSwiper from './components/TimeTableSwiper';
@@ -86,7 +88,8 @@ export default function Home() {
 
   // Modal State
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS' | 'AI_CHAT'>('NONE');
+  // Modal State
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS' | 'AI_CHAT' | 'MAIL_SUMMARY'>('NONE');
 
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
@@ -378,6 +381,9 @@ export default function Home() {
                <IconButton onClick={() => setCurrentDate(getBusinessDate())} size="small" sx={{ mr: 0, color: 'text.secondary' }}>
                   <MyLocationIcon />
               </IconButton>
+              <IconButton onClick={() => setActiveModal('MAIL_SUMMARY')} sx={{ mr: 0.5 }}>
+                  <MailIcon />
+              </IconButton>
               <IconButton onClick={handleMenuOpen}>
                   <MenuIcon />
               </IconButton>
@@ -639,9 +645,8 @@ export default function Home() {
                         onClose={handleCloseModal}
                     />
                 )}
-                {activeModal === 'AI_CHAT' && (
-                    <AIChatModal
-                        open={true}
+                {activeModal === 'MAIL_SUMMARY' && (
+                    <MailSummaryModal
                         onClose={handleCloseModal}
                     />
                 )}

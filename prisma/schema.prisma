@@ -27,6 +27,9 @@ model User {
   aiModel         String? // e.g. gpt-4, claude-3-5-sonnet
   aiBaseUrl       String? // for OpenAI Compatible endpoint
 
+  mailSummaryModelId String?
+  mailSummaryPrompt  String?
+
 
 
   createdAt DateTime @default(now())
