@@ -338,3 +338,191 @@ export async function getGmailMessages(userId: string, timeMin: Date, timeMax?: 
         throw e;
     }
 }
+
+// Google Drive Functions
+
+export async function findDriveFolder(userId: string, folderName: string, parentId?: string) {
+    try {
+        const account = await getPrimaryGoogleAccount(userId);
+        if (!account?.access_token) return null;
+
+        const auth = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET
+        );
+        auth.setCredentials({ access_token: account.access_token, refresh_token: account.refresh_token });
+        const drive = google.drive({ version: 'v3', auth });
+
+        let query = `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false`;
+        if (parentId) {
+            query += ` and '${parentId}' in parents`;
+        }
+
+        const res = await drive.files.list({
+            q: query,
+            fields: 'files(id, name)',
+            spaces: 'drive',
+        });
+
+        if (res.data.files && res.data.files.length > 0) {
+            return res.data.files[0];
+        }
+        return null;
+    } catch (e: any) {
+        console.error('Failed to find Drive folder', e);
+        if (e?.message?.includes('invalid_grant')) {
+             throw new Error("AUTH_ERROR"); // Re-throw auth error
+        }
+        return null; // Return null for other errors (e.g. not found)
+    }
+}
+
+export async function createDriveFolder(userId: string, folderName: string, parentId?: string) {
+    try {
+        const account = await getPrimaryGoogleAccount(userId);
+        if (!account?.access_token) return null;
+
+        const auth = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET
+        );
+        auth.setCredentials({ access_token: account.access_token, refresh_token: account.refresh_token });
+        const drive = google.drive({ version: 'v3', auth });
+
+        const fileMetadata: any = {
+            name: folderName,
+            mimeType: 'application/vnd.google-apps.folder',
+        };
+        if (parentId) {
+            fileMetadata.parents = [parentId];
+        }
+
+        const res = await drive.files.create({
+            requestBody: fileMetadata,
+            fields: 'id',
+        });
+
+        return res.data;
+    } catch (e) {
+        console.error('Failed to create Drive folder', e);
+        throw e;
+    }
+}
+
+import { Stream } from 'stream';
+
+export async function uploadToGoogleDrive(
+    userId: string, 
+    filename: string, 
+    content: string | Buffer | Stream, 
+    mimeType: string, 
+    parentId?: string
+) {
+    try {
+        const account = await getPrimaryGoogleAccount(userId);
+        if (!account?.access_token) return null;
+
+        const auth = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET
+        );
+        auth.setCredentials({ access_token: account.access_token, refresh_token: account.refresh_token });
+        const drive = google.drive({ version: 'v3', auth });
+
+        const fileMetadata: any = {
+            name: filename,
+        };
+        if (parentId) {
+            fileMetadata.parents = [parentId];
+        }
+
+        const media = {
+            mimeType: mimeType,
+            body: content,
+        };
+
+        const res = await drive.files.create({
+            requestBody: fileMetadata,
+            media: media,
+            fields: 'id',
+        });
+
+        return res.data;
+    } catch (e) {
+        console.error('Failed to upload to Drive', e);
+        throw e;
+    }
+}
+
+export async function findDriveFile(userId: string, filename: string, parentId?: string) {
+    try {
+        const account = await getPrimaryGoogleAccount(userId);
+        if (!account?.access_token) return null;
+
+        const auth = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET
+        );
+        auth.setCredentials({ access_token: account.access_token, refresh_token: account.refresh_token });
+        const drive = google.drive({ version: 'v3', auth });
+
+        let query = `name='${filename}' and trashed=false`;
+        if (parentId) {
+            query += ` and '${parentId}' in parents`;
+        } else {
+            // If checking root or shared, might need broader query but usually parentId is key
+        }
+
+        const res = await drive.files.list({
+            q: query,
+            fields: 'files(id, name)',
+            spaces: 'drive',
+        });
+
+        if (res.data.files && res.data.files.length > 0) {
+            return res.data.files[0];
+        }
+        return null;
+    } catch (e: any) {
+        console.error('Failed to find Drive file', e);
+         if (e?.message?.includes('invalid_grant')) {
+             throw new Error("AUTH_ERROR");
+        }
+        return null; 
+    }
+}
+
+export async function updateDriveFile(
+    userId: string, 
+    fileId: string,
+    content: string | Buffer | Stream, 
+    mimeType: string
+) {
+    try {
+        const account = await getPrimaryGoogleAccount(userId);
+        if (!account?.access_token) return null;
+
+        const auth = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET
+        );
+        auth.setCredentials({ access_token: account.access_token, refresh_token: account.refresh_token });
+        const drive = google.drive({ version: 'v3', auth });
+
+        const media = {
+            mimeType: mimeType,
+            body: content,
+        };
+
+        const res = await drive.files.update({
+            fileId: fileId,
+            media: media,
+            fields: 'id',
+        });
+
+        return res.data;
+    } catch (e) {
+        console.error('Failed to update Drive file', e);
+        throw e;
+    }
+}

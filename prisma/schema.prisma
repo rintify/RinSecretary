@@ -42,6 +42,7 @@ model User {
   aiConfigs AiConfig[]
   mailBlockedSenders MailBlockedSender[]
   mailSummaries MailSummary[]
+  backupConfig BackupConfig?
 }
 
 model MailBlockedSender {
@@ -213,4 +214,21 @@ model MailSummary {
   updatedAt DateTime @updatedAt
 
   @@index([userId, latestMailReceivedAt])
+}
+
+model BackupConfig {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  isEnabled Boolean  @default(false)
+  folderId  String?  // Google Drive Folder ID
+  folderName String? @default("RinSecretary_Backup")
+  
+  lastBackupAt DateTime?
+  lastStatus   String? // "SUCCESS", "FAILED"
+  lastError    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

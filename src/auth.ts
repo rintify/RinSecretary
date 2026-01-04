@@ -13,7 +13,7 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       authorization: {
         params: {
-          scope: 'openid email profile https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.readonly',
+          scope: 'openid email profile https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.file',
           prompt: "consent", // Force consent to ensure refresh token is retrieved
           access_type: "offline", // Ensure refresh token
           response_type: "code",

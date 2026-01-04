@@ -57,7 +57,8 @@ import {
     DataUsage as DataUsageIcon,
     Chat as ChatIcon,
     Email as MailIcon,
-    Google as GoogleIcon
+    Google as GoogleIcon,
+    CloudUpload as BackupIcon
 } from '@mui/icons-material';
 
 import TimeTableSwiper from './components/TimeTableSwiper';
@@ -70,6 +71,7 @@ import ImmediateTaskFlow from './components/immediate/ImmediateTaskFlow';
 import ImmediateEventFlow from './components/immediate/ImmediateEventFlow';
 import ImmediateAlarmFlow from './components/immediate/ImmediateAlarmFlow';
 import GoogleSettingsModal from './components/GoogleSettingsModal';
+import BackupSettingsModal from './components/BackupSettingsModal';
 // import LongPressFab from './components/ui/LongPressFab'; // Unused
 
 import DataUsageModal from './components/DataUsageModal';
@@ -94,7 +96,7 @@ export default function Home() {
   // Modal State
   // Modal State
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS' | 'AI_CHAT' | 'MAIL_SETTINGS' | 'GOOGLE_SETTINGS'>('NONE');
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS' | 'AI_CHAT' | 'MAIL_SETTINGS' | 'GOOGLE_SETTINGS' | 'BACKUP_SETTINGS'>('NONE');
 
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
@@ -471,6 +473,12 @@ export default function Home() {
                        </ListItemIcon>
                        <ListItemText>Google設定</ListItemText>
                    </MenuItem>
+                   <MenuItem onClick={() => { handleMenuClose(); setActiveModal('BACKUP_SETTINGS'); }}>
+                       <ListItemIcon>
+                           <BackupIcon fontSize="small" />
+                       </ListItemIcon>
+                       <ListItemText>バックアップ設定</ListItemText>
+                   </MenuItem>
                    <Divider />
                    <MenuItem onClick={() => { handleMenuClose(); router.push('/mail-summaries'); }}>
                        <ListItemIcon>
@@ -683,6 +691,10 @@ export default function Home() {
     onClose={handleCloseModal}
 />
 
+<BackupSettingsModal
+    open={activeModal === 'BACKUP_SETTINGS'}
+    onClose={handleCloseModal}
+/>
        {/* Regular Task Create Modal */}
       <RegularTaskSettingsModal
         open={activeModal === 'REGULAR_TASK_SETTINGS'}

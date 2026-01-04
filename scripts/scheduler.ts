@@ -80,11 +80,16 @@ async function checkRegularTasks() {
 checkAlarms();
 checkRegularTasks();
 checkDailyBriefing();
+// Note: Backup check is handled within the interval loop mostly, but can add here if needed.
+// checkBackup(); // Avoid running immediately on restart if it happens to be 3:00, let interval handle it strictly? 
+// Or just let it run.
+checkBackup();
 setInterval(() => {
     checkAlarms();
     checkRegularTasks();
     checkDailyBriefing();
     checkMailSummary();
+    checkBackup();
 }, 60 * 1000);
 
 async function checkDailyBriefing() {
@@ -156,6 +161,31 @@ async function checkMailSummary() {
     }
 }
 
+async function checkBackup() {
+    const now = new Date();
+    // 03:00 execution
+    if (now.getHours() !== 3 || now.getMinutes() !== 0) {
+        return;
+    }
+    console.log('Running Daily Backup...', now.toISOString());
+
+    try {
+        const configs = await prisma.backupConfig.findMany({
+            where: { isEnabled: true }
+        });
+
+        for (const config of configs) {
+            try {
+                const { performBackup } = await import('../src/lib/backup-actions');
+                await performBackup(config.userId);
+            } catch(e) {
+                console.error(`Error backing up for user ${config.userId}`, e);
+            }
+        }
+    } catch (e) {
+        console.error("Error in checkBackup:", e);
+    }
+}
  
 // Note: scripts/scheduler.ts is likely run with ts-node which might have issues with path aliases '@/' if not configured.
 // The file imports from '../src/lib/regularTaskService' so relative paths work.
