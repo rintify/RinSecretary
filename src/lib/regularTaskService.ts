@@ -9,6 +9,8 @@ export async function generateRegularTasks(forceDate?: Date) {
     
     console.log('Generating Regular Tasks...', now.toISOString());
 
+    const results: { userId: string; status: 'CREATED' | 'SKIPPED' | 'ERROR'; title?: string; reason?: string }[] = [];
+
     try {
         const configs = await prisma.regularTaskConfig.findMany({
             // where: { isPaused: false }, // Config-level pause removed, creating for all users, but individual items checked
@@ -107,20 +109,28 @@ export async function generateRegularTasks(forceDate?: Date) {
                                  }
                             });
                             console.log(`Created ${config.type} task for user ${config.userId}`);
+                            results.push({ userId: config.userId, status: 'CREATED', title });
                         } else {
                             console.log(`Skipping ${config.type} task for user ${config.userId}: No active items`);
+                            results.push({ userId: config.userId, status: 'SKIPPED', reason: 'No active items' });
                         }
                     } else {
                         console.log(`Skipping ${config.type} task for user ${config.userId}: Already exists`);
+                        results.push({ userId: config.userId, status: 'SKIPPED', reason: 'Already exists' });
                     }
                 }
 
-            } catch (err) {
+            } catch (err: any) {
                 console.error(`Error processing config ${config.id}:`, err);
+                results.push({ userId: config.userId, status: 'ERROR', reason: err.message });
             }
         }
 
-    } catch (e) {
+    } catch (e: any) {
         console.error("Error in generateRegularTasks:", e);
+        // We can't really assign this error to a specific user easily unless we wrap the whole thing differently
+        // But for scheduler, logging is primary.
     }
+
+    return results;
 }

@@ -29,9 +29,9 @@ export default function BackupSettingsModal({ open, onClose }: BackupSettingsMod
             getBackupSettings().then(config => {
                 setIsEnabled(config.isEnabled);
                 setFolderName(config.folderName || 'RinSecretary_Backup');
-                setLastBackup(config.lastBackupAt ? new Date(config.lastBackupAt) : null);
-                setLastStatus(config.lastStatus);
-                setLastError(config.lastError);
+                setLastBackup('lastBackupAt' in config && config.lastBackupAt ? new Date(config.lastBackupAt) : null);
+                setLastStatus('lastStatus' in config ? config.lastStatus : null);
+                setLastError('lastError' in config ? config.lastError : null);
             }).catch(console.error).finally(() => setLoading(false));
         }
     }, [open]);

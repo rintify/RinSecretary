@@ -168,6 +168,7 @@ export async function performBackup(userId: string) {
         });
         
         console.log(`Backup completed successfully for user ${userId}`);
+        return { success: true, folderName };
 
     } catch (e: any) {
         console.error(`Backup failed for user ${userId}`, e);

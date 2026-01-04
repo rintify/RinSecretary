@@ -34,13 +34,13 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
         const userAny = user as any;
         if (!userAny.mailSummaryModelId) {
             console.log("No mail summary model configured. Skipping.");
-            return;
+            return { success: false, cardsCreated: 0, error: "Not Configured" };
         }
 
         const config = userAny.aiConfigs.find((c: any) => c.id === userAny.mailSummaryModelId);
         if (!config) {
             console.log("Config missing. Skipping.");
-            return;
+            return { success: false, cardsCreated: 0, error: "Config Missing" };
         }
         
         // Fetch messages
@@ -63,7 +63,7 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
                         targetRangeEnd: timeMax
                     }
                 });
-                return;
+                return { success: false, cardsCreated: 1, error: "Auth Error" };
             }
 
             // Create Error Card
@@ -79,7 +79,7 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
                     targetRangeEnd: timeMax
                 }
             });
-            return;
+            return { success: false, cardsCreated: 1, error: e.message };
         }
 
         // Filter Blocked
@@ -110,7 +110,7 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
                     status: "GENERATED"
                 }
             });
-            return;
+            return { success: true, cardsCreated: 1 };
         }
         
         // Generate AI Summary
@@ -131,7 +131,7 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
                     targetRangeEnd: timeMax
                 }
             });
-            return;
+            return { success: false, cardsCreated: 1, error: e.message };
         }
         
         // Save Cards (Topics)
@@ -197,8 +197,9 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
         }
 
         console.log(`Generated ${cardsToCreate.length} cards for user ${userId}`);
+        return { success: true, cardsCreated: cardsToCreate.length };
 
-    } catch (e) {
+    } catch (e: any) {
         console.error("Critical logic error in generateDailyMailSummary", e);
         // Fallback catch-all error card
          await prisma.mailSummary.create({
@@ -213,6 +214,7 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
                 targetRangeEnd: timeMax
             }
         });
+        return { success: false, cardsCreated: 1, error: e.message };
     }
 }
 

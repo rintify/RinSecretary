@@ -5,6 +5,43 @@ import { sendPushoverNotification } from '../src/lib/pushover';
 
 const prisma = new PrismaClient();
 
+// --- Notification Helper ---
+async function sendDiscordNotification(userId: string, title: string, message: string) {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user || !user.discordWebhookUrl) {
+            return;
+        }
+
+        const payload = {
+            embeds: [{
+                title: title,
+                description: message,
+                color: title.includes("失敗") || title.includes("エラー") ? 0xFF0000 : 0x00FF00, // Red or Green
+                timestamp: new Date().toISOString()
+            }]
+        };
+
+        const res = await fetch(user.discordWebhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            console.error(`Failed to send Discord notification for user ${userId}: ${res.status} ${res.statusText}`);
+        } else {
+            console.log(`Sent Discord notification to user ${userId}: ${title}`);
+        }
+    } catch (e) {
+        console.error(`Error sending Discord notification for user ${userId}:`, e);
+    }
+}
+
+
 async function checkAlarms() {
     console.log('Checking alarms...', new Date().toISOString());
     const now = new Date();
@@ -73,7 +110,16 @@ async function checkRegularTasks() {
     console.log('Running Regular Task Scheduler...', now.toISOString());
     
     // Call shared logic
-    await generateRegularTasks(now);
+    const results = await generateRegularTasks(now);
+    
+    // Notify Users
+    for (const res of results) {
+        if (res.status === 'CREATED') {
+            await sendDiscordNotification(res.userId, "定期タスク作成完了", `定期タスクを作成しました: **${res.title}**`);
+        } else if (res.status === 'ERROR') {
+            await sendDiscordNotification(res.userId, "定期タスク作成エラー", `定期タスクの作成に失敗しました: ${res.reason}`);
+        }
+    }
 }
 
 // Run immediately then every minute
@@ -84,6 +130,7 @@ checkDailyBriefing();
 // checkBackup(); // Avoid running immediately on restart if it happens to be 3:00, let interval handle it strictly? 
 // Or just let it run.
 checkBackup();
+
 setInterval(() => {
     checkAlarms();
     checkRegularTasks();
@@ -110,8 +157,8 @@ async function checkDailyBriefing() {
         });
 
         for (const user of users) {
-            if (!user.discordWebhookUrl) continue;
-            await sendBriefingForUser(user);
+             if (!user.discordWebhookUrl) continue;
+             await sendBriefingForUser(user);
         }
 
     } catch (e) {
@@ -153,7 +200,23 @@ async function checkMailSummary() {
         const { generateDailyMailSummary } = await import('../src/lib/mail-scheduler-actions');
 
         for (const user of users) {
-            await generateDailyMailSummary(user.id);
+            const res = await generateDailyMailSummary(user.id);
+            // Notify
+            if (res) {
+                 if (res.success) {
+                     await sendDiscordNotification(
+                         user.id, 
+                         "メール要約完了", 
+                         `本日のメール要約を作成しました (件数: ${res.cardsCreated})`
+                     );
+                 } else {
+                     await sendDiscordNotification(
+                         user.id, 
+                         "メール要約エラー", 
+                         `メール要約の作成に失敗しました: ${res.error}`
+                     );
+                 }
+            }
         }
 
     } catch (e) {
@@ -177,9 +240,21 @@ async function checkBackup() {
         for (const config of configs) {
             try {
                 const { performBackup } = await import('../src/lib/backup-actions');
-                await performBackup(config.userId);
-            } catch(e) {
+                const res = await performBackup(config.userId);
+                if (res && res.success) {
+                    await sendDiscordNotification(
+                        config.userId,
+                        "バックアップ完了",
+                        `Google Drive (${res.folderName}) へのバックアップが完了しました。`
+                    );
+                }
+            } catch(e: any) {
                 console.error(`Error backing up for user ${config.userId}`, e);
+                await sendDiscordNotification(
+                    config.userId,
+                    "バックアップ失敗",
+                    `バックアップに失敗しました: ${e.message}`
+                );
             }
         }
     } catch (e) {
