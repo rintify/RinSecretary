@@ -80,7 +80,7 @@ export async function unblockSender(id: string) {
 export type TopicCard = {
     title: string;
     summary: string;
-    relatedLinks: { text: string, url: string }[];
+    relatedLinks: { text: string, id: string }[];
     senders: { name: string, email: string }[];
 };
 
@@ -90,7 +90,7 @@ export interface MailSummaryResult {
     otherSenders: { name: string, email: string }[];
 }
 
-export async function generateMailSummary(): Promise<MailSummaryResult> {
+export async function collectMailData() {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -106,7 +106,7 @@ export async function generateMailSummary(): Promise<MailSummaryResult> {
 
     const userAny = user as any;
     if (!userAny.mailSummaryModelId) {
-        throw new Error("NO_CONFIG"); // UI handle: prompt to settings
+        throw new Error("NO_CONFIG");
     }
 
     const config = userAny.aiConfigs.find((c: any) => c.id === userAny.mailSummaryModelId);
@@ -117,9 +117,9 @@ export async function generateMailSummary(): Promise<MailSummaryResult> {
     // Blocked list (normalized to lower case)
     const blockedEmails = (userAny.mailBlockedSenders || []).map((b: any) => b.email.toLowerCase());
 
-    // Fetch emails (last 7 days)
+    // Fetch emails (last 14 days)
     const timeMin = new Date();
-    timeMin.setDate(timeMin.getDate() - 7);
+    timeMin.setDate(timeMin.getDate() - 14);
     
     let messages: any[] = [];
     try {
@@ -136,13 +136,32 @@ export async function generateMailSummary(): Promise<MailSummaryResult> {
 
     // Filter Logic: Exclude blocked senders
     const filteredMessages = messages.filter(m => {
-        // Extract email from "Name <email>" or just "email"
         const match = m.from.match(/<(.+)>/);
         const email = match ? match[1] : m.from;
         return !blockedEmails.includes(email.toLowerCase());
     });
 
-    if (filteredMessages.length === 0) {
+    // Sort messages by date (Newest first)
+    filteredMessages.sort((a, b) => {
+        const dateA = a.date ? new Date(a.date).getTime() : 0;
+        const dateB = b.date ? new Date(b.date).getTime() : 0;
+        return dateB - dateA;
+    });
+
+    return {
+        messages: filteredMessages,
+        messageCount: filteredMessages.length,
+        config,
+        mailSummaryPrompt: userAny.mailSummaryPrompt
+    };
+}
+
+export async function generateSummaryFromData(
+    messages: any[], 
+    config: any, 
+    mailSummaryPrompt?: string
+): Promise<MailSummaryResult> {
+    if (messages.length === 0) {
         return { topics: [], otherMessagesSummary: "", otherSenders: [] };
     }
 
@@ -152,7 +171,7 @@ export async function generateMailSummary(): Promise<MailSummaryResult> {
 また、トピックとして取り上げられなかったその他のメールについても、簡単な要約（どのようなメールがあったか）を作成してください。
 
 メールリスト:
-${JSON.stringify(filteredMessages.map(m => ({ 
+${JSON.stringify(messages.map(m => ({ 
     id: m.id,
     from: m.from, 
     subject: m.subject, 
@@ -161,23 +180,21 @@ ${JSON.stringify(filteredMessages.map(m => ({
 })))}
 
 ユーザーのカスタム指示:
-${userAny.mailSummaryPrompt || "重要な連絡、請求書、個人的なメッセージを優先して要約してください。"}
+${mailSummaryPrompt || "重要な連絡、請求書、個人的なメッセージを優先して要約してください。"}
 
 出力形式 (JSON Object):
+※注意: relatedLinks の "id" は、提供されたメールリストの "id" を大文字小文字含め、一字一句変えずにそのまま使用してください。
 {
   "topics": [
     {
       "title": "トピックのタイトル（要約）",
       "summary": "トピックの詳細な説明",
       "relatedLinks": [
-        { "text": "メール件名", "url": "https://mail.google.com/mail/u/0/#inbox/{emailId}" }
-      ],
-      "senders": [
-        { "name": "送信者名", "email": "メールアドレス" }
+        { "text": "メール件名", "id": "{emailId}" }
       ]
     }
   ],
-  "otherMessagesSummary": "その他、広告メールが〇件、通知メールが〇件ありました。特に重要なものはありませんでした。（など、残りのメールの概要）"
+  "otherMessagesSummary": "その他、〇〇や〇〇から〇〇に関するメッセージがありました。（など、残りのメールの概要）"
 }
 output json only. no markdown code block.
 `;
@@ -219,43 +236,23 @@ output json only. no markdown code block.
     }
 
     try {
-        // Clean markdown block if present (Anthropic usually doesn't strictly support json mode like others might not forced)
         const jsonStr = resultText.replace(/```json\n|\n```/g, '').trim();
-        // Sometimes strictly JSON object if openai response_format used improperly with array prompt? 
-        // With json_object it expects object, but I asked for array. 
-        // I should ask for object wrapping array to be safe: { "topics": [...] }
-        // But let's try direct parse first or fix prompt if needed.
-        // Actually, OpenAI json_object requires keyword "json" in prompt. I have it.
-        // But for array root, better to wrap.
-        // Let's assume modern models are smart enough or parse loosely.
-        
-        // Handling OpenAI "json_object" requiring valid JSON object ref:
-        // "When using response_format: { type: 'json_object' }, the model will generate valid JSON. Note that the model may generate a JSON object, not an array."
-        // So I should probably prompt for object keys.
-        
         let parsed: any = JSON.parse(jsonStr);
-        
-        // Normalize response
         let result: MailSummaryResult = { topics: [], otherMessagesSummary: "", otherSenders: [] };
 
         if (parsed.topics) {
             result.topics = parsed.topics;
             result.otherMessagesSummary = parsed.otherMessagesSummary || "";
         } else if (Array.isArray(parsed)) {
-            // Old format fallback
             result.topics = parsed;
-        } else {
-             // Fallback single object or weird structure
-             // Attempt to see if it's a single topic
-             if(parsed.title && parsed.summary) {
-                 result.topics = [parsed];
-             }
+        } else if (parsed.title && parsed.summary) {
+            result.topics = [parsed];
         }
         
-        // Calculate otherSenders (Senders in filteredMessages but NOT in topics)
         const allSenders = new Map<string, { name: string, email: string }>();
+        const messageIdToSender = new Map<string, { name: string, email: string }>();
         
-        filteredMessages.forEach(m => {
+        messages.forEach(m => {
             const match = m.from.match(/(.*)<(.+)>/);
             let name = m.from;
             let email = m.from;
@@ -264,18 +261,34 @@ output json only. no markdown code block.
                 name = match[1].trim().replace(/^"|"$/g, '');
                 email = match[2].trim();
             } else {
-                // Try simple email match if no brackets
                  const emailMatch = m.from.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/);
                  if (emailMatch) {
                      email = emailMatch[0];
-                     if (name === email) name = ""; // No separate name
+                     if (name === email) name = "";
                  }
             }
             
             if (email) {
-                allSenders.set(email.toLowerCase(), { name, email });
+                const sender = { name, email };
+                allSenders.set(email.toLowerCase(), sender);
+                messageIdToSender.set(m.id, sender);
             }
         });
+
+        if (result.topics) {
+            result.topics.forEach(topic => {
+                const topicSendersMap = new Map<string, { name: string, email: string }>();
+                if (topic.relatedLinks) {
+                    topic.relatedLinks.forEach(link => {
+                        const sender = messageIdToSender.get(link.id);
+                        if (sender) {
+                            topicSendersMap.set(sender.email.toLowerCase(), sender);
+                        }
+                    });
+                }
+                topic.senders = Array.from(topicSendersMap.values());
+            });
+        }
 
         const topicSenderEmails = new Set<string>();
         if (result.topics) {
@@ -291,6 +304,12 @@ output json only. no markdown code block.
         return result;
     } catch (e) {
         console.error("JSON Parse Error", e, resultText);
-        throw new Error("AI_ERROR"); // Parse failed
+        throw new Error("AI_ERROR");
     }
 }
+
+export async function generateMailSummary(): Promise<MailSummaryResult> {
+    const data = await collectMailData();
+    return generateSummaryFromData(data.messages, data.config, data.mailSummaryPrompt);
+}
+

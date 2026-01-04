@@ -170,3 +170,39 @@ export async function ignoreExpiredTask(taskId: string) {
     revalidatePath('/');
     return { success: true };
 }
+
+export interface CreateTaskData {
+    title: string;
+    memo?: string;
+    deadline?: Date;
+}
+
+export async function createTask(data: CreateTaskData) {
+    const session = await auth();
+    if (!session?.user?.email) throw new Error('Unauthorized');
+
+    const user = await prisma.user.findUnique({
+        where: { email: session.user.email },
+    });
+    if (!user) throw new Error('User not found');
+
+    const now = new Date();
+    // Default deadline: Tomorrow 23:59:59
+    const defaultDeadline = endOfDay(addDays(now, 1));
+
+    await prisma.task.create({
+        data: {
+            title: data.title,
+            memo: data.memo || '',
+            startDate: startOfDay(now),
+            deadline: data.deadline || defaultDeadline,
+            progress: 0,
+            maxProgress: 100,
+            userId: user.id,
+            checklist: '[]',
+        }
+    });
+
+    revalidatePath('/');
+    return { success: true };
+}

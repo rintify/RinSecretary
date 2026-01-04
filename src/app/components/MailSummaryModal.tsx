@@ -11,17 +11,24 @@ import {
     Refresh as RefreshIcon,
     Block as BlockIcon,
     OpenInNew as OpenIcon,
-    Mail as MailIcon
+    Mail as MailIcon,
+    Reply as ReplyIcon,
+    AddTask as AddTaskIcon
 } from '@mui/icons-material';
-import { generateMailSummary, blockSender, TopicCard, MailSummaryResult } from '@/lib/mail-actions';
+import { generateMailSummary, blockSender, TopicCard, MailSummaryResult, collectMailData, generateSummaryFromData } from '@/lib/mail-actions';
+import { createTask } from '@/lib/task-actions';
 
 interface MailSummaryModalProps {
     onClose: () => void;
 }
 
+type LoadingStep = 'idle' | 'fetching' | 'analyzing' | 'finalizing';
+
 export default function MailSummaryModal({ onClose }: MailSummaryModalProps) {
     const [summary, setSummary] = useState<MailSummaryResult | null>(null);
     const [loading, setLoading] = useState(true);
+    const [loadingStep, setLoadingStep] = useState<LoadingStep>('idle');
+    const [foundCount, setFoundCount] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [blocking, setBlocking] = useState<string | null>(null);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string }>({ open: false, message: '' });
@@ -29,8 +36,24 @@ export default function MailSummaryModal({ onClose }: MailSummaryModalProps) {
     const fetchSummary = async () => {
         setLoading(true);
         setError(null);
+        setLoadingStep('fetching');
         try {
-            const result = await generateMailSummary();
+            // Step 1: Collect Data
+            const data = await collectMailData();
+            setFoundCount(data.messageCount);
+            
+            if (data.messageCount === 0) {
+                setSummary({ topics: [], otherMessagesSummary: "", otherSenders: [] });
+                setLoading(false);
+                return;
+            }
+
+            // Step 2: AI Analysis
+            setLoadingStep('analyzing');
+            const result = await generateSummaryFromData(data.messages, data.config, data.mailSummaryPrompt);
+            
+            // Step 3: Finalizing
+            setLoadingStep('finalizing');
             setSummary(result);
         } catch (e: any) {
             // Only log unknown errors to console
@@ -52,6 +75,7 @@ export default function MailSummaryModal({ onClose }: MailSummaryModalProps) {
             }
         } finally {
             setLoading(false);
+            setLoadingStep('idle');
         }
     };
 
@@ -82,6 +106,24 @@ export default function MailSummaryModal({ onClose }: MailSummaryModalProps) {
         }
     };
 
+    const handleCreateReplyTask = async (title: string, summary: string, senders: { name: string, email: string }[]) => {
+        try {
+            const senderInfo = senders.map(s => {
+                const searchUrl = `https://mail.google.com/mail/#search/from%3A${encodeURIComponent(`"${s.email}"`)}`;
+                return `${s.name || s.email}: ${searchUrl}`;
+            }).join('\n');
+            await createTask({
+                title: `返信: ${title}`,
+                memo: `${summary}\n\n送信者:\n${senderInfo}`,
+                // Deadline is handled on server side default (tomorrow 23:59)
+            });
+            setSnackbar({ open: true, message: '返信タスクを作成しました' });
+        } catch (e) {
+            console.error(e);
+            setSnackbar({ open: true, message: 'タスク作成に失敗しました' });
+        }
+    };
+
     useEffect(() => {
         fetchSummary();
     }, []);
@@ -89,10 +131,15 @@ export default function MailSummaryModal({ onClose }: MailSummaryModalProps) {
     // render content helper
     const renderContent = () => {
         if (loading) {
+            let label = "メールを取得・分析中...";
+            if (loadingStep === 'fetching') label = "Gmailからメールを取得中...";
+            if (loadingStep === 'analyzing') label = `AIで内容を分析中... (${foundCount}通のメール)`;
+            if (loadingStep === 'finalizing') label = "結果を整理中...";
+
             return (
                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 2 }}>
                     <CircularProgress />
-                    <Typography color="text.secondary">メールを取得・分析中...</Typography>
+                    <Typography color="text.secondary">{label}</Typography>
                 </Box>
             );
         }
@@ -145,6 +192,7 @@ export default function MailSummaryModal({ onClose }: MailSummaryModalProps) {
                                                 label={`${sender.name || sender.email}`}
                                                 variant="outlined"
                                                 size="small"
+                                                onClick={() => window.open(`https://mail.google.com/mail/#search/from%3A${encodeURIComponent(`"${sender.email}"`)}`, '_blank')}
                                                 onDelete={() => handleBlock(sender.email)}
                                                 deleteIcon={
                                                     <Box component="span" sx={{ display: 'flex' }} title="この送信者を要約から除外">
@@ -154,7 +202,8 @@ export default function MailSummaryModal({ onClose }: MailSummaryModalProps) {
                                                 sx={{ 
                                                     maxWidth: '100%',
                                                     borderColor: isBlocked ? 'error.main' : undefined,
-                                                    color: isBlocked ? 'error.main' : undefined
+                                                    color: isBlocked ? 'error.main' : undefined,
+                                                    cursor: 'pointer'
                                                 }}
                                             />
                                         );
@@ -172,7 +221,7 @@ export default function MailSummaryModal({ onClose }: MailSummaryModalProps) {
                                         {card.relatedLinks.map((link, lIdx) => (
                                             <MuiLink 
                                                 key={lIdx} 
-                                                href={link.url} 
+                                                href={`https://mail.google.com/mail/u/0/#inbox/${link.id}`} 
                                                 target="_blank" 
                                                 rel="noopener noreferrer"
                                                 sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.875rem' }}
@@ -184,6 +233,18 @@ export default function MailSummaryModal({ onClose }: MailSummaryModalProps) {
                                     </Stack>
                                 </Box>
                             )}
+
+                             {/* Actions */}
+                             <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                                <Button 
+                                    variant="outlined" 
+                                    size="small" 
+                                    startIcon={<AddTaskIcon />}
+                                    onClick={() => handleCreateReplyTask(card.title, card.summary, card.senders)}
+                                >
+                                    返信タスクを作成
+                                </Button>
+                            </Box>
                         </CardContent>
                     </Card>
                 ))}
@@ -218,6 +279,7 @@ export default function MailSummaryModal({ onClose }: MailSummaryModalProps) {
                                             label={`${sender.name || sender.email}`}
                                             variant="outlined"
                                             size="small"
+                                            onClick={() => window.open(`https://mail.google.com/mail/#search/from%3A${encodeURIComponent(`"${sender.email}"`)}`, '_blank')}
                                             onDelete={() => handleBlock(sender.email)}
                                             deleteIcon={
                                                 <Box component="span" sx={{ display: 'flex' }} title="この送信者を要約から除外">
@@ -227,7 +289,8 @@ export default function MailSummaryModal({ onClose }: MailSummaryModalProps) {
                                             sx={{ 
                                                 maxWidth: '100%',
                                                 borderColor: isBlocked ? 'error.main' : undefined,
-                                                color: isBlocked ? 'error.main' : undefined
+                                                color: isBlocked ? 'error.main' : undefined,
+                                                cursor: 'pointer'
                                             }}
                                         />
                                     );
@@ -251,7 +314,7 @@ export default function MailSummaryModal({ onClose }: MailSummaryModalProps) {
             }}
         >
             <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: 1, borderColor: 'divider' }}>
-                <Typography variant="h6" component="div">メール要約 (直近1週間)</Typography>
+                <Typography variant="h6" component="div">メール要約 (直近2週間)</Typography>
                 <IconButton onClick={onClose}>
                     <CloseIcon />
                 </IconButton>
