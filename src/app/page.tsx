@@ -26,10 +26,11 @@ import AlarmForm from './components/AlarmForm';
 import AlarmDetailModal from './components/AlarmDetailModal';
 import SettingsModal from './components/SettingsModal';
 import RegularTaskSettingsModal from './components/RegularTaskSettingsModal';
+import MailSummaryResultModal from '@/app/components/mail/MailSummaryResultModal';
+import { getUnreadMailSummaries } from '@/lib/mail-scheduler-actions';
 import FreeTimeModal from './components/FreeTimeModal';
 import ExpiredTaskListModal from './components/ExpiredTaskListModal';
 import AIChatModal from './components/AIChatModal';
-import MailSummaryModal from './components/MailSummaryModal';
 import MailSettingsModal from './components/MailSettingsModal';
 
 import { getExpiredTaskCount } from '@/lib/task-actions';
@@ -93,7 +94,7 @@ export default function Home() {
   // Modal State
   // Modal State
   // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS' | 'AI_CHAT' | 'MAIL_SUMMARY' | 'MAIL_SETTINGS' | 'GOOGLE_SETTINGS'>('NONE');
+  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS' | 'AI_CHAT' | 'MAIL_SETTINGS' | 'GOOGLE_SETTINGS'>('NONE');
 
   const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
 
@@ -159,6 +160,9 @@ export default function Home() {
   const [taskRefreshTrigger, setTaskRefreshTrigger] = useState(0);
   const [calendarRefreshTrigger, setCalendarRefreshTrigger] = useState(0);
   const [memoLoading, setMemoLoading] = useState(false);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+  const [unreadSummaries, setUnreadSummaries] = useState<any[]>([]);
+  const [unreadSummariesOpen, setUnreadSummariesOpen] = useState(false);
   const router = useRouter();
 
   const handleCreateMemo = async () => {
@@ -168,6 +172,7 @@ export default function Home() {
         const { createEmptyMemo } = await import('./memos/actions');
         const memo = await createEmptyMemo();
         router.push(`/memos/${memo.id}/edit?new=true`);
+        router.refresh();
     } catch (e) {
         console.error(e);
         setMemoLoading(false);
@@ -191,6 +196,20 @@ export default function Home() {
         fetchCount();
     }
   }, [taskRefreshTrigger, activeModal]);
+
+  // Check for unread summaries on mount
+  useEffect(() => {
+      // Assuming userId is available, e.g., from a context or prop.
+      // For this example, we'll use a placeholder or assume it's fetched elsewhere.
+      // If userId is not available, this useEffect might need to be adjusted.
+      const userId = 'current_user_id'; // Placeholder: Replace with actual userId retrieval
+      getUnreadMailSummaries(userId).then(res => {
+          if (res.success && res.summaries && res.summaries.length > 0) {
+              setUnreadSummaries(res.summaries);
+              setUnreadSummariesOpen(true);
+          }
+      }).catch(console.error);
+  }, []); // Empty dependency array means this runs once on mount
 
   // Google Events & Alarms Sync
   const [googleEvents, setGoogleEvents] = useState<TaskLocal[]>([]);
@@ -382,11 +401,8 @@ export default function Home() {
 
           {/* Right: Menu */}
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-               <IconButton onClick={() => setCurrentDate(getBusinessDate())} size="small" sx={{ mr: 0, color: 'text.secondary' }}>
+              <IconButton onClick={() => setCurrentDate(getBusinessDate())} size="small" sx={{ mr: 0, color: 'text.secondary' }}>
                   <MyLocationIcon />
-              </IconButton>
-              <IconButton onClick={() => setActiveModal('MAIL_SUMMARY')} sx={{ mr: 0.5 }}>
-                  <MailIcon />
               </IconButton>
               <IconButton onClick={handleMenuOpen}>
                   <MenuIcon />
@@ -444,6 +460,13 @@ export default function Home() {
                            <GoogleIcon fontSize="small" />
                        </ListItemIcon>
                        <ListItemText>Google設定</ListItemText>
+                   </MenuItem>
+                   <Divider />
+                   <MenuItem onClick={() => { handleMenuClose(); router.push('/mail-summaries'); }}>
+                       <ListItemIcon>
+                           <MailIcon fontSize="small" />
+                       </ListItemIcon>
+                       <ListItemText>メール要約履歴</ListItemText>
                    </MenuItem>
                   <MenuItem onClick={async () => { 
                       handleMenuClose(); 
@@ -650,6 +673,19 @@ export default function Home() {
     onClose={handleCloseModal}
 />
 
+       {/* Regular Task Create Modal */}
+      <RegularTaskSettingsModal
+        open={activeModal === 'REGULAR_TASK_SETTINGS'}
+        onClose={handleCloseModal}
+      />
+
+       {/* Unread Mail Summary Modal */}
+       <MailSummaryResultModal
+          open={unreadSummariesOpen}
+          onClose={() => setUnreadSummariesOpen(false)}
+          summaries={unreadSummaries}
+          title="新着メール要約"
+       />
 
                 {activeModal === 'FREE_TIME' && (
                     <FreeTimeModal
@@ -675,11 +711,7 @@ export default function Home() {
                         onClose={handleCloseModal}
                     />
                 )}
-                {activeModal === 'MAIL_SUMMARY' && (
-                    <MailSummaryModal
-                        onClose={handleCloseModal}
-                    />
-                )}
+
 
 
     {/* Immediate Action Flows */}

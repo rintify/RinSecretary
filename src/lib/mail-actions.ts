@@ -90,72 +90,6 @@ export interface MailSummaryResult {
     otherSenders: { name: string, email: string }[];
 }
 
-export async function collectMailData() {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error("Unauthorized");
-
-    const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        include: { 
-            aiConfigs: true,
-            mailBlockedSenders: true
-        } as any
-    });
-
-    if (!user) throw new Error("User not found");
-
-    const userAny = user as any;
-    if (!userAny.mailSummaryModelId) {
-        throw new Error("NO_CONFIG");
-    }
-
-    const config = userAny.aiConfigs.find((c: any) => c.id === userAny.mailSummaryModelId);
-    if (!config) {
-        throw new Error("CONFIG_MISSING");
-    }
-
-    // Blocked list (normalized to lower case)
-    const blockedEmails = (userAny.mailBlockedSenders || []).map((b: any) => b.email.toLowerCase());
-
-    // Fetch emails (last 14 days)
-    const timeMin = new Date();
-    timeMin.setDate(timeMin.getDate() - 14);
-    
-    let messages: any[] = [];
-    try {
-        messages = await getGmailMessages(user.id, timeMin);
-    } catch (e: any) {
-        if (e.message === 'AUTH_ERROR') {
-             throw new Error("AUTH_ERROR");
-        }
-        if (e.message?.includes('Gmail API has not been used') || e.message?.includes('is disabled')) {
-            throw new Error("GMAIL_API_DISABLED");
-        }
-        throw e;
-    }
-
-    // Filter Logic: Exclude blocked senders
-    const filteredMessages = messages.filter(m => {
-        const match = m.from.match(/<(.+)>/);
-        const email = match ? match[1] : m.from;
-        return !blockedEmails.includes(email.toLowerCase());
-    });
-
-    // Sort messages by date (Newest first)
-    filteredMessages.sort((a, b) => {
-        const dateA = a.date ? new Date(a.date).getTime() : 0;
-        const dateB = b.date ? new Date(b.date).getTime() : 0;
-        return dateB - dateA;
-    });
-
-    return {
-        messages: filteredMessages,
-        messageCount: filteredMessages.length,
-        config,
-        mailSummaryPrompt: userAny.mailSummaryPrompt
-    };
-}
-
 export async function generateSummaryFromData(
     messages: any[], 
     config: any, 
@@ -165,10 +99,13 @@ export async function generateSummaryFromData(
         return { topics: [], otherMessagesSummary: "", otherSenders: [] };
     }
 
+    console.log(`Generating AI summary for ${messages.length} messages...`);
+
     const systemPrompt = `
-あなたは優秀な秘書です。ユーザーのメールボックスから直近一週間のメールを取得しました。
-ユーザーの設定した指示に従って、重要なメールをグループ化し、「トピックカード」のリストを作成してください。
-また、トピックとして取り上げられなかったその他のメールについても、簡単な要約（どのようなメールがあったか）を作成してください。
+あなたは優秀な秘書です。提供された「対象期間」のメールリストを分析してください。
+ユーザーにとって「重要である（返信・対応が必要、または内容を正確に把握しておくべき）」と判断されるメッセージをあぶり出し、それぞれ「要約カード」として作成してください。
+複数のメールをトピックとしてまとめることよりも、個々の重要な連絡や依頼を見落とさないように抽出することを優先してください。
+重要として抽出されなかった残りのメッセージについては、まとめて「その他のメッセージ」として簡単な概要を作成してください。
 
 メールリスト:
 ${JSON.stringify(messages.map(m => ({ 
@@ -308,8 +245,5 @@ output json only. no markdown code block.
     }
 }
 
-export async function generateMailSummary(): Promise<MailSummaryResult> {
-    const data = await collectMailData();
-    return generateSummaryFromData(data.messages, data.config, data.mailSummaryPrompt);
-}
+
 

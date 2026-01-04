@@ -84,6 +84,7 @@ setInterval(() => {
     checkAlarms();
     checkRegularTasks();
     checkDailyBriefing();
+    checkMailSummary();
 }, 60 * 1000);
 
 async function checkDailyBriefing() {
@@ -110,6 +111,48 @@ async function checkDailyBriefing() {
 
     } catch (e) {
         console.error("Error in checkDailyBriefing:", e);
+    }
+}
+
+async function checkMailSummary() {
+    const now = new Date();
+    // 18:30 execution
+    if (now.getHours() !== 18 || now.getMinutes() !== 30) {
+        return;
+    }
+    console.log('Running Daily Mail Summary...', now.toISOString());
+
+    try {
+        // Delete old summaries (older than 2 months based on latestMailReceivedAt)
+        const twoMonthsAgo = new Date();
+        twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+        
+        const deleteResult = await prisma.mailSummary.deleteMany({
+            where: {
+                latestMailReceivedAt: {
+                    lt: twoMonthsAgo
+                }
+            }
+        });
+        console.log(`Deleted ${deleteResult.count} old mail summaries.`);
+
+        // Find users who have mail summary configured
+        const users = await prisma.user.findMany({
+            where: {
+                mailSummaryModelId: {
+                    not: null
+                }
+            }
+        });
+
+        const { generateDailyMailSummary } = await import('../src/lib/mail-scheduler-actions');
+
+        for (const user of users) {
+            await generateDailyMailSummary(user.id);
+        }
+
+    } catch (e) {
+        console.error("Error in checkMailSummary:", e);
     }
 }
 

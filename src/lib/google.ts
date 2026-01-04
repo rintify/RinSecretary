@@ -198,7 +198,7 @@ export async function deleteGoogleCalendarEvent(userId: string, eventId: string)
     }
 }
 
-export async function getGmailMessages(userId: string, timeMin: Date) {
+export async function getGmailMessages(userId: string, timeMin: Date, timeMax?: Date) {
     try {
         const accounts = await prisma.account.findMany({
             where: { userId, provider: 'google' }
@@ -236,9 +236,14 @@ export async function getGmailMessages(userId: string, timeMin: Date) {
 
                 const gmail = google.gmail({ version: 'v1', auth });
 
+                let query = `after:${Math.floor(timeMin.getTime() / 1000)}`;
+                if (timeMax) {
+                    query += ` before:${Math.floor(timeMax.getTime() / 1000)}`;
+                }
+
                 const res = await gmail.users.messages.list({
                     userId: 'me',
-                    q: `after:${Math.floor(timeMin.getTime() / 1000)}`,
+                    q: query,
                     maxResults: 50
                 });
 

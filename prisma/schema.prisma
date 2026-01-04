@@ -41,6 +41,7 @@ model User {
   
   aiConfigs AiConfig[]
   mailBlockedSenders MailBlockedSender[]
+  mailSummaries MailSummary[]
 }
 
 model MailBlockedSender {
@@ -185,4 +186,31 @@ model Attachment {
   memo      Memo     @relation(fields: [memoId], references: [id], onDelete: Cascade)
   
   createdAt DateTime @default(now())
+}
+
+model MailSummary {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title     String
+  summary   String   // Text content
+  
+  // JSON fields
+  senders       String?  // JSON
+  relatedLinks  String?  // JSON
+
+  // Metadata
+  latestMailReceivedAt DateTime 
+  targetRangeStart     DateTime
+  targetRangeEnd       DateTime
+
+  status    String   @default("GENERATED") // GENERATED, FAILED, UNREAD
+  isRead    Boolean  @default(false)
+  error     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, latestMailReceivedAt])
 }
