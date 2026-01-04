@@ -2,8 +2,59 @@ import { generateRegularTasks } from '../src/lib/regularTaskService';
 import { getGoogleCalendarEvents } from '../src/lib/google';
 import { PrismaClient } from '@prisma/client';
 import { sendPushoverNotification } from '../src/lib/pushover';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const prisma = new PrismaClient();
+
+// --- Persistent State Management ---
+// State is loaded from file on startup, updated in memory, and saved after each task execution.
+// This ensures: 1) No DB overhead, 2) Survives process restarts and deploys, 3) No I/O on every minute check.
+// Stored in data/ directory which is persisted across deploys (same as sqlite.db)
+
+const STATE_FILE = path.join(__dirname, '..', 'data', '.scheduler-state.json');
+
+interface SchedulerState {
+    lastRegularTaskRunDate: string | null;
+    lastDailyBriefingRunDate: string | null;
+    lastMailSummaryRunDate: string | null;
+    lastBackupRunDate: string | null;
+}
+
+let state: SchedulerState = {
+    lastRegularTaskRunDate: null,
+    lastDailyBriefingRunDate: null,
+    lastMailSummaryRunDate: null,
+    lastBackupRunDate: null,
+};
+
+function loadState(): void {
+    try {
+        if (fs.existsSync(STATE_FILE)) {
+            const data = fs.readFileSync(STATE_FILE, 'utf-8');
+            state = { ...state, ...JSON.parse(data) };
+            console.log('Loaded scheduler state:', state);
+        }
+    } catch (e) {
+        console.error('Failed to load scheduler state, starting fresh:', e);
+    }
+}
+
+function saveState(): void {
+    try {
+        fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    } catch (e) {
+        console.error('Failed to save scheduler state:', e);
+    }
+}
+
+// Helper to get today's date string for comparison
+function getTodayDateString(): string {
+    return new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
+}
+
+// Load state on startup
+loadState();
 
 // --- Notification Helper ---
 async function sendDiscordNotification(userId: string, title: string, message: string) {
@@ -102,11 +153,14 @@ async function checkAlarms() {
 
 async function checkRegularTasks() {
     const now = new Date();
-    // Check if it is 04:00 (allow a small window like 04:00 - 04:01)
-    if (now.getHours() !== 4 || now.getMinutes() !== 0) {
-        return;
-    }
-
+    const today = getTodayDateString();
+    
+    // Run at 04:00 or later, but only once per day
+    if (now.getHours() < 4) return;
+    if (state.lastRegularTaskRunDate === today) return;
+    
+    state.lastRegularTaskRunDate = today;
+    saveState();
     console.log('Running Regular Task Scheduler...', now.toISOString());
     
     // Call shared logic
@@ -141,10 +195,14 @@ setInterval(() => {
 
 async function checkDailyBriefing() {
     const now = new Date();
-    // 06:00 execution
-    if (now.getHours() !== 6 || now.getMinutes() !== 0) {
-        return;
-    }
+    const today = getTodayDateString();
+    
+    // Run at 06:00 or later, but only once per day
+    if (now.getHours() < 6) return;
+    if (state.lastDailyBriefingRunDate === today) return;
+    
+    state.lastDailyBriefingRunDate = today;
+    saveState();
     console.log('Running Daily Briefing...', now.toISOString());
 
     try {
@@ -168,10 +226,17 @@ async function checkDailyBriefing() {
 
 async function checkMailSummary() {
     const now = new Date();
-    // 18:30 execution
-    if (now.getHours() !== 18 || now.getMinutes() !== 30) {
-        return;
-    }
+    const today = getTodayDateString();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    
+    // Run at 18:30 or later, but only once per day
+    // Check if current time is at or after 18:30
+    if (hours < 18 || (hours === 18 && minutes < 30)) return;
+    if (state.lastMailSummaryRunDate === today) return;
+    
+    state.lastMailSummaryRunDate = today;
+    saveState();
     console.log('Running Daily Mail Summary...', now.toISOString());
 
     try {
@@ -226,10 +291,14 @@ async function checkMailSummary() {
 
 async function checkBackup() {
     const now = new Date();
-    // 03:00 execution
-    if (now.getHours() !== 3 || now.getMinutes() !== 0) {
-        return;
-    }
+    const today = getTodayDateString();
+    
+    // Run at 03:00 or later, but only once per day
+    if (now.getHours() < 3) return;
+    if (state.lastBackupRunDate === today) return;
+    
+    state.lastBackupRunDate = today;
+    saveState();
     console.log('Running Daily Backup...', now.toISOString());
 
     try {
