@@ -67,14 +67,24 @@ export function MailSummaryCardView({
      return (
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
             <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                    <Typography variant="h6" color="primary">
-                        {card.title}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                        {format(new Date(card.latestMailReceivedAt), 'MM/dd HH:mm')}
-                    </Typography>
-                </Box>
+                {card.title && card.title !== 'Untitled' && card.title !== 'タイトルなし' && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                        <Typography variant="h6" color="primary">
+                            {card.title}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            {format(new Date(card.latestMailReceivedAt), 'MM/dd HH:mm')}
+                        </Typography>
+                    </Box>
+                )}
+                
+                {(!card.title || card.title === 'Untitled' || card.title === 'タイトルなし') && (
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                            {format(new Date(card.latestMailReceivedAt), 'MM/dd HH:mm')}
+                        </Typography>
+                    </Box>
+                )}
                 
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>
                     {card.summary}

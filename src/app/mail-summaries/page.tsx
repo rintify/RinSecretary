@@ -253,23 +253,46 @@ export default function MailSummariesPage() {
                          <MailIcon sx={{ fontSize: 60, mb: 1, opacity: 0.3 }} />
                          <Typography>履歴はありません</Typography>
                      </Box>
-                 ) : (
-                     <Stack spacing={2}>
-                          {summaries.map((card) => (
-                              <MailSummaryCardView 
-                                key={card.id}
-                                card={card}
-                                onRegenerate={handleRegenerate}
-                                onBlock={handleBlock}
-                                isRegenerating={regeneratingId === card.id}
-                                isBlocking={blocking || undefined}
-                                genStatus={genStatus}
-                                onCreateReplyTask={handleCreateReplyTask}
-                                onDelete={handleDelete}
-                              />
+                  ) : (
+                      <Stack spacing={3}>
+                          {Object.entries(
+                                summaries.reduce((acc, card) => {
+                                    const date = format(new Date(card.latestMailReceivedAt), 'yyyy-MM-dd');
+                                    if (!acc[date]) acc[date] = [];
+                                    acc[date].push(card);
+                                    return acc;
+                                }, {} as Record<string, any[]>)
+                          )
+                          .sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime())
+                          .map(([date, cards]: [string, any[]]) => (
+                                <Box key={date}>
+                                    <Divider textAlign="left" sx={{ mb: 2 }}>
+                                        <Chip 
+                                            label={format(new Date(date), 'MM月dd日 (EEE)', { locale: ja })} 
+                                            size="small" 
+                                            variant="outlined" 
+                                            color="default"
+                                        />
+                                    </Divider>
+                                    <Stack spacing={2}>
+                                        {cards.map((card) => (
+                                            <MailSummaryCardView 
+                                                key={card.id}
+                                                card={card}
+                                                onRegenerate={handleRegenerate}
+                                                onBlock={handleBlock}
+                                                isRegenerating={regeneratingId === card.id}
+                                                isBlocking={blocking || undefined}
+                                                genStatus={genStatus}
+                                                onCreateReplyTask={handleCreateReplyTask}
+                                                onDelete={handleDelete}
+                                            />
+                                        ))}
+                                    </Stack>
+                                </Box>
                           ))}
-                     </Stack>
-                 )}
+                      </Stack>
+                  )}
             </Container>
             
             <Snackbar

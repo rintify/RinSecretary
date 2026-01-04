@@ -46,7 +46,7 @@ export default function MailSummaryResultModal({
         <Dialog
             open={open}
             onClose={handleClose}
-            fullScreen={fullScreen}
+            fullScreen={false}
             maxWidth="md"
             fullWidth
             scroll="paper"
@@ -68,7 +68,9 @@ export default function MailSummaryResultModal({
                     </Box>
                 ) : (
                     <Stack spacing={2}>
-                        {summaries.map(card => (
+                        {[...summaries]
+                            .sort((a, b) => new Date(a.latestMailReceivedAt).getTime() - new Date(b.latestMailReceivedAt).getTime())
+                            .map(card => (
                             <MailSummaryCardView 
                                 key={card.id} 
                                 card={card} 

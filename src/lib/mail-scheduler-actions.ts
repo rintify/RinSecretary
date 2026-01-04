@@ -162,7 +162,7 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
 
             cardsToCreate.push({
                 userId,
-                title: "その他のメッセージ",
+                title: "Untitled",
                 summary: result.otherMessagesSummary,
                 senders: JSON.stringify(result.otherSenders), // Include senders
                 relatedLinks: "[]", // No links as requested
@@ -320,7 +320,7 @@ export async function generateAndSaveMailSummary(messages: any[], customRange?: 
         const globalLatest = messages.length > 0 ? new Date(messages[0].date) : timeMax;
         cardsToCreate.push({
             userId,
-            title: customRange ? "その他のメッセージ" : "その他のメッセージ (2週間分)",
+            title: "Untitled",
             summary: result.otherMessagesSummary,
             senders: JSON.stringify(result.otherSenders),
             relatedLinks: "[]",
