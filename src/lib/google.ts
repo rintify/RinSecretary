@@ -43,7 +43,14 @@ async function getPrimaryGoogleAccount(userId: string) {
     return accounts[0];
 }
 
-export async function getGoogleCalendarEvents(userId: string, timeMin: Date, timeMax: Date) {
+export class AuthError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'AuthError';
+    }
+}
+
+export async function getGoogleCalendarEvents(userId: string, timeMin?: Date, timeMax?: Date) {
   try {
     const account = await getPrimaryGoogleAccount(userId);
 
@@ -72,12 +79,6 @@ export async function getGoogleCalendarEvents(userId: string, timeMin: Date, tim
     });
 
     // Auto-refresh token if needed
-    // googleapis handles refresh automatically if refresh_token is present and valid
-    // We should listen to credentials event to save new tokens if we want to be persistent
-    // specificially for offline usage, but here for a quick request it might just work in memory
-    // for the request duration.
-    // However, to keep DB in sync:
-    
     auth.on('tokens', async (tokens) => {
         if (tokens.access_token) {
             await prisma.account.update({
@@ -85,7 +86,7 @@ export async function getGoogleCalendarEvents(userId: string, timeMin: Date, tim
                 data: {
                     access_token: tokens.access_token,
                     expires_at: Math.floor((tokens.expiry_date || 0) / 1000),
-                    refresh_token: tokens.refresh_token ?? account.refresh_token // Use new if provided, else keep old
+                    refresh_token: tokens.refresh_token ?? account.refresh_token
                 }
             });
         }
@@ -95,8 +96,8 @@ export async function getGoogleCalendarEvents(userId: string, timeMin: Date, tim
     
     const response = await calendar.events.list({
       calendarId: 'primary',
-      timeMin: timeMin.toISOString(),
-      timeMax: timeMax.toISOString(),
+      timeMin: timeMin?.toISOString(),
+      timeMax: timeMax?.toISOString(),
       singleEvents: true,
       orderBy: 'startTime',
     });
@@ -218,8 +219,23 @@ export async function getGmailMessages(userId: string, timeMin: Date, timeMax?: 
                     process.env.GOOGLE_CLIENT_ID,
                     process.env.GOOGLE_CLIENT_SECRET
                 );
-                auth.setCredentials({ access_token: account.access_token, refresh_token: account.refresh_token });
                 
+                if (account.refresh_token) {
+                    auth.setCredentials({ refresh_token: account.refresh_token });
+                    try {
+                        // Force token refresh to check validity
+                        await auth.getAccessToken();
+                    } catch (e: any) {
+                        console.error("Token refresh failed", e);
+                        throw new AuthError("Googleアカウントの認証が無効です。再ログインしてください。");
+                    }
+                } else {
+                    console.error("No refresh token for user", userId);
+                    // If no refresh token, we can't fetch.
+                    // This might happen if user only logged in but didn't grant offline access or scope issue.
+                    throw new AuthError("Googleアカウントのリフレッシュトークンがありません。再連携してください。");
+                }
+
                 // Auto-refresh token hook
                 auth.on('tokens', async (tokens) => {
                     if (tokens.access_token) {

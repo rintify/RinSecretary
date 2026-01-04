@@ -26,10 +26,12 @@ export function MailSummaryCardView({
     onCreateReplyTask, onDelete 
 }: MailSummaryCardProps) {
      if (card.status === 'FAILED') {
+         const isAuthError = card.error === 'AUTH_ERROR' || card.title === '再連携が必要です';
+         
          // Error Card View
          return (
-            <Paper variant="outlined" sx={{ p: 2, borderColor: 'error.main', bgcolor: '#fff5f5' }}>
-                <Typography variant="subtitle1" color="error" fontWeight="bold" gutterBottom>
+            <Paper variant="outlined" sx={{ p: 2, borderColor: isAuthError ? 'warning.main' : 'error.main', bgcolor: isAuthError ? '#fff9e6' : '#fff5f5' }}>
+                <Typography variant="subtitle1" color={isAuthError ? 'warning.dark' : 'error'} fontWeight="bold" gutterBottom>
                     {card.title || "生成エラー"}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" paragraph>
@@ -38,7 +40,21 @@ export function MailSummaryCardView({
                 <Typography variant="caption" display="block" color="text.secondary" gutterBottom>
                     対象期間: {format(new Date(card.targetRangeStart), 'MM/dd HH:mm')} - {format(new Date(card.targetRangeEnd), 'MM/dd HH:mm')}
                 </Typography>
-                {onRegenerate && (
+                
+                {isAuthError && (
+                    <Box sx={{ mt: 2 }}>
+                        <Button 
+                            variant="contained" 
+                            color="warning" 
+                            size="small"
+                            onClick={() => window.location.href = '/settings?tab=google'} // Assuming settings page link
+                        >
+                            設定画面へ
+                        </Button>
+                    </Box>
+                )}
+
+                {!isAuthError && onRegenerate && (
                 <Box sx={{ mt: 2, textAlign: 'right' }}>
                     <Button 
                         variant="outlined" 

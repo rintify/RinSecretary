@@ -254,42 +254,41 @@ export default function MailSummariesPage() {
                          <Typography>履歴はありません</Typography>
                      </Box>
                   ) : (
-                      <Stack spacing={3}>
-                          {Object.entries(
-                                summaries.reduce((acc, card) => {
-                                    const date = format(new Date(card.latestMailReceivedAt), 'yyyy-MM-dd');
-                                    if (!acc[date]) acc[date] = [];
-                                    acc[date].push(card);
-                                    return acc;
-                                }, {} as Record<string, any[]>)
-                          )
-                          .sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime())
-                          .map(([date, cards]: [string, any[]]) => (
-                                <Box key={date}>
-                                    <Divider textAlign="left" sx={{ mb: 2 }}>
-                                        <Chip 
-                                            label={format(new Date(date), 'MM月dd日 (EEE)', { locale: ja })} 
-                                            size="small" 
-                                            variant="outlined" 
-                                            color="default"
-                                        />
-                                    </Divider>
-                                    <Stack spacing={2}>
-                                        {cards.map((card) => (
-                                            <MailSummaryCardView 
-                                                key={card.id}
-                                                card={card}
-                                                onRegenerate={handleRegenerate}
-                                                onBlock={handleBlock}
-                                                isRegenerating={regeneratingId === card.id}
-                                                isBlocking={blocking || undefined}
-                                                genStatus={genStatus}
-                                                onCreateReplyTask={handleCreateReplyTask}
-                                                onDelete={handleDelete}
-                                            />
-                                        ))}
-                                    </Stack>
-                                </Box>
+                      <Stack spacing={4}>
+                          {(Object.entries(
+                              summaries.reduce((acc, card) => {
+                                  const key = format(new Date(card.latestMailReceivedAt), 'yyyy-MM-dd');
+                                  if (!acc[key]) acc[key] = [];
+                                  acc[key].push(card);
+                                  return acc;
+                              }, {} as Record<string, any[]>)
+                          ) as [string, any[]][])
+                          .sort((a, b) => b[0].localeCompare(a[0]))
+                          .map(([dateKey, groupCards]) => (
+                              <Box key={dateKey}>
+                                  <Divider textAlign="left" sx={{ mb: 2 }}>
+                                      <Chip 
+                                          label={format(new Date(groupCards[0].latestMailReceivedAt), 'MM月dd日 (EEE)', { locale: ja })} 
+                                          size="small" 
+                                          sx={{ px: 1, fontWeight: 'bold' }}
+                                      />
+                                  </Divider>
+                                  <Stack spacing={2}>
+                                      {groupCards.map((card: any) => (
+                                          <MailSummaryCardView 
+                                              key={card.id}
+                                              card={card}
+                                              onRegenerate={handleRegenerate}
+                                              onBlock={handleBlock}
+                                              isRegenerating={regeneratingId === card.id}
+                                              isBlocking={blocking || undefined}
+                                              genStatus={genStatus}
+                                              onCreateReplyTask={handleCreateReplyTask}
+                                              onDelete={handleDelete}
+                                          />
+                                      ))}
+                                  </Stack>
+                              </Box>
                           ))}
                       </Stack>
                   )}

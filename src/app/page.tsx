@@ -215,7 +215,7 @@ export default function Home() {
   const [googleEvents, setGoogleEvents] = useState<TaskLocal[]>([]);
   const [tasks, setTasks] = useState<TaskLocal[]>([]); // Synched Local Tasks
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncError, setSyncError] = useState(false);
+  const [calendarFetchSuccess, setCalendarFetchSuccess] = useState<boolean | null>(null); // null=未取得, true=成功, false=失敗
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [now, setNow] = useState(new Date());
 
@@ -235,10 +235,8 @@ export default function Home() {
           currentDate < subDays(calendarCacheRange.end, BUFFER_DAYS);
 
       // If legitimate cache hit and not force refresh, skip
-      if (!isForce && inRange && googleEvents.length > 0) {
-          // console.log("Cache Hit: Skipping fetch");
-          // Update lastSyncedAt just to show it's "live" enough? Or maybe kept as is?
-          // Let's keep lastSyncedAt as the actual API fetch time to be honest.
+      // ただし、前回のfetchが失敗している場合は再試行する
+      if (!isForce && inRange && googleEvents.length > 0 && calendarFetchSuccess === true) {
           return;
       }
 
@@ -254,14 +252,14 @@ export default function Home() {
           const [events, alarms] = await Promise.all([eventsPromise, alarmsPromise]);
           setGoogleEvents([...(events as TaskLocal[]), ...(alarms as TaskLocal[])]);
           setLastSyncedAt(new Date());
-          setSyncError(false);
+          setCalendarFetchSuccess(true); // 明示的に成功を記録
           setCalendarCacheRange({ start, end });
       } catch (e: any) {
           // AUTH_ERROR is expected when token is expired/revoked, so we don't log it as error
           if (e?.message !== 'AUTH_ERROR' && !e?.message?.includes('AUTH_ERROR')) {
             console.error("Failed to load events/alarms", e);
           }
-          setSyncError(true);
+          setCalendarFetchSuccess(false); // 明示的に失敗を記録
       } finally {
           setIsSyncing(false);
       }
@@ -292,7 +290,9 @@ export default function Home() {
   }, []);
 
   const timeSinceSync = lastSyncedAt ? differenceInMinutes(now, lastSyncedAt) : 999;
-  const isSyncedRecently = !syncError && timeSinceSync < 5;
+  // 緑=成功かつ5分以内, 赤=失敗, 黄色=未取得または時間経過
+  const isSyncedRecently = calendarFetchSuccess === true && timeSinceSync < 5;
+  const syncError = calendarFetchSuccess === false;
 
 
 
@@ -643,7 +643,7 @@ export default function Home() {
                 )}
             {/* Other Modals Logic inside main Dialog... */}
             {activeModal === 'REGULAR_TASK_SETTINGS' && (
-                <RegularTaskSettingsModal onClose={handleCloseModal} />
+                <RegularTaskSettingsModal open={activeModal === 'REGULAR_TASK_SETTINGS'} onClose={handleCloseModal} />
             )}
         </Suspense>
     </DialogContent>

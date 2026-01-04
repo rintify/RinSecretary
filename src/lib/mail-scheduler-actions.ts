@@ -2,7 +2,7 @@
 
 import { prisma } from './prisma';
 import { generateSummaryFromData, MailSummaryResult } from './mail-actions';
-import { getGmailMessages } from './google';
+import { getGmailMessages, AuthError } from './google';
 import { devAuth as auth } from '@/lib/dev-auth'; 
 
 // Utility to calculate range: Yesterday 18:30 -> Today 18:30 (relative to "targetDate" being Today)
@@ -49,6 +49,23 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
             messages = await getGmailMessages(userId, timeMin, timeMax);
         } catch (e: any) {
             console.error(`Failed to fetch messages for ${userId}`, e);
+            
+            if (e instanceof AuthError || e.name === 'AuthError') {
+                 await prisma.mailSummary.create({
+                    data: {
+                        userId,
+                        title: "再連携が必要です",
+                        summary: "Googleアカウントの接続が無効になりました。設定画面から再度ログインして連携し直してください。",
+                        status: 'FAILED', // or AUTH_ERROR if we want specific UI handling
+                        error: "AUTH_ERROR",
+                        latestMailReceivedAt: timeMax,
+                        targetRangeStart: timeMin,
+                        targetRangeEnd: timeMax
+                    }
+                });
+                return;
+            }
+
             // Create Error Card
             await prisma.mailSummary.create({
                 data: {
@@ -230,6 +247,9 @@ export async function fetchMailDataInRange(targetStart: Date, targetEnd: Date) {
         messages = await getGmailMessages(userId, targetStart, targetEnd);
     } catch (e: any) {
         console.error(`Failed to fetch messages for ${userId}`, e);
+        if (e instanceof AuthError || e.name === 'AuthError') {
+             throw new Error("AUTH_ERROR: Googleアカウントの再連携が必要です。");
+        }
         throw new Error(`メール取得エラー: ${e.message}`);
     }
 

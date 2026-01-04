@@ -22,15 +22,15 @@ export async function saveMailSettings(modelId: string, prompt: string) {
     return { success: true };
 }
 
-export async function getMailSettings() {
+export async function getMailSettings(): Promise<{ mailSummaryModelId: string | null; mailSummaryPrompt: string | null } | null> {
     const session = await auth();
     if (!session?.user?.id) return null;
 
     const user = await prisma.user.findUnique({
         where: { id: session.user.id },
-        select: { mailSummaryModelId: true, mailSummaryPrompt: true } as any
+        select: { mailSummaryModelId: true, mailSummaryPrompt: true }
     });
-    return user;
+    return user as { mailSummaryModelId: string | null; mailSummaryPrompt: string | null } | null;
 }
 
 export async function blockSender(email: string) {
