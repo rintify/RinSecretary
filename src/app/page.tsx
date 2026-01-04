@@ -34,7 +34,7 @@ import AIChatModal from './components/AIChatModal';
 import MailSettingsModal from './components/MailSettingsModal';
 
 import { getExpiredTaskCount } from '@/lib/task-actions';
-import { fetchGoogleEvents } from '@/lib/calendar-actions';
+import { fetchGoogleEvents, checkPrimaryGoogleAccountStatus } from '@/lib/calendar-actions';
 import { getAlarms } from '@/lib/alarm-actions';
 import { TaskLocal } from './components/TimeTable';
 
@@ -216,8 +216,18 @@ export default function Home() {
   const [tasks, setTasks] = useState<TaskLocal[]>([]); // Synched Local Tasks
   const [isSyncing, setIsSyncing] = useState(false);
   const [calendarFetchSuccess, setCalendarFetchSuccess] = useState<boolean | null>(null); // null=未取得, true=成功, false=失敗
+  const [primaryAccountValid, setPrimaryAccountValid] = useState<boolean | null>(null); // メインアカウントの認証状態
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [now, setNow] = useState(new Date());
+
+  // メインGoogleアカウントの認証状態をチェック
+  useEffect(() => {
+      checkPrimaryGoogleAccountStatus().then(result => {
+          setPrimaryAccountValid(result.valid);
+      }).catch(() => {
+          setPrimaryAccountValid(false);
+      });
+  }, [calendarRefreshTrigger]); // リフレッシュ時に再チェック
 
   // Client-side caching for Calendar
   const [calendarCacheRange, setCalendarCacheRange] = useState<{ start: Date; end: Date } | null>(null);
@@ -290,9 +300,9 @@ export default function Home() {
   }, []);
 
   const timeSinceSync = lastSyncedAt ? differenceInMinutes(now, lastSyncedAt) : 999;
-  // 緑=成功かつ5分以内, 赤=失敗, 黄色=未取得または時間経過
-  const isSyncedRecently = calendarFetchSuccess === true && timeSinceSync < 5;
-  const syncError = calendarFetchSuccess === false;
+  // 緑=成功かつ5分以内かつメインアカウント有効, 赤=失敗またはメインアカウント無効, 黄色=未取得または時間経過
+  const isSyncedRecently = calendarFetchSuccess === true && primaryAccountValid === true && timeSinceSync < 5;
+  const syncError = calendarFetchSuccess === false || primaryAccountValid === false;
 
 
 
@@ -768,16 +778,34 @@ export default function Home() {
             <Typography variant="caption" color="text.secondary">
                 {syncError ? "Googleアカウントの認証が切れています。再ログインしてください。" : "通常は自動で同期されますが、ボタンを押して手動で更新することもできます。"}
             </Typography>
+            {syncError && (
+                <Box sx={{ mt: 2 }}>
+                    <Button 
+                        variant="contained" 
+                        color="error"
+                        startIcon={<GoogleIcon />}
+                        fullWidth
+                        onClick={async () => {
+                            const { signIn } = await import('next-auth/react');
+                            await signIn('google', { callbackUrl: '/' });
+                        }}
+                    >
+                        Googleに再ログイン
+                    </Button>
+                </Box>
+            )}
         </DialogContent>
         <DialogActions>
             <Button onClick={() => setShowSyncModal(false)}>閉じる</Button>
-            <Button variant="contained" onClick={() => {
-                setTaskRefreshTrigger(prev => prev + 1);
-                setCalendarRefreshTrigger(prev => prev + 1);
-                setShowSyncModal(false);
-            }}>
-                最新にする
-            </Button>
+            {!syncError && (
+                <Button variant="contained" onClick={() => {
+                    setTaskRefreshTrigger(prev => prev + 1);
+                    setCalendarRefreshTrigger(prev => prev + 1);
+                    setShowSyncModal(false);
+                }}>
+                    最新にする
+                </Button>
+            )}
         </DialogActions>
     </Dialog>
 

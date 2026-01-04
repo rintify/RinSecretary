@@ -47,10 +47,52 @@ export async function getLinkedGoogleAccounts() {
         const fullAccount = await prisma.account.findUnique({ where: { id: acc.id } });
         if(!fullAccount?.access_token) return { ...acc, email: 'Unknown (No Token)', isPrimary: false };
         
+        // まずアクセストークンで試す
+        let accessToken = fullAccount.access_token;
+        
         try {
-           const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-               headers: { Authorization: `Bearer ${fullAccount.access_token}` }
+           let res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+               headers: { Authorization: `Bearer ${accessToken}` }
            });
+           
+           // トークン期限切れの場合、リフレッシュを試みる
+           if (!res.ok && res.status === 401 && fullAccount.refresh_token) {
+               console.log('Access token expired, attempting refresh for account', acc.id);
+               try {
+                   const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                       body: new URLSearchParams({
+                           client_id: process.env.GOOGLE_CLIENT_ID!,
+                           client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+                           refresh_token: fullAccount.refresh_token,
+                           grant_type: 'refresh_token'
+                       })
+                   });
+                   
+                   if (refreshRes.ok) {
+                       const tokens = await refreshRes.json();
+                       accessToken = tokens.access_token;
+                       
+                       // DBに新しいトークンを保存
+                       await prisma.account.update({
+                           where: { id: acc.id },
+                           data: {
+                               access_token: tokens.access_token,
+                               expires_at: tokens.expires_in ? Math.floor(Date.now() / 1000) + tokens.expires_in : undefined,
+                           }
+                       });
+                       
+                       // リフレッシュしたトークンで再試行
+                       res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+                           headers: { Authorization: `Bearer ${accessToken}` }
+                       });
+                   }
+               } catch (refreshError) {
+                   console.error('Token refresh failed for account', acc.id, refreshError);
+               }
+           }
+           
            if(res.ok) {
                const data = await res.json();
                const isPrimary = user?.email && data.email ? (user.email.toLowerCase() === data.email.toLowerCase()) : false;

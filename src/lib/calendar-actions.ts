@@ -3,6 +3,93 @@
 import { devAuth as auth } from '@/lib/dev-auth';
 import { getGoogleCalendarEvents } from './google';
 import { subDays, addDays } from 'date-fns';
+import { prisma } from './prisma';
+
+// メインアカウントの認証状態をチェック
+export async function checkPrimaryGoogleAccountStatus(): Promise<{ valid: boolean; email?: string }> {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return { valid: false };
+    }
+
+    const userId = session.user.id;
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true }
+    });
+
+    const accounts = await prisma.account.findMany({
+        where: { userId, provider: 'google' }
+    });
+
+    if (!accounts || accounts.length === 0) {
+        return { valid: false };
+    }
+
+    // メインアカウント（ユーザーのメールと一致するもの）を探す
+    for (const account of accounts) {
+        if (!account.access_token) continue;
+        
+        let accessToken = account.access_token;
+        
+        try {
+            let res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            
+            // トークン期限切れの場合、リフレッシュを試みる
+            if (!res.ok && res.status === 401 && account.refresh_token) {
+                console.log('checkPrimaryGoogleAccountStatus: Access token expired, attempting refresh for account', account.id);
+                try {
+                    const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({
+                            client_id: process.env.GOOGLE_CLIENT_ID!,
+                            client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+                            refresh_token: account.refresh_token,
+                            grant_type: 'refresh_token'
+                        })
+                    });
+                    
+                    if (refreshRes.ok) {
+                        const tokens = await refreshRes.json();
+                        accessToken = tokens.access_token;
+                        
+                        // DBに新しいトークンを保存
+                        await prisma.account.update({
+                            where: { id: account.id },
+                            data: {
+                                access_token: tokens.access_token,
+                                expires_at: tokens.expires_in ? Math.floor(Date.now() / 1000) + tokens.expires_in : undefined,
+                            }
+                        });
+                        
+                        // リフレッシュしたトークンで再試行
+                        res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+                            headers: { Authorization: `Bearer ${accessToken}` }
+                        });
+                    }
+                } catch (refreshError) {
+                    console.error('checkPrimaryGoogleAccountStatus: Token refresh failed for account', account.id, refreshError);
+                }
+            }
+            
+            if (res.ok) {
+                const data = await res.json();
+                if (data.email && user?.email && data.email.toLowerCase() === user.email.toLowerCase()) {
+                    // メインアカウントが有効
+                    return { valid: true, email: data.email };
+                }
+            }
+        } catch (e) {
+            console.error('checkPrimaryGoogleAccountStatus: check failed for account', account.id);
+        }
+    }
+
+    // メインアカウントが見つからないか認証が無効
+    return { valid: false };
+}
 
 // Simple in-memory cache
 interface CacheEntry {
