@@ -27,7 +27,7 @@ import AlarmDetailModal from './components/AlarmDetailModal';
 import SettingsModal from './components/SettingsModal';
 import RegularTaskSettingsModal from './components/RegularTaskSettingsModal';
 import MailSummaryResultModal from '@/app/components/mail/MailSummaryResultModal';
-import { getUnreadMailSummaries } from '@/lib/mail-scheduler-actions';
+import { fetchMyUnreadMailSummaries } from '@/lib/mail-scheduler-actions';
 import FreeTimeModal from './components/FreeTimeModal';
 import ExpiredTaskListModal from './components/ExpiredTaskListModal';
 import AIChatModal from './components/AIChatModal';
@@ -201,11 +201,7 @@ export default function Home() {
 
   // Check for unread summaries on mount
   useEffect(() => {
-      // Assuming userId is available, e.g., from a context or prop.
-      // For this example, we'll use a placeholder or assume it's fetched elsewhere.
-      // If userId is not available, this useEffect might need to be adjusted.
-      const userId = 'current_user_id'; // Placeholder: Replace with actual userId retrieval
-      getUnreadMailSummaries(userId).then(res => {
+      fetchMyUnreadMailSummaries().then(res => {
           if (res.success && res.summaries && res.summaries.length > 0) {
               setUnreadSummaries(res.summaries);
               setUnreadSummariesOpen(true);

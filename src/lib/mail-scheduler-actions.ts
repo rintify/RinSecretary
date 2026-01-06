@@ -450,6 +450,12 @@ export async function fetchMyMailSummaries() {
     return getMailSummaries(session.user.id);
 }
 
+export async function fetchMyUnreadMailSummaries() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    return getUnreadMailSummaries(session.user.id);
+}
+
 export async function deleteMyMailSummary(id: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");

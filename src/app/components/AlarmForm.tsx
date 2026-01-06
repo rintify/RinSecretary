@@ -203,6 +203,13 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
                 variant="outlined" 
                 value={title}
                 onChange={e => setTitle(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.nativeEvent.isComposing) return;
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSubmit(e as any);
+                    }
+                }}
                 size="small"
             />
 
