@@ -11,7 +11,7 @@ import JobItem from './JobItem';
 import Draggable, { DraggableEventHandler } from 'react-draggable';
 
 export default function JobMonitor() {
-    const { jobs, removeJob, cancelJob } = useGlobalJobs(); // Removed activeInterface
+    const { jobs, removeJob, cancelJob } = useGlobalJobs();
     const [viewingAiJob, setViewingAiJob] = React.useState<{ open: boolean; messages: Message[] }>({ open: false, messages: [] });
     
     // Visibility State
@@ -25,6 +25,7 @@ export default function JobMonitor() {
         open: false, message: '', severity: 'success' 
     });
     const lastJobStatuses = React.useRef<Record<string, JobStatus>>({}); // Track last status to detect completion
+    const prevJobIds = React.useRef<Set<string>>(new Set()); // Track previous job IDs to detect new jobs
 
     // Persistent Position
     const [position, setPosition] = React.useState<{ x: number, y: number } | null>(null);
@@ -51,7 +52,11 @@ export default function JobMonitor() {
 
     // 1. Monitor Jobs for 0.5s rule AND completion
     React.useEffect(() => {
+        // Debug: Log all jobs and their statuses
+        console.log('[JobMonitor] Jobs update:', jobs.map(j => ({ id: j.id.slice(-6), type: j.type, status: j.status })));
+        
         const hasRunningJobs = jobs.some(j => j.status === 'RUNNING' || j.status === 'PENDING');
+        console.log('[JobMonitor] hasRunningJobs:', hasRunningJobs, 'isVisible:', isVisible, 'isDismissed:', isDismissed);
         
         // Check for completions
         jobs.forEach(job => {
@@ -84,9 +89,25 @@ export default function JobMonitor() {
         });
 
         if (hasRunningJobs) {
+            // Check if there are any NEW running jobs (not seen before)
+            const currentRunningIds = new Set(jobs.filter(j => j.status === 'RUNNING' || j.status === 'PENDING').map(j => j.id));
+            const hasNewJob = [...currentRunningIds].some(id => !prevJobIds.current.has(id));
+            
+            if (hasNewJob) {
+                // Reset dismissed state when a new job appears
+                if (isDismissed) {
+                    console.log('[JobMonitor] New job detected, resetting dismissed state');
+                    setIsDismissed(false);
+                }
+            }
+            
+            prevJobIds.current = currentRunningIds;
+
             if (!isVisible && !visibilityTimer.current && !isDismissed) {
                 // Start timer to show (only if not dismissed)
+                console.log('[JobMonitor] Starting 0.5s visibility timer');
                 visibilityTimer.current = setTimeout(() => {
+                    console.log('[JobMonitor] Timer fired, showing monitor');
                     setIsVisible(true);
                     visibilityTimer.current = null;
                 }, 500); // 0.5s delay
@@ -95,6 +116,7 @@ export default function JobMonitor() {
             // No running jobs.
             // Reset dismissed state so new future jobs will show up
             if (isDismissed) setIsDismissed(false);
+            prevJobIds.current = new Set();
 
             if (visibilityTimer.current) {
                 clearTimeout(visibilityTimer.current);

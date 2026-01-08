@@ -20,7 +20,6 @@ import {
     VideoFile as VideoIcon,
     TextSnippet as TextIcon
 } from '@mui/icons-material';
-import { useGlobalJobs } from '../context/GlobalJobContext';
 
 interface MemoDetailProps {
     memo: {
@@ -35,12 +34,6 @@ interface MemoDetailProps {
 
 export default function MemoDetail({ memo }: MemoDetailProps) {
     const router = useRouter();
-    const { setActiveInterface } = useGlobalJobs();
-
-    useEffect(() => {
-        setActiveInterface('MEMO');
-        return () => setActiveInterface(null);
-    }, [setActiveInterface]);
 
     const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
     const [isFileManagementOpen, setIsFileManagementOpen] = useState(false);

@@ -78,26 +78,14 @@ export default function AIChatModal({ open, onClose, initialMessages }: AIChatMo
     // Toast State
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
-    const { jobs } = useGlobalJobs();
-    const { setActiveInterface } = useGlobalJobs();
+    const { jobs, refreshServerJobs } = useGlobalJobs();
     
     // Auto-scroll logic
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
 
-    // Register Active Interface
-    useEffect(() => {
-        if (open) {
-            setActiveInterface('AI_CHAT');
-        } else {
-            setActiveInterface(null);
-        }
-        return () => {
-             // If unmounting while open, clear it
-             setActiveInterface(null); 
-        };
-    }, [open, setActiveInterface]);
+
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -172,14 +160,19 @@ export default function AIChatModal({ open, onClose, initialMessages }: AIChatMo
                 configId: selectedConfigId
             });
 
+            // Manually trigger refresh since SSE might not work in dev mode
+            refreshServerJobs();
+
             // Poll for result
             const pollResult = async () => {
                 // Use getJob imported at top (need to add import if missing, or use submitJob return if it had logic but it doesn't)
                 // Actually need to import getJob.
                 const maxAttempts = 120; // 2 minutes max
+                console.log('[AIChatModal] Starting poll for job', job.id);
                 for (let i = 0; i < maxAttempts; i++) {
                     await new Promise(r => setTimeout(r, 1000));
                     const updatedJob = await getJob(job.id);
+                    console.log('[AIChatModal] Poll attempt', i + 1, 'status:', updatedJob?.status);
                     if (!updatedJob) break;
                     
                     if (updatedJob.status === 'COMPLETED' && updatedJob.result) {
@@ -190,9 +183,11 @@ export default function AIChatModal({ open, onClose, initialMessages }: AIChatMo
                                     ? { ...m, content: result.content || '', images: result.images } 
                                     : m
                             ));
+                            console.log('[AIChatModal] Job completed, updating message');
                         } catch (e) {
                             console.error('Failed to parse AI result', e);
                         }
+                        refreshServerJobs(); // Update job list to stop spinner
                         break;
                     } else if (updatedJob.status === 'FAILED') {
                         setMessages(prev => prev.map(m => 
@@ -200,6 +195,7 @@ export default function AIChatModal({ open, onClose, initialMessages }: AIChatMo
                                 ? { ...m, content: 'エラーが発生しました。' } 
                                 : m
                         ));
+                        refreshServerJobs(); // Update job list to stop spinner
                         break;
                     }
                 }

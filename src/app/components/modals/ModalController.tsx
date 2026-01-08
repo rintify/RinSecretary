@@ -234,7 +234,7 @@ export default function ModalController({
 
             {/* AI Chat Modal */}
             {activeModal === 'AI_CHAT' && (
-                <AIChatModal open={true} onClose={onCloseModal} />
+                <AIChatModal open={true} onClose={onCloseModal} initialMessages={modalData?.initialMessages} />
             )}
 
             {/* Immediate Action Flows */}

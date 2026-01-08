@@ -27,15 +27,12 @@ interface GlobalJobContextType {
     removeJob: (id: string) => void; 
     refreshServerJobs: () => Promise<void>;
     cancelJob: (id: string) => Promise<void>;
-    activeInterface: string | null;
-    setActiveInterface: (name: string | null) => void;
 }
 
 const GlobalJobContext = createContext<GlobalJobContextType | null>(null);
 
 export function GlobalJobProvider({ children }: { children: React.ReactNode }) {
     const [jobs, setJobs] = useState<Job[]>([]);
-    const [activeInterface, setActiveInterface] = useState<string | null>(null);
     
     // SSE Connection
     useEffect(() => {
@@ -85,6 +82,7 @@ export function GlobalJobProvider({ children }: { children: React.ReactNode }) {
     const refreshServerJobs = async () => {
         try {
             const serverJobs = await getJobs();
+            console.log('[GlobalJobContext] Fetched jobs:', serverJobs.map(j => ({ id: j.id.slice(-6), status: j.status })));
             setJobs(currentJobs => {
                 // Merge server jobs with existing client jobs
                 const clientJobs = currentJobs.filter(j => j.isClient);
@@ -157,7 +155,7 @@ export function GlobalJobProvider({ children }: { children: React.ReactNode }) {
     };
 
     return (
-        <GlobalJobContext.Provider value={{ jobs, addClientJob, updateClientJob, removeJob, refreshServerJobs, cancelJob, activeInterface, setActiveInterface }}>
+        <GlobalJobContext.Provider value={{ jobs, addClientJob, updateClientJob, removeJob, refreshServerJobs, cancelJob }}>
             {children}
         </GlobalJobContext.Provider>
     );

@@ -28,7 +28,7 @@ export default function JobListModal({ open, onClose, onViewResult }: JobListMod
             disableScrollLock
         >
             <DialogTitle sx={{ m: 0, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="h6">ジョブ一覧 ({jobs.length})</Typography>
+                <Typography variant="h6" component="span">ジョブ一覧 ({jobs.length})</Typography>
                 <IconButton
                     aria-label="close"
                     onClick={onClose}

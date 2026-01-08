@@ -22,7 +22,6 @@ import { deleteMemos, createMemoWithFile, createMemo, getMemos } from './actions
 import { MEMO_COLOR } from '../utils/colors';
 import { Folder as FolderIcon } from '@mui/icons-material';
 import CircularProgress from '@mui/material/CircularProgress';
-import { useGlobalJobs } from '../context/GlobalJobContext';
 
 type Attachment = {
     id: string;
@@ -41,14 +40,6 @@ type Memo = {
 };
 
 export default function MemoListContainer({ memos: initialMemos, initialQuery = '' }: { memos: Memo[], initialQuery?: string }) {
-    const { setActiveInterface } = useGlobalJobs();
-    
-    // Register Context
-    useEffect(() => {
-        setActiveInterface('MEMO');
-        return () => setActiveInterface(null);
-    }, [setActiveInterface]);
-
     const [memos, setMemos] = useState<Memo[]>(initialMemos);
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

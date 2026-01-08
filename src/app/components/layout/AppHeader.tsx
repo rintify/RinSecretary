@@ -48,7 +48,7 @@ interface AppHeaderProps {
     isSyncedRecently: boolean;
     lastSyncedAt: Date | null;
     onOpenSyncModal: () => void;
-    onOpenModal: (modal: ModalType) => void;
+    onOpenModal: (modal: ModalType, data?: any) => void;
 }
 
 export default function AppHeader({
@@ -258,31 +258,34 @@ export default function AppHeader({
                 open={jobListOpen} 
                 onClose={() => setJobListOpen(false)}
                 onViewResult={(job) => {
-                    // Handle view result similarly to JobMonitor if needed, 
-                    // or maybe JobListModal handles detailed view internally?
-                    // JobListModal prop onViewResult expects a callback.
-                    // For now let's just log or implement a basic alert if we don't have the context here easily.
-                    // Actually AppHeader doesn't have the logic to show AI Chat modal easily without prop drilling or context.
-                    // Ideally JobMonitor handles the "View" because it has the AIChatModal.
-                    // But here we are in AppHeader.
-                    // Let's assume GlobalJobContext or a separate UI context should handle "Open AI Chat Result".
-                    // For now, let's just let JobListModal handle it if it can, or pass a dummy.
-                    // Actually, let's look at `JobMonitor`: it has local state for `viewingAiJob`.
-                    // We might need to lift that up or duplicate it.
-                    // Given the constraint, for now, we'll implement a basic alert or handle it if easy.
-                    // Wait, `onOpenModal('AI_CHAT')` exists!
-                    // If we can pass data to `onOpenModal`, that would be great.
-                    // `onOpenModal` signature is just `(modal: ModalType) => void`.
-                    // We might need to just show the modal and let it load history? 
-                    // No, `AIChatModal` takes `initialMessages`.
-                    
-                    // Allow simple viewing for now:
                     if (job.type === 'AI_CHAT' && job.result) {
-                        // We can't easily open the AI Chat Modal with specific messages from here 
-                        // without changing AppHeader props or using a global UI context.
-                        // Let's implement a simplified view or just log it for now as a limitation.
-                        console.log('View result requested for', job.id);
-                        alert('詳細は現在ジョブモニターから確認してください');
+                        try {
+                            const result = JSON.parse(job.result);
+                            const payload = job.payload ? JSON.parse(job.payload) : {};
+                            
+                            // Build messages array
+                            let messages: any[] = [];
+                            if (payload.messages && Array.isArray(payload.messages)) {
+                                messages = payload.messages.map((m: any, idx: number) => ({
+                                    id: `hist-${idx}`,
+                                    role: m.role,
+                                    content: m.content,
+                                    images: m.images,
+                                    timestamp: new Date()
+                                }));
+                            }
+                            messages.push({
+                                id: Date.now().toString(),
+                                role: 'assistant',
+                                content: result.content || '',
+                                images: result.images,
+                                timestamp: new Date()
+                            });
+                            
+                            onOpenModal('AI_CHAT', { initialMessages: messages });
+                        } catch (e) {
+                            console.error('Failed to parse job result', e);
+                        }
                     }
                 }}
             />
