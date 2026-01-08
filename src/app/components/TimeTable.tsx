@@ -231,8 +231,7 @@ export default function TimeTable({
     refreshTrigger,
     expiredCount,
     onOpenExpired,
-    googleEvents,
-    tasks
+    items
 }: { 
     date: Date;
     onNewTask?: (startTime?: string) => void;
@@ -240,12 +239,12 @@ export default function TimeTable({
     refreshTrigger?: number;
     expiredCount?: number;
     onOpenExpired?: () => void;
-    googleEvents: TaskLocal[];
-    tasks: TaskLocal[];
+    items: TaskLocal[];
 }) {
   const [isLoading, setIsLoading] = useState(false);
   
-  const allTasks = [...tasks, ...googleEvents];
+  // Previously merged here, now passed pre-merged
+  const allTasks = items;
   
   const [isClient, setIsClient] = useState(false);
   const [now, setNow] = useState(new Date());
@@ -317,7 +316,7 @@ export default function TimeTable({
   // Only show on "Today"
 
 
-  const hasDeadlineWarning = isToday && tasks.some(task => {
+  const hasDeadlineWarning = isToday && items.some(task => {
       if (!task.deadline) return false;
       
       const p = typeof task.progress === 'number' ? task.progress : Number(task.progress || 0);

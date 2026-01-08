@@ -5,8 +5,7 @@ import { isSameDay, subDays } from 'date-fns';
 import { Box, Backdrop, CircularProgress, Typography } from '@mui/material';
 
 // Hooks
-import { useCalendarData } from './hooks/useCalendarData';
-import { useTaskData } from './hooks/useTaskData';
+import { useTimeTableData } from './hooks/useTimeTableData';
 import { useMailSummary } from './hooks/useMailSummary';
 
 // Components
@@ -35,20 +34,18 @@ export default function Home() {
     const [calendarRefreshTrigger, setCalendarRefreshTrigger] = useState(0);
 
     // Custom hooks for data fetching (non-blocking)
+    // Unified Data Fetching
     const { 
-        googleEvents, 
+        items,
+        expiredCount,
         isSyncing, 
         lastSyncedAt, 
         isSyncedRecently, 
-        syncError 
-    } = useCalendarData({ 
+        syncError,
+        refresh
+    } = useTimeTableData({ 
         currentDate, 
-        refreshTrigger: calendarRefreshTrigger 
-    });
-
-    const { tasks, expiredCount } = useTaskData({ 
-        currentDate, 
-        refreshTrigger: taskRefreshTrigger 
+        refreshTrigger: calendarRefreshTrigger + taskRefreshTrigger 
     });
 
     const { 
@@ -153,8 +150,7 @@ export default function Home() {
                         refreshTrigger={taskRefreshTrigger}
                         expiredCount={expiredCount}
                         onOpenExpired={() => setActiveModal('EXPIRED_TASKS')}
-                        googleEvents={googleEvents}
-                        tasks={tasks}
+                        items={items}
                     />
                     
                     {/* FABs */}

@@ -23,16 +23,16 @@ interface TimeTableSwiperProps {
     refreshTrigger: number;
     expiredCount?: number;
     onOpenExpired?: () => void;
-    googleEvents: TaskLocal[];
-    tasks: TaskLocal[];
+
+    items: TaskLocal[];
 }
 
 // Range of virtual slides. 
 // 0 to 2000 => Center at 1000.
 // +/- 1000 days (approx 2.7 years) is enough for session.
 // If outside, we could reset, but let's assume it's enough.
-const VIRTUAL_RANGE = 30;
-const INITIAL_INDEX = 15;
+const VIRTUAL_RANGE = 20000;
+const INITIAL_INDEX = 10000;
 
 export default function TimeTableSwiper({
     currentDate,
@@ -42,8 +42,7 @@ export default function TimeTableSwiper({
     refreshTrigger,
     expiredCount,
     onOpenExpired,
-    googleEvents,
-    tasks
+    items
 }: TimeTableSwiperProps) {
     const swiperRef = useRef<SwiperClass | null>(null);
     const [mounted, setMounted] = useState(false);
@@ -96,8 +95,7 @@ export default function TimeTableSwiper({
                      refreshTrigger={refreshTrigger}
                      expiredCount={expiredCount}
                      onOpenExpired={onOpenExpired}
-                     googleEvents={googleEvents}
-                     tasks={tasks}
+                     items={items}
                  />
             </Box>
         );
@@ -146,8 +144,7 @@ export default function TimeTableSwiper({
                                     refreshTrigger={refreshTrigger}
                                     expiredCount={expiredCount}
                                     onOpenExpired={onOpenExpired}
-                                    googleEvents={googleEvents}
-                                    tasks={tasks}
+                                    items={items}
                                 />
                             </Box>
                         </SwiperSlide>

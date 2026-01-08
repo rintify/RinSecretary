@@ -38,11 +38,12 @@ export async function GET(request: Request) {
     // However, if the user sends start/end, we might want to filter deadlines within that range.
     
     if (start && end) {
-         // If generic time range provided, show tasks with DEADLINE in that range
-         whereClause.deadline = {
-             gte: new Date(start),
-             lte: new Date(end)
-         };
+         // Overlap logic: Task is relevant if its duration overlaps with [start, end]
+         // deadline >= start AND startDate <= end
+         whereClause.AND = [
+             { deadline: { gte: new Date(start) } },
+             { startDate: { lte: new Date(end) } }
+         ];
     }
 
     const tasks = await prisma.task.findMany({
