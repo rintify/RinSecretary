@@ -43,6 +43,7 @@ model User {
   mailBlockedSenders MailBlockedSender[]
   mailSummaries MailSummary[]
   backupConfig BackupConfig?
+  jobs          Job[]
 }
 
 model MailBlockedSender {
@@ -242,4 +243,21 @@ model SharedFile {
   createdAt DateTime @default(now())
   
   userId    String   @default("legacy")
+}
+
+model Job {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type      String   // "AI_CHAT", "BACKUP", "MAIL_SUMMARY"
+  status    String   // "PENDING", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"
+  
+  payload   String?  // JSON input
+  result    String?  // JSON output or error message
+  
+  progress  Int      @default(0) // 0-100
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

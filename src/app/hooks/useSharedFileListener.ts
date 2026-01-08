@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { uploadSharedFile, getLatestSharedFile } from '@/app/actions/shared-file';
 import { ModalType } from '../components/layout/AppHeader';
+import { useGlobalJobs } from '../context/GlobalJobContext';
 
 interface UseSharedFileListenerProps {
     onOpenModal: (modal: ModalType, data?: any) => void;
@@ -11,7 +12,7 @@ interface UseSharedFileListenerProps {
 }
 
 export function useSharedFileListener({ onOpenModal }: UseSharedFileListenerProps) {
-    const [isUploading, setIsUploading] = useState(false);
+    const { addClientJob, updateClientJob } = useGlobalJobs();
     const lastShownIdRef = useRef<string | null>(null);
 
     // Check for new items on mount (once)
@@ -72,32 +73,35 @@ export function useSharedFileListener({ onOpenModal }: UseSharedFileListenerProp
     };
 
     const handleFileUpload = async (file: File) => {
-        setIsUploading(true);
+        const jobId = Math.random().toString(36).substring(7);
+        addClientJob({
+            id: jobId,
+            type: 'UPLOAD',
+            title: `アップロード: ${file.name}`,
+            error: undefined
+        });
+
         try {
             const formData = new FormData();
             formData.append('file', file);
             
-            // Show some loading state? 
-            // The modal will open when the poll catches it, OR we open it immediately with the result.
-            // Opening immediately is better for the uploader.
             const sharedFile = await uploadSharedFile(formData);
             
+            updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
             
             sessionStorage.setItem('rin_last_uploaded_id', sharedFile.id);
             onOpenModal('SHARED_ITEM', sharedFile);
             
-        } catch (e) {
+        } catch (e: any) {
             console.error('Upload failed', e);
+            updateClientJob(jobId, { status: 'FAILED', error: 'アップロード失敗' });
             alert('アップロードに失敗しました');
-        } finally {
-            setIsUploading(false);
         }
     };
 
     return {
         handlePaste,
         handleDrop,
-        handleDragOver,
-        isUploading
+        handleDragOver
     };
 }

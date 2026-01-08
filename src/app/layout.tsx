@@ -1,5 +1,6 @@
 import './globals.css';
 import ThemeRegistry from './ThemeRegistry';
+import { GlobalJobProvider } from './context/GlobalJobContext';
 import type { Metadata, Viewport } from 'next';
 
 export const viewport: Viewport = {
@@ -37,7 +38,9 @@ export default function RootLayout({
     <html lang="ja" style={{ WebkitUserSelect: 'none', userSelect: 'none' } as React.CSSProperties}>
       <body style={{ WebkitUserSelect: 'none', userSelect: 'none' } as React.CSSProperties}>
         <ThemeRegistry>
-          {children}
+          <GlobalJobProvider>
+            {children}
+          </GlobalJobProvider>
         </ThemeRegistry>
       </body>
     </html>

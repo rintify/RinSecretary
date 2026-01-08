@@ -3,8 +3,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { 
     Dialog, DialogContent, Box, Typography, IconButton, 
-    TextField, Button, Paper, Avatar, Tooltip, Select, MenuItem, FormControl,
-    Accordion, AccordionSummary, AccordionDetails
+    TextField, Button, Tooltip, Select, MenuItem, FormControl,
+    Accordion, AccordionSummary, AccordionDetails,
+    CircularProgress, Snackbar, Alert, Paper
 } from '@mui/material';
 import { 
     Close as CloseIcon, 
@@ -25,9 +26,10 @@ import MarkdownDisplay from './MarkdownDisplay';
 import { createMemo } from '@/app/memos/actions';
 import { useRouter } from 'next/navigation';
 import { chatWithAI, getAIConfigs } from '@/lib/ai-actions';
+import { submitJob, getJob } from '@/app/actions/job';
 
 
-interface Message {
+export interface Message {
     id: string;
     role: 'user' | 'assistant';
     content: string;
@@ -44,10 +46,11 @@ interface Message {
 interface AIChatModalProps {
     open: boolean;
     onClose: () => void;
+    initialMessages?: Message[];
 }
 
-export default function AIChatModal({ open, onClose }: AIChatModalProps) {
-    const [messages, setMessages] = useState<Message[]>([]);
+export default function AIChatModal({ open, onClose, initialMessages }: AIChatModalProps) {
+    const [messages, setMessages] = useState<Message[]>(initialMessages || []);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isSearchEnabled, setIsSearchEnabled] = useState(false);
@@ -58,8 +61,21 @@ export default function AIChatModal({ open, onClose }: AIChatModalProps) {
     const [configs, setConfigs] = useState<{id: string, name: string}[]>([]);
     const [selectedConfigId, setSelectedConfigId] = useState<string>('');
 
+    // Sync initialMessages when modal opens or prop changes
+    useEffect(() => {
+        if (open && initialMessages) {
+            setMessages(initialMessages);
+        } else if (open && !initialMessages) {
+            // New chat
+            setMessages([]);
+        }
+    }, [open, initialMessages]);
+
     // Compose Modal State
     const [isComposeOpen, setIsComposeOpen] = useState(false);
+    
+    // Toast State
+    const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -115,143 +131,96 @@ export default function AIChatModal({ open, onClose }: AIChatModalProps) {
         setIsLoading(true);
         setIsComposeOpen(false); // Close compose modal on send
 
-        const controller = new AbortController();
-        abortControllerRef.current = controller;
+        // Add placeholder for AI response
+        const aiMsgId = (Date.now() + 1).toString();
+        const pendingAiMsg: Message = {
+            id: aiMsgId,
+            role: 'assistant',
+            content: '',
+            timestamp: new Date()
+        };
+        setMessages(prev => [...prev, pendingAiMsg]);
 
         try {
-            // Initial placeholder for AI message
-            const aiMsgId = (Date.now() + 1).toString();
-            const initialAiMsg: Message = {
-                id: aiMsgId,
-                role: 'assistant',
-                content: '',
-                timestamp: new Date()
-            };
-            setMessages(prev => [...prev, initialAiMsg]);
-
-            const response = await fetch('/api/chat/stream', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    messages: [...messages, userMsg].map(m => ({ 
-                        role: m.role as 'user'|'assistant', 
-                        content: m.content,
-                        images: m.images
-                    })),
-                    useSearch: isSearchEnabled,
-                    useImageGen: isImageGenEnabled,
-                    configId: selectedConfigId
-                }),
-                signal: controller.signal
+            // Submit Job
+            const job = await submitJob('AI_CHAT', {
+                messages: [...messages, userMsg].map(m => ({ 
+                    role: m.role as 'user'|'assistant', 
+                    content: m.content,
+                    images: m.images
+                })),
+                useSearch: isSearchEnabled,
+                useImageGen: isImageGenEnabled,
+                configId: selectedConfigId
             });
 
-            if (!response.ok) throw new Error(response.statusText);
-            
-            const reader = response.body?.getReader();
-            if (!reader) throw new Error('No reader');
-
-            const decoder = new TextDecoder();
-            let buffer = '';
-            
-            let currentContent = '';
-            let currentThought = '';
-            let currentImages: string[] = [];
-            let currentUsage: Message['usage'] | undefined = undefined;
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                const chunk = decoder.decode(value, { stream: true });
-                buffer += chunk;
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                    if (!line.trim()) continue;
-                    try {
-                        const data = JSON.parse(line);
-                        
-                        if (data.type === 'text') {
-                            currentContent += data.content;
-                        } else if (data.type === 'thought') {
-                            // Accumulate thought, add newline if needed? 
-                            // API usually sends fragments.
-                            currentContent = currentContent; // no-op
-                            currentThought += data.content;
-                        } else if (data.type === 'image') {
-                            currentImages.push(data.content);
-                        } else if (data.type === 'usage') {
-                            currentUsage = data.usage;
+            // Poll for result
+            const pollResult = async () => {
+                // Use getJob imported at top (need to add import if missing, or use submitJob return if it had logic but it doesn't)
+                // Actually need to import getJob.
+                const maxAttempts = 120; // 2 minutes max
+                for (let i = 0; i < maxAttempts; i++) {
+                    await new Promise(r => setTimeout(r, 1000));
+                    const updatedJob = await getJob(job.id);
+                    if (!updatedJob) break;
+                    
+                    if (updatedJob.status === 'COMPLETED' && updatedJob.result) {
+                        try {
+                            const result = JSON.parse(updatedJob.result);
+                            setMessages(prev => prev.map(m => 
+                                m.id === aiMsgId 
+                                    ? { ...m, content: result.content || '', images: result.images } 
+                                    : m
+                            ));
+                        } catch (e) {
+                            console.error('Failed to parse AI result', e);
                         }
-
-                        // Update state
+                        break;
+                    } else if (updatedJob.status === 'FAILED') {
                         setMessages(prev => prev.map(m => 
                             m.id === aiMsgId 
-                                ? { 
-                                    ...m, 
-                                    content: currentContent, 
-                                    thought: currentThought || undefined,
-                                    images: currentImages.length > 0 ? [...currentImages] : undefined,
-                                    usage: currentUsage
-                                  } 
+                                ? { ...m, content: 'エラーが発生しました。' } 
                                 : m
                         ));
-                    } catch (e) {
-                        console.error('JSON Parse Error', e);
+                        break;
                     }
                 }
-            }
-        } catch (error: any) {
-            if (error.name === 'AbortError') {
-                console.log('Fetch aborted');
-                // Optional: Indicate interruption in UI? 
-                // Currently just stops updating, which is fine.
-            } else {
-                console.error(error);
-                const errorMsg: Message = {
-                    id: (Date.now() + 2).toString(),
-                    role: 'assistant',
-                    content: '通信エラーが発生しました。',
-                    timestamp: new Date()
-                };
-                setMessages(prev => [...prev, errorMsg]);
-            }
-        } finally {
-            setIsLoading(false);
-            abortControllerRef.current = null;
-        }
+                setIsLoading(false);
+            };
+            pollResult();
 
+        } catch (error: any) {
+            console.error(error);
+            setMessages(prev => prev.map(m => 
+                m.id === aiMsgId 
+                    ? { ...m, content: 'ジョブの送信に失敗しました。' } 
+                    : m
+            ));
+            setIsLoading(false);
+        }
     };
 
     const handleEndChat = async () => {
         if (isLoading) {
-            if (!confirm('回答の生成中です。チャットを終了しますか？')) {
-                return;
-            }
-            // Abort the running request
             abortControllerRef.current?.abort();
+            setIsLoading(false);
         }
+        onClose();
+    };
 
-        if (messages.length === 0) {
-            onClose();
-            return;
-        }
-
+    const handleSaveMemo = async () => {
+        if (messages.length === 0) return;
+        
+        const historyText = messages.map((m: any) => 
+            `**${m.role === 'user' ? 'User' : 'AI'}**: ${m.content}`
+        ).join('\n\n');
+        
         try {
-            // Format chat history
-            const content = messages.map(m => 
-                `**${m.role === 'user' ? 'User' : 'AI'}**: ${m.content}`
-            ).join('\n\n');
-
-            const title = `AI Chat Log ${new Date().toLocaleString()}`;
-            const memoContent = `# ${title}\n\n${content}`;
-
-            await createMemo(memoContent);
-            onClose();
+            await createMemo(`# AI Chat Log (${new Date().toLocaleString()})\n\n${historyText}`);
+            setToast({ open: true, message: 'メモに保存しました', severity: 'success' });
         } catch (e) {
-            console.error('Failed to save memo', e);
-            alert('メモの保存に失敗しました');
+            console.error(e);
+            setToast({ open: true, message: '保存に失敗しました', severity: 'error' });
         }
     };
 
@@ -381,11 +350,20 @@ export default function AIChatModal({ open, onClose }: AIChatModalProps) {
             <Box sx={{ p: 2, display: 'flex', gap: 2 }} onClick={handleEndChat}>
                 <Button 
                     variant="outlined" 
+                    color="inherit" 
+                    fullWidth 
+                    onClick={(e) => { e.stopPropagation(); handleSaveMemo(); }}
+                    disabled={messages.length === 0}
+                >
+                    メモに保存
+                </Button>
+                <Button 
+                    variant="outlined" 
                     color="error" 
                     fullWidth 
                     onClick={(e) => { e.stopPropagation(); handleEndChat(); }}
                 >
-                    チャット終了
+                    終了
                 </Button>
                 <Button 
                     variant="contained" 
@@ -395,7 +373,7 @@ export default function AIChatModal({ open, onClose }: AIChatModalProps) {
                     onClick={(e) => { e.stopPropagation(); setIsComposeOpen(true); }}
                     disabled={isLoading}
                 >
-                    メッセージ作成
+                    作成
                 </Button>
             </Box>
 
@@ -508,6 +486,17 @@ export default function AIChatModal({ open, onClose }: AIChatModalProps) {
                     </Box>
                 </DialogContent>
             </Dialog>
+            {/* Toast Notification */}
+            <Snackbar
+                open={toast.open}
+                autoHideDuration={6000}
+                onClose={() => setToast({ ...toast, open: false })}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            >
+                <Alert onClose={() => setToast({ ...toast, open: false })} severity={toast.severity} sx={{ width: '100%' }}>
+                    {toast.message}
+                </Alert>
+            </Snackbar>
         </Dialog>
     );
 }

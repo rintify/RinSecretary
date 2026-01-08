@@ -64,7 +64,7 @@ export default function Home() {
     }, []);
 
     // Shared File Listener (Drag & Drop / Paste / Polling)
-    const { handlePaste, handleDrop, handleDragOver, isUploading } = useSharedFileListener({ 
+    const { handlePaste, handleDrop, handleDragOver } = useSharedFileListener({ 
         onOpenModal: handleOpenModal, 
         currentDate 
     });
@@ -131,69 +131,56 @@ export default function Home() {
 
     return (
         <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
-            {/* Header */}
-            <AppHeader
-                currentDate={currentDate}
-                onDateChange={setCurrentDate}
-                isSyncing={isSyncing}
-                syncError={syncError}
-                isSyncedRecently={isSyncedRecently}
-                lastSyncedAt={lastSyncedAt}
-                onOpenSyncModal={() => setShowSyncModal(true)}
-                onOpenModal={handleOpenModal}
-            />
-            
-            {/* Main Display */}
-            <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative', mt: '60px', height: 'calc(100dvh - 60px)' }}>
-                <TimeTableSwiper 
-                    currentDate={currentDate} 
+                {/* Header */}
+                <AppHeader
+                    currentDate={currentDate}
                     onDateChange={setCurrentDate}
-                    onNewTask={handleNewEvent} 
-                    onEditTask={handleTaskClick}
-                    refreshTrigger={taskRefreshTrigger}
-                    expiredCount={expiredCount}
-                    onOpenExpired={() => setActiveModal('EXPIRED_TASKS')}
-                    googleEvents={googleEvents}
-                    tasks={tasks}
+                    isSyncing={isSyncing}
+                    syncError={syncError}
+                    isSyncedRecently={isSyncedRecently}
+                    lastSyncedAt={lastSyncedAt}
+                    onOpenSyncModal={() => setShowSyncModal(true)}
+                    onOpenModal={handleOpenModal}
                 />
                 
-                {/* FABs */}
-                <ActionFabs onOpenModal={handleOpenModal} />
-            </Box>
+                {/* Main Display */}
+                <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative', mt: '60px', height: 'calc(100dvh - 60px)' }}>
+                    <TimeTableSwiper 
+                        currentDate={currentDate} 
+                        onDateChange={setCurrentDate}
+                        onNewTask={handleNewEvent} 
+                        onEditTask={handleTaskClick}
+                        refreshTrigger={taskRefreshTrigger}
+                        expiredCount={expiredCount}
+                        onOpenExpired={() => setActiveModal('EXPIRED_TASKS')}
+                        googleEvents={googleEvents}
+                        tasks={tasks}
+                    />
+                    
+                    {/* FABs */}
+                    <ActionFabs onOpenModal={handleOpenModal} />
+                </Box>
 
-            {/* All Modals */}
-            <ModalController
-                activeModal={activeModal}
-                modalData={modalData}
-                currentDate={currentDate}
-                onCloseModal={handleCloseModal}
-                onEditFromDetail={handleEditFromDetail}
-                onTaskRefresh={() => setTaskRefreshTrigger(prev => prev + 1)}
-                onCalendarRefresh={() => setCalendarRefreshTrigger(prev => prev + 1)}
-                onTaskClick={handleTaskClick}
-                showSyncModal={showSyncModal}
-                onCloseSyncModal={() => setShowSyncModal(false)}
-                isSyncing={isSyncing}
-                syncError={syncError}
-                isSyncedRecently={isSyncedRecently}
-                lastSyncedAt={lastSyncedAt}
-                unreadSummaries={unreadSummaries}
-                showUnreadModal={showUnreadModal}
-                onCloseUnreadModal={() => setShowUnreadModal(false)}
-            />
-            {/* Loading Overlay */}
-            <Backdrop
-                sx={{ 
-                    color: '#fff', 
-                    zIndex: (theme) => theme.zIndex.modal + 100,
-                    flexDirection: 'column',
-                    gap: 2
-                }}
-                open={!!isUploading}
-            >
-                <CircularProgress color="inherit" />
-                <Typography variant="h6">アップロード中...</Typography>
-            </Backdrop>
-        </Box>
+                {/* All Modals */}
+                <ModalController
+                    activeModal={activeModal}
+                    modalData={modalData}
+                    currentDate={currentDate}
+                    onCloseModal={handleCloseModal}
+                    onEditFromDetail={handleEditFromDetail}
+                    onTaskRefresh={() => setTaskRefreshTrigger(prev => prev + 1)}
+                    onCalendarRefresh={() => setCalendarRefreshTrigger(prev => prev + 1)}
+                    onTaskClick={handleTaskClick}
+                    showSyncModal={showSyncModal}
+                    onCloseSyncModal={() => setShowSyncModal(false)}
+                    isSyncing={isSyncing}
+                    syncError={syncError}
+                    isSyncedRecently={isSyncedRecently}
+                    lastSyncedAt={lastSyncedAt}
+                    unreadSummaries={unreadSummaries}
+                    showUnreadModal={showUnreadModal}
+                    onCloseUnreadModal={() => setShowUnreadModal(false)}
+                />
+            </Box>
     );
 }

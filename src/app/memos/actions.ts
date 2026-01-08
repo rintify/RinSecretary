@@ -102,7 +102,6 @@ export async function createEmptyMemo() {
 }
 
 export async function createMemo(content: string) {
-// ...
   const session = await devAuth();
   if (!session?.user?.email) throw new Error('Unauthorized');
 
@@ -114,6 +113,10 @@ export async function createMemo(content: string) {
     throw new Error('User not found');
   }
 
+  return createMemoInternal(user.id, content);
+}
+
+export async function createMemoInternal(userId: string, content: string) {
   const title = extractTitle(content);
   const thumbnailPath = extractThumbnail(content);
 
@@ -121,7 +124,7 @@ export async function createMemo(content: string) {
     data: {
       title,
       content,
-      userId: user.id,
+      userId,
       thumbnailPath,
     },
   });
