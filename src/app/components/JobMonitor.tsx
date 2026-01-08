@@ -24,6 +24,15 @@ export default function JobMonitor() {
 
     // 1. Monitor Jobs for 0.5s rule and individual job removal after 0.4s
     const jobRemovalTimers = React.useRef<Record<string, NodeJS.Timeout>>({});
+    const [hiddenJobIds, setHiddenJobIds] = React.useState<Set<string>>(new Set());
+
+    const dismissJobLocally = (jobId: string) => {
+        setHiddenJobIds(prev => {
+            const next = new Set(prev);
+            next.add(jobId);
+            return next;
+        });
+    };
 
     React.useEffect(() => {
         // Track completion and set up removal timers
@@ -36,7 +45,7 @@ export default function JobMonitor() {
                 // Set timer to remove this job after 0.4s
                 if (!jobRemovalTimers.current[job.id]) {
                     jobRemovalTimers.current[job.id] = setTimeout(() => {
-                        removeJob(job.id);
+                        dismissJobLocally(job.id);
                         delete jobRemovalTimers.current[job.id];
                     }, 400);
                 }
@@ -62,7 +71,8 @@ export default function JobMonitor() {
 
         if (hasRunningJobs || hasPendingRemovals) {
             // Check if there are any NEW running jobs (not seen before)
-            const currentRunningIds = new Set(jobs.filter(j => j.status === 'RUNNING' || j.status === 'PENDING').map(j => j.id));
+            const visibleJobs = jobs.filter(j => !hiddenJobIds.has(j.id));
+            const currentRunningIds = new Set(visibleJobs.filter(j => j.status === 'RUNNING' || j.status === 'PENDING').map(j => j.id));
             const hasNewJob = [...currentRunningIds].some(id => !prevJobIds.current.has(id));
             
             if (hasNewJob) {
@@ -94,7 +104,7 @@ export default function JobMonitor() {
                 setIsVisible(false);
             }
         }
-    }, [jobs, isVisible, isDismissed, removeJob]);
+    }, [jobs, isVisible, isDismissed, hiddenJobIds]);
 
     // 2. Auto-close on interaction (Global Click/KeyDown)
     React.useEffect(() => {
@@ -212,7 +222,7 @@ export default function JobMonitor() {
 
                 <Box sx={{ maxHeight: 300, overflowY: 'auto', p: 1 }}>
                     <AnimatePresence>
-                        {jobs.map((job) => (
+                        {jobs.filter(j => !hiddenJobIds.has(j.id)).map((job) => (
                             <motion.div
                                 key={job.id}
                                 initial={{ opacity: 0, height: 0 }}
@@ -220,10 +230,10 @@ export default function JobMonitor() {
                                 exit={{ opacity: 0, height: 0 }}
                                 transition={{ duration: 0.3 }}
                             >
-                                 <JobItem 
+                                <JobItem 
                                     job={job} 
                                     onCancel={() => cancelJob(job.id)} 
-                                    onDismiss={() => removeJob(job.id)} 
+                                    onDismiss={() => dismissJobLocally(job.id)} 
                                     onView={() => handleViewResult(job)}
                                 />
                             </motion.div>
