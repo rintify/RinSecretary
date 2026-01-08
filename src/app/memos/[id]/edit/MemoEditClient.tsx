@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Box, IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Divider, useTheme, useMediaQuery, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button } from '@mui/material';
+import { Box, IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Divider, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button } from '@mui/material';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { ArrowBack as ArrowBackIcon, Folder as FolderIcon, Delete as DeleteIcon, Check as CheckIcon, FormatListNumbered as LineNumberIcon, MoreVert as MoreVertIcon, Code as CodeIcon, Edit as EditIcon, FiberManualRecord as UnsavedIcon, Done as SavedIcon } from '@mui/icons-material';
@@ -9,6 +9,7 @@ import { CircularProgress, Tooltip } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { useRouter } from 'next/navigation';
 import { MEMO_COLOR } from '@/app/utils/colors';
+import { useDevice } from '@/app/context/DeviceContext';
 import MemoHeader from '@/app/components/MemoHeader';
 import MemoComposer, { MemoComposerRef, SaveStatus } from '@/app/components/MemoComposer';
 import MemoFileManagement, { Attachment } from '@/app/components/MemoFileManagement';
@@ -24,13 +25,12 @@ interface MemoEditClientProps {
 
 export default function MemoEditClient({ memo, isNew }: MemoEditClientProps) {
     const router = useRouter();
-
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const { isComputer } = useDevice();
     const composerRef = useRef<MemoComposerRef>(null);
     const [isFileManagementOpen, setIsFileManagementOpen] = useState(false);
     const [showLineNumbers, setShowLineNumbers] = useState(false);
-    const [editorMode, setEditorMode] = useState<'monaco' | 'plain'>(isMobile ? 'plain' : 'monaco');
+    // Default to 'monaco' (rich editor) if on computer, otherwise 'plain' (better for mobile inputs)
+    const [editorMode, setEditorMode] = useState<'monaco' | 'plain'>(isComputer ? 'monaco' : 'plain');
     const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
     const [lastSavedAt, setLastSavedAt] = useState<Date | undefined>(memo.updatedAt);
     const [timeDisplay, setTimeDisplay] = useState('');

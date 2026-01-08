@@ -7,10 +7,15 @@ import { MEMO_COLOR } from '../utils/colors';
 import { createEmptyMemo, createMemo, createMemoWithFile } from './actions';
 import { useGlobalJobs } from '../context/GlobalJobContext';
 import { useToast } from '../context/ToastContext';
+import { useDevice } from '../context/DeviceContext';
 
 export function MemoListFabs() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
+    
+    // Check if on computer to decide whether to show Paste FAB
+    // If we are on a computer, we assume drag & drop or global paste (Ctrl+V) is preferred/available
+    const { isComputer } = useDevice();
 
     const { addClientJob, updateClientJob } = useGlobalJobs();
     const { showToast } = useToast();
@@ -109,14 +114,17 @@ export function MemoListFabs() {
 
     return (
         <Box sx={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-            <Fab 
-                aria-label="paste" 
-                onClick={handlePasteCreate}
-                disabled={loading}
-                sx={{ bgcolor: 'background.paper', color: MEMO_COLOR, '&:hover': { bgcolor: 'action.hover' } }}
-            >
-                {loading ? <CircularProgress size={24} color="inherit" /> : <PasteIcon />}
-            </Fab>
+            {/* Only show Paste FAB if NOT on computer (i.e. mobile/tablet touch devices where global paste is harder) */}
+            {!isComputer && (
+                <Fab 
+                    aria-label="paste" 
+                    onClick={handlePasteCreate}
+                    disabled={loading}
+                    sx={{ bgcolor: 'background.paper', color: MEMO_COLOR, '&:hover': { bgcolor: 'action.hover' } }}
+                >
+                    {loading ? <CircularProgress size={24} color="inherit" /> : <PasteIcon />}
+                </Fab>
+            )}
             <Fab 
                 aria-label="add" 
                 onClick={handleCreate}
