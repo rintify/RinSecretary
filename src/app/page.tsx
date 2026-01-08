@@ -1,84 +1,20 @@
 'use client'; 
 
-import React, { useState, useRef, Suspense, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Event as EventIcon, TaskAlt as TaskIcon, Note as MemoIcon } from '@mui/icons-material';
-import { format, isSameDay, subDays, addDays, differenceInMinutes } from 'date-fns';
-import { ja } from 'date-fns/locale';
-import Slide from '@mui/material/Slide';
-import { TransitionProps } from '@mui/material/transitions';
+import React, { useState } from 'react';
+import { isSameDay, subDays } from 'date-fns';
+import { Box } from '@mui/material';
 
-const SlideTransition = React.forwardRef(function Transition(
-  props: TransitionProps & {
-    children: React.ReactElement<any, any>;
-  },
-  ref: React.Ref<unknown>,
-) {
-  return <Slide direction="up" ref={ref} {...props} />;
-});
+// Hooks
+import { useCalendarData } from './hooks/useCalendarData';
+import { useTaskData } from './hooks/useTaskData';
+import { useMailSummary } from './hooks/useMailSummary';
 
-import TaskForm from './components/TaskForm';
-
-import EventForm from './components/EventForm';
-import TaskDetailModal from './components/TaskDetailModal';
-import EventDetailModal from './components/EventDetailModal';
-import AlarmForm from './components/AlarmForm';
-import AlarmDetailModal from './components/AlarmDetailModal';
-import SettingsModal from './components/SettingsModal';
-import RegularTaskSettingsModal from './components/RegularTaskSettingsModal';
-import MailSummaryResultModal from '@/app/components/mail/MailSummaryResultModal';
-import { fetchMyUnreadMailSummaries } from '@/lib/mail-scheduler-actions';
-import FreeTimeModal from './components/FreeTimeModal';
-import ExpiredTaskListModal from './components/ExpiredTaskListModal';
-import AIChatModal from './components/AIChatModal';
-import MailSettingsModal from './components/MailSettingsModal';
-
-import { getExpiredTaskCount } from '@/lib/task-actions';
-import { fetchGoogleEvents, checkPrimaryGoogleAccountStatus } from '@/lib/calendar-actions';
-import { getAlarms } from '@/lib/alarm-actions';
-import { TaskLocal } from './components/TimeTable';
-
-import { 
-    IconButton, Box, Fab, Dialog, DialogContent, DialogTitle, DialogActions, Typography,
-    useTheme, useMediaQuery, Tooltip, Button, 
-    Menu, MenuItem, ListItemIcon, ListItemText, 
-    CircularProgress, Divider, Badge 
-} from '@mui/material';
-import { 
-    Menu as MenuIcon, 
-    Add as AddIcon, 
-    ChevronLeft, 
-    ChevronRight, 
-    MyLocation as MyLocationIcon,
-    AccessTime as AccessTimeIcon,
-    Settings as SettingsIcon,
-    Warning as WarningIcon,
-    Notifications as AlarmIcon,
-    DataUsage as DataUsageIcon,
-    Chat as ChatIcon,
-    Email as MailIcon,
-    Google as GoogleIcon,
-    CloudUpload as BackupIcon
-} from '@mui/icons-material';
-
+// Components
+import AppHeader, { ModalType } from './components/layout/AppHeader';
+import ActionFabs from './components/layout/ActionFabs';
+import ModalController from './components/modals/ModalController';
 import TimeTableSwiper from './components/TimeTableSwiper';
-import CustomDatePicker from './components/ui/CustomDatePicker';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { AppRegistration as BulkIcon } from '@mui/icons-material';
-import BulkEventCreator from './components/BulkEventCreator';
-import ImmediateTaskFlow from './components/immediate/ImmediateTaskFlow';
-import ImmediateEventFlow from './components/immediate/ImmediateEventFlow';
-import ImmediateAlarmFlow from './components/immediate/ImmediateAlarmFlow';
-import GoogleSettingsModal from './components/GoogleSettingsModal';
-import BackupSettingsModal from './components/BackupSettingsModal';
-// import LongPressFab from './components/ui/LongPressFab'; // Unused
 
-import DataUsageModal from './components/DataUsageModal';
-
-import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR, MEMO_COLOR } from './utils/colors';
-
-// Helper to get the "Business Date" (shifts day back if before 4 AM)
 const getBusinessDate = () => {
     const now = new Date();
     if (now.getHours() < 4) {
@@ -88,735 +24,144 @@ const getBusinessDate = () => {
 };
 
 export default function Home() {
-  const [currentDate, setCurrentDate] = useState(getBusinessDate());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showSyncModal, setShowSyncModal] = useState(false);
+    const [currentDate, setCurrentDate] = useState(getBusinessDate());
+    const [showSyncModal, setShowSyncModal] = useState(false);
+    const [activeModal, setActiveModal] = useState<ModalType>('NONE');
+    const [modalData, setModalData] = useState<any>(null);
+    
+    // Refresh triggers
+    const [taskRefreshTrigger, setTaskRefreshTrigger] = useState(0);
+    const [calendarRefreshTrigger, setCalendarRefreshTrigger] = useState(0);
 
-  // Modal State
-  // Modal State
-  // Modal State
-  // Modal State
-  const [activeModal, setActiveModal] = useState<'NONE' | 'NEW_EVENT' | 'EDIT_TASK' | 'EDIT_EVENT' | 'DETAIL_TASK' | 'DETAIL_EVENT' | 'EDIT_ALARM' | 'DETAIL_ALARM' | 'SETTINGS' | 'FREE_TIME' | 'BULK_CREATE' | 'IMMEDIATE_TASK' | 'IMMEDIATE_EVENT' | 'IMMEDIATE_ALARM' | 'REGULAR_TASK_SETTINGS' | 'DATA_USAGE' | 'EXPIRED_TASKS' | 'AI_CHAT' | 'MAIL_SETTINGS' | 'GOOGLE_SETTINGS' | 'BACKUP_SETTINGS'>('NONE');
+    // Custom hooks for data fetching (non-blocking)
+    const { 
+        googleEvents, 
+        isSyncing, 
+        lastSyncedAt, 
+        isSyncedRecently, 
+        syncError 
+    } = useCalendarData({ 
+        currentDate, 
+        refreshTrigger: calendarRefreshTrigger 
+    });
 
-  const [modalData, setModalData] = useState<any>(null); // { startTime } or { id }
+    const { tasks, expiredCount } = useTaskData({ 
+        currentDate, 
+        refreshTrigger: taskRefreshTrigger 
+    });
 
+    const { 
+        unreadSummaries, 
+        showUnreadModal, 
+        setShowUnreadModal 
+    } = useMailSummary();
 
-
-  const handleNewEvent = (startTime?: string) => {
-    setModalData({ startTime });
-    setActiveModal('NEW_EVENT');
-  };
-
-
-
-  const handleTaskClick = (task: any) => {
-      setModalData(task);
-      if (task.deadline) {
-        setActiveModal('DETAIL_TASK');
-      } else if (task.type === 'ALARM') {
-        setActiveModal('DETAIL_ALARM');
-      } else {
-        setActiveModal('DETAIL_EVENT');
-      }
-  };
-
-  const handleEditFromDetail = () => {
-      // modalData is the task
-      if (modalData?.deadline) {
-          setActiveModal('EDIT_TASK');
-      } else if (modalData?.type === 'ALARM') {
-          setActiveModal('EDIT_ALARM');
-      } else {
-          setActiveModal('EDIT_EVENT');
-      }
-  };
-
-  const handleCloseModal = (arg?: any) => {
-      const closingModal = activeModal;
-      setActiveModal('NONE');
-      setModalData(null);
-      
-      // Update logic: Only refresh what's needed
-      const isCalendar = closingModal.includes('EVENT') || closingModal.includes('ALARM') || closingModal === 'SETTINGS' || closingModal === 'FREE_TIME';
-      const isTask = closingModal.includes('TASK') || closingModal === 'BULK_CREATE' || closingModal === 'SETTINGS' || closingModal === 'FREE_TIME' || closingModal === 'EXPIRED_TASKS' || closingModal === 'REGULAR_TASK_SETTINGS';
-      // AI Chat doesn't need refresh trigger usually, but if it saves memo, memo list might need refresh? 
-      // Current logic is for task/calendar refresh. Memo is separate.
-
-
-      if (isCalendar) {
-          setCalendarRefreshTrigger(prev => prev + 1);
-      }
-      if (isTask) {
-          setTaskRefreshTrigger(prev => prev + 1);
-      }
-
-      if (arg instanceof Date) {
-          // Convert the item's date to its corresponding business date
-          // If the time is before 4 AM, it belongs to the previous calendar day's business day
-          const itemDate = arg;
-          const businessDate = itemDate.getHours() < 4 ? subDays(itemDate, 1) : itemDate;
-          setCurrentDate(businessDate);
-      }
-  };
-  
-  const [taskRefreshTrigger, setTaskRefreshTrigger] = useState(0);
-  const [calendarRefreshTrigger, setCalendarRefreshTrigger] = useState(0);
-  const [memoLoading, setMemoLoading] = useState(false);
-  const [aiChatOpen, setAiChatOpen] = useState(false);
-  const [unreadSummaries, setUnreadSummaries] = useState<any[]>([]);
-  const [unreadSummariesOpen, setUnreadSummariesOpen] = useState(false);
-  const router = useRouter();
-
-  const handleCreateMemo = async () => {
-    if (memoLoading) return;
-    setMemoLoading(true);
-    try {
-        const { createEmptyMemo } = await import('./memos/actions');
-        const memo = await createEmptyMemo();
-        router.push(`/memos/${memo.id}/edit?new=true`);
-        router.refresh();
-    } catch (e) {
-        console.error(e);
-        setMemoLoading(false);
-        alert('メモ作成に失敗しました');
-    }
-  };
-
-  // Expired Tasks Badge
-  const [expiredCount, setExpiredCount] = useState(0);
-
-  useEffect(() => {
-    // Initial fetch
-    const fetchCount = async () => {
-        const count = await getExpiredTaskCount();
-        setExpiredCount(count);
+    // Modal handlers
+    const handleOpenModal = (modal: ModalType, data?: any) => {
+        setModalData(data ?? null);
+        setActiveModal(modal);
     };
-    fetchCount();
 
-    // Re-fetch on refreshTrigger (e.g. when modal closes)
-    if (activeModal === 'NONE') {
-        fetchCount();
-    }
-  }, [taskRefreshTrigger, activeModal]);
+    const handleNewEvent = (startTime?: string) => {
+        setModalData({ startTime });
+        setActiveModal('NEW_EVENT');
+    };
 
-  // Check for unread summaries on mount
-  useEffect(() => {
-      fetchMyUnreadMailSummaries().then(res => {
-          if (res.success && res.summaries && res.summaries.length > 0) {
-              setUnreadSummaries(res.summaries);
-              setUnreadSummariesOpen(true);
-          }
-      }).catch(console.error);
-  }, []); // Empty dependency array means this runs once on mount
+    const handleTaskClick = (task: any) => {
+        setModalData(task);
+        if (task.deadline) {
+            setActiveModal('DETAIL_TASK');
+        } else if (task.type === 'ALARM') {
+            setActiveModal('DETAIL_ALARM');
+        } else {
+            setActiveModal('DETAIL_EVENT');
+        }
+    };
 
-  // Google Events & Alarms Sync
-  const [googleEvents, setGoogleEvents] = useState<TaskLocal[]>([]);
-  const [tasks, setTasks] = useState<TaskLocal[]>([]); // Synched Local Tasks
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [calendarFetchSuccess, setCalendarFetchSuccess] = useState<boolean | null>(null); // null=未取得, true=成功, false=失敗
-  const [primaryAccountValid, setPrimaryAccountValid] = useState<boolean | null>(null); // メインアカウントの認証状態
-  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const [now, setNow] = useState(new Date());
+    const handleEditFromDetail = () => {
+        if (modalData?.deadline) {
+            setActiveModal('EDIT_TASK');
+        } else if (modalData?.type === 'ALARM') {
+            setActiveModal('EDIT_ALARM');
+        } else {
+            setActiveModal('EDIT_EVENT');
+        }
+    };
 
-  // メインGoogleアカウントの認証状態をチェック
-  useEffect(() => {
-      checkPrimaryGoogleAccountStatus().then(result => {
-          setPrimaryAccountValid(result.valid);
-      }).catch(() => {
-          setPrimaryAccountValid(false);
-      });
-  }, [calendarRefreshTrigger]); // リフレッシュ時に再チェック
+    const handleCloseModal = (arg?: any) => {
+        const closingModal = activeModal;
+        setActiveModal('NONE');
+        setModalData(null);
+        
+        const isCalendar = closingModal.includes('EVENT') || closingModal.includes('ALARM') || closingModal === 'SETTINGS' || closingModal === 'FREE_TIME';
+        const isTask = closingModal.includes('TASK') || closingModal === 'BULK_CREATE' || closingModal === 'SETTINGS' || closingModal === 'FREE_TIME' || closingModal === 'EXPIRED_TASKS' || closingModal === 'REGULAR_TASK_SETTINGS';
 
-  // Client-side caching for Calendar
-  const [calendarCacheRange, setCalendarCacheRange] = useState<{ start: Date; end: Date } | null>(null);
-  const prevTriggerRef = useRef(calendarRefreshTrigger);
-  const FETCH_WINDOW_DAYS = 7;
-  const BUFFER_DAYS = 2;
+        if (isCalendar) {
+            setCalendarRefreshTrigger(prev => prev + 1);
+        }
+        if (isTask) {
+            setTaskRefreshTrigger(prev => prev + 1);
+        }
 
-  const loadEvents = async () => {
-      // Check cache validity
-      const isForce = calendarRefreshTrigger !== prevTriggerRef.current;
-      prevTriggerRef.current = calendarRefreshTrigger;
+        if (arg instanceof Date) {
+            const itemDate = arg;
+            const businessDate = itemDate.getHours() < 4 ? subDays(itemDate, 1) : itemDate;
+            setCurrentDate(businessDate);
+        }
+    };
 
-      const inRange = calendarCacheRange && 
-          currentDate > addDays(calendarCacheRange.start, BUFFER_DAYS) && 
-          currentDate < subDays(calendarCacheRange.end, BUFFER_DAYS);
-
-      // If legitimate cache hit and not force refresh, skip
-      // ただし、前回のfetchが失敗している場合は再試行する
-      if (!isForce && inRange && googleEvents.length > 0 && calendarFetchSuccess === true) {
-          return;
-      }
-
-      setIsSyncing(true);
-      // Fetch wider window
-      const start = subDays(currentDate, FETCH_WINDOW_DAYS);
-      const end = addDays(currentDate, FETCH_WINDOW_DAYS);
-      
-      try {
-          const eventsPromise = fetchGoogleEvents(start, end);
-          const alarmsPromise = getAlarms(start, end);
-
-          const [events, alarms] = await Promise.all([eventsPromise, alarmsPromise]);
-          setGoogleEvents([...(events as TaskLocal[]), ...(alarms as TaskLocal[])]);
-          setLastSyncedAt(new Date());
-          setCalendarFetchSuccess(true); // 明示的に成功を記録
-          setCalendarCacheRange({ start, end });
-      } catch (e: any) {
-          // AUTH_ERROR is expected when token is expired/revoked, so we don't log it as error
-          if (e?.message !== 'AUTH_ERROR' && !e?.message?.includes('AUTH_ERROR')) {
-            console.error("Failed to load events/alarms", e);
-          }
-          setCalendarFetchSuccess(false); // 明示的に失敗を記録
-      } finally {
-          setIsSyncing(false);
-      }
-  };
-
-  const fetchTasks = async () => {
-      try {
-          const res = await fetch('/api/tasks');
-          if (res.ok) {
-              const data = await res.json();
-              setTasks(data);
-          }
-      } catch (e) { console.error("Failed to fetch tasks", e); }
-  };
-
-  useEffect(() => {
-      loadEvents();
-  }, [currentDate, calendarRefreshTrigger]);
-
-  useEffect(() => {
-    fetchTasks();
-  }, [currentDate, taskRefreshTrigger]);
-
-  // Update 'now' for sync status calculation
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60000); // Every minute
-    return () => clearInterval(timer);
-  }, []);
-
-  const timeSinceSync = lastSyncedAt ? differenceInMinutes(now, lastSyncedAt) : 999;
-  // 緑=成功かつ5分以内かつメインアカウント有効, 赤=失敗またはメインアカウント無効, 黄色=未取得または時間経過
-  const isSyncedRecently = calendarFetchSuccess === true && primaryAccountValid === true && timeSinceSync < 5;
-  const syncError = calendarFetchSuccess === false || primaryAccountValid === false;
-
-
-
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => setAnchorEl(event.currentTarget);
-  const handleMenuClose = () => setAnchorEl(null);
-
-  const theme = useTheme();
-  // Unused fullScreen var can be removed or kept? kept for safety if used later in unseen code? 
-  // Step 12 showed it used but I need to check where.
-  // Actually looking at Step 12, fullScreen is only declared, not used in JSX shown? 
-  // Wait, I see `maxWidth="sm" fullWidth` in Dialog. 
-  // Ah, let's keep it.
-  const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
-
-  return (
-    <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
-      {/* Custom Header */}
-      <Box sx={{ 
-          height: '60px', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'space-between', 
-          px: 2, 
-          borderBottom: 1, 
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
-          flexShrink: 0,
-          zIndex: 1200, // Elevated z-index
-          position: 'fixed', // Fixed position
-          top: 0,
-          left: 0,
-          right: 0
-      }}>
-          
-          {/* Main Navigation Group: Date Left Aligned */}
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-              <Button 
-                  onClick={() => setShowDatePicker(true)}
-                  sx={{ 
-                      color: 'text.primary',
-                      textTransform: 'none',
-                      fontSize: '1.4rem', 
-                      fontWeight: 'bold',
-                      minWidth: 'auto',
-                      whiteSpace: 'nowrap',
-                      lineHeight: 1,
-                      pl: 0, // Remove left padding to align to edge
-                      justifyContent: 'flex-start'
-                  }}
-              >
-                  {format(currentDate, 'MM/dd (E)', { locale: ja })}
-              </Button>
-              <CustomDatePicker 
-                  open={showDatePicker}
-                  onClose={() => setShowDatePicker(false)}
-                  value={currentDate}
-                  onChange={setCurrentDate}
-              />
-              
-              <Tooltip title={isSyncing ? "同期中..." : (syncError ? "認証エラー：再ログインしてください" : `最終同期: ${lastSyncedAt ? format(lastSyncedAt, 'HH:mm') : '未同期'}`)}>
-                  <Box 
-                      onClick={() => setShowSyncModal(true)}
-                      sx={{ 
-                          ml: 1, 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          height: 24, 
-                          width: 24, 
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          '&:hover': { opacity: 0.8 }
-                      }}
-                  >
-                      <AnimatePresence mode="wait">
-                          {isSyncing ? (
-                              <motion.div
-                                  key="syncing"
-                                  initial={{ opacity: 0, scale: 0.5 }}
-                                  animate={{ opacity: 1, scale: 1 }}
-                                  exit={{ opacity: 0, scale: 0.5 }}
-                                  transition={{ duration: 0.2 }}
-                              >
-                                  <CircularProgress size={12} thickness={5} color="inherit" sx={{ opacity: 0.6, display: 'block' }} />
-                              </motion.div>
-                          ) : (
-                              <motion.div
-                                  key="status-dot"
-                                  initial={{ scale: 0.8 }}
-                                  animate={{ 
-                                      scale: 1,
-                                      backgroundColor: syncError ? '#f44336' : (isSyncedRecently ? '#4caf50' : '#ff9800')
-                                  }}
-                                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                                  style={{
-                                      width: 8,
-                                      height: 8,
-                                      borderRadius: '50%',
-                                  }}
-                              />
-                          )}
-                      </AnimatePresence>
-                  </Box>
-              </Tooltip>
-          </Box>
-
-          {/* Right: Menu */}
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <IconButton onClick={() => setCurrentDate(getBusinessDate())} size="small" sx={{ mr: 0, color: 'text.secondary' }}>
-                  <MyLocationIcon />
-              </IconButton>
-              <IconButton onClick={handleMenuOpen}>
-                  <MenuIcon />
-              </IconButton>
-              <Menu
-                  anchorEl={anchorEl}
-                  open={Boolean(anchorEl)}
-                  onClose={handleMenuClose}
-              >
-                  <MenuItem onClick={() => { handleMenuClose(); setActiveModal('EXPIRED_TASKS'); }}>
-                      <ListItemIcon>
-                          <WarningIcon fontSize="small" color="error" />
-                      </ListItemIcon>
-                      <ListItemText sx={{ color: 'error.main' }}>期限切れタスク</ListItemText>
-                  </MenuItem>
-                  <MenuItem onClick={() => { handleMenuClose(); setActiveModal('FREE_TIME'); }}>
-                      <ListItemIcon>
-                          <AccessTimeIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>空き時間</ListItemText>
-                  </MenuItem>
-                  <MenuItem onClick={() => { handleMenuClose(); setActiveModal('BULK_CREATE'); }}>
-                      <ListItemIcon>
-                          <BulkIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>一括作成</ListItemText>
-                  </MenuItem>
-                  <MenuItem onClick={() => { handleMenuClose(); setActiveModal('SETTINGS'); }}>
-                      <ListItemIcon>
-                          <SettingsIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>設定</ListItemText>
-                  </MenuItem>
-                  <MenuItem onClick={() => { handleMenuClose(); setActiveModal('REGULAR_TASK_SETTINGS'); }}>
-                      <ListItemIcon>
-                           <TaskIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText>定期タスク設定</ListItemText>
-                  </MenuItem>
-                  <Divider />
-                  <MenuItem onClick={() => { handleMenuClose(); setActiveModal('DATA_USAGE'); }}>
-                       <ListItemIcon>
-                           <DataUsageIcon fontSize="small" />
-                       </ListItemIcon>
-                       <ListItemText>通信量</ListItemText>
-                   </MenuItem>
-                   <MenuItem onClick={() => { handleMenuClose(); setActiveModal('MAIL_SETTINGS'); }}>
-                       <ListItemIcon>
-                           <MailIcon fontSize="small" />
-                       </ListItemIcon>
-                       <ListItemText>メール設定</ListItemText>
-                   </MenuItem>
-                   <MenuItem onClick={() => { handleMenuClose(); setActiveModal('GOOGLE_SETTINGS'); }}>
-                       <ListItemIcon>
-                           <GoogleIcon fontSize="small" />
-                       </ListItemIcon>
-                       <ListItemText>Google設定</ListItemText>
-                   </MenuItem>
-                   <MenuItem onClick={() => { handleMenuClose(); setActiveModal('BACKUP_SETTINGS'); }}>
-                       <ListItemIcon>
-                           <BackupIcon fontSize="small" />
-                       </ListItemIcon>
-                       <ListItemText>バックアップ設定</ListItemText>
-                   </MenuItem>
-                   <Divider />
-                   <MenuItem onClick={() => { handleMenuClose(); router.push('/mail-summaries'); }}>
-                       <ListItemIcon>
-                           <MailIcon fontSize="small" />
-                       </ListItemIcon>
-                       <ListItemText>メール要約履歴</ListItemText>
-                   </MenuItem>
-                  <MenuItem onClick={async () => { 
-                      handleMenuClose(); 
-                      const { logout } = await import('@/lib/actions');
-                      await logout();
-                  }}>
-                      <ListItemIcon>
-                           <Box sx={{ color: 'error.main', display: 'flex' }}>
-                               <SettingsIcon fontSize="small" sx={{ opacity: 0 }} /> {/* Spacer */}
-                               {/* Or import Logout icon? Let's keep it simple or allow standard text */}
-                           </Box>
-                      </ListItemIcon>
-                      <ListItemText primaryTypographyProps={{ color: 'error' }}>ログアウト</ListItemText>
-                  </MenuItem>
-              </Menu>
-          </Box>
-      </Box>
-      
-      {/* Main Display with Swiper */}
-      <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative', mt: '60px', height: 'calc(100dvh - 60px)' }}>
-          <TimeTableSwiper 
-              currentDate={currentDate} 
-              onDateChange={setCurrentDate}
-              onNewTask={(time) => handleNewEvent(time)} 
-              onEditTask={handleTaskClick}
-              refreshTrigger={taskRefreshTrigger}
-              expiredCount={expiredCount}
-              onOpenExpired={() => setActiveModal('EXPIRED_TASKS')}
-              googleEvents={googleEvents}
-              tasks={tasks}
-          />
-          
-          {/* FABs */}
-          <Box sx={{ position: 'absolute', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center', zIndex: 100 }}>
-             <Tooltip title="New Task" placement="left">
-                <Box>
-                <Fab 
-                    aria-label="add task" 
-                    onClick={() => { setModalData(null); setActiveModal('IMMEDIATE_TASK'); }}
-                    size="medium"
-                    sx={{ bgcolor: TASK_COLOR, color: '#fff', '&:hover': { bgcolor: TASK_COLOR, opacity: 0.9 } }}
-                >
-                    <TaskIcon />
-                </Fab>
-                </Box>
-             </Tooltip>
-             <Tooltip title="New Event" placement="left">
-                <Box>
-                <Fab 
-                    aria-label="add event" 
-                    onClick={() => { setModalData({ startTime: undefined }); setActiveModal('IMMEDIATE_EVENT'); }}
-                    size="medium" 
-                    sx={{ bgcolor: EVENT_COLOR, color: '#fff', '&:hover': { bgcolor: EVENT_COLOR, opacity: 0.9 } }}
-                >
-                    <EventIcon />
-                </Fab>
-                </Box>
-             </Tooltip>
-             <Tooltip title="New Alarm" placement="left">
-                <Box>
-                <Fab 
-                    aria-label="add alarm" 
-                    onClick={() => { setModalData(null); setActiveModal('IMMEDIATE_ALARM'); }}
-                    size="medium" 
-                    sx={{ bgcolor: ALARM_COLOR, color: '#fff', '&:hover': { bgcolor: ALARM_COLOR, opacity: 0.9 } }}
-                >
-                    <AlarmIcon />
-                </Fab>
-                </Box>
-             </Tooltip>
-             <Tooltip title="New Memo" placement="left">
-                <Box>
-                <Fab 
-                    aria-label="view memos" 
-                    component={Link}
-                    href="/memos"
-                    size="medium" 
-                    sx={{ bgcolor: MEMO_COLOR, color: '#fff', '&:hover': { bgcolor: MEMO_COLOR, opacity: 0.9 } }}
-                >
-                    <MemoIcon />
-                </Fab>
-                </Box>
-             </Tooltip>
-
-             <Tooltip title="AI Chat" placement="left">
-                <Box>
-                <Fab 
-                    aria-label="ai chat" 
-                    onClick={() => setActiveModal('AI_CHAT')}
-                    size="medium" 
-                    sx={{ bgcolor: '#f44336', color: '#fff', '&:hover': { bgcolor: '#d32f2f', opacity: 0.9 } }}
-                >
-                    <ChatIcon />
-                </Fab>
-                </Box>
-             </Tooltip>
-          </Box>
-
-      </Box>
-
-      {/* Dialog - Shared Wrapper for non-standalone modals */}
-      <Dialog
-        open={['NEW_EVENT', 'EDIT_TASK', 'EDIT_EVENT', 'DETAIL_TASK', 'DETAIL_EVENT', 'EDIT_ALARM', 'DETAIL_ALARM', 'REGULAR_TASK_SETTINGS'].includes(activeModal)}
-        onClose={handleCloseModal}
-        fullScreen={false}
-        maxWidth={false}
-
-        PaperProps={{
-            sx: {
-                width: '92%', // 4% margin x 2
-                maxWidth: '600px', // Reasonable max-width for desktop
-                m: 'auto',
-                borderRadius: 3
-            }
-        }}
-      >
-        <DialogContent sx={{ p: 0 }}>
-             <Suspense fallback={<Box p={4}>Loading...</Box>}>
-
-                 {activeModal === 'EDIT_TASK' && (
-                    <TaskForm 
-                        taskId={modalData?.id} 
-                        initialValues={modalData}
-                        onSuccess={handleCloseModal} 
-                        isModal
-                    />
-                )}
-                {activeModal === 'NEW_EVENT' && (
-                     <EventForm
-                        initialStartTime={modalData?.startTime}
-                        onSuccess={handleCloseModal}
-                        isModal
-                        initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
-                     />
-                )}
-                {activeModal === 'EDIT_EVENT' && (
-                    <EventForm 
-                        eventId={modalData?.id}
-                        initialValues={modalData}
-                        onSuccess={handleCloseModal} 
-                        isModal
-                    />
-                )}
-                {activeModal === 'DETAIL_TASK' && (
-                    <TaskDetailModal
-                        task={modalData}
-                        onClose={handleCloseModal}
-                        onEdit={handleEditFromDetail}
-                        onUpdate={() => setTaskRefreshTrigger(prev => prev + 1)}
-                    />
-                )}
-                {activeModal === 'DETAIL_EVENT' && (
-                    <EventDetailModal
-                        event={modalData}
-                        onClose={handleCloseModal}
-                        onEdit={handleEditFromDetail}
-                    />
-                )}
-
-                {activeModal === 'EDIT_ALARM' && (
-                    <AlarmForm
-                        alarmId={modalData?.id}
-                        initialValues={modalData}
-                        onSuccess={handleCloseModal}
-                        isModal
-                    />
-                )}
-                {activeModal === 'DETAIL_ALARM' && (
-                    <AlarmDetailModal
-                        alarm={modalData}
-                        onClose={handleCloseModal}
-                        onEdit={handleEditFromDetail}
-                    />
-                )}
-            {/* Other Modals Logic inside main Dialog... */}
-            {activeModal === 'REGULAR_TASK_SETTINGS' && (
-                <RegularTaskSettingsModal open={activeModal === 'REGULAR_TASK_SETTINGS'} onClose={handleCloseModal} />
-            )}
-        </Suspense>
-    </DialogContent>
-</Dialog>
-
-{/* Dedicated Settings Dialog for FullScreen */}
-<Dialog
-    open={activeModal === 'SETTINGS'}
-    onClose={handleCloseModal}
-    fullScreen
-    TransitionComponent={SlideTransition}
->
-   <SettingsModal onClose={handleCloseModal} />
-</Dialog>
-
-<Dialog
-    open={activeModal === 'MAIL_SETTINGS'}
-    onClose={handleCloseModal}
-    fullScreen
-    TransitionComponent={SlideTransition}
->
-   <MailSettingsModal onClose={handleCloseModal} />
-</Dialog>
-
-<GoogleSettingsModal 
-    open={activeModal === 'GOOGLE_SETTINGS'}
-    onClose={handleCloseModal}
-/>
-
-<BackupSettingsModal
-    open={activeModal === 'BACKUP_SETTINGS'}
-    onClose={handleCloseModal}
-/>
-       {/* Regular Task Create Modal */}
-      <RegularTaskSettingsModal
-        open={activeModal === 'REGULAR_TASK_SETTINGS'}
-        onClose={handleCloseModal}
-      />
-
-       {/* Unread Mail Summary Modal */}
-       <MailSummaryResultModal
-          open={unreadSummariesOpen}
-          onClose={() => setUnreadSummariesOpen(false)}
-          summaries={unreadSummaries}
-          title="新着メール要約"
-       />
-
-                {activeModal === 'FREE_TIME' && (
-                    <FreeTimeModal
-                        onClose={handleCloseModal}
-                    />
-                )}
-                {activeModal === 'DATA_USAGE' && (
-                    <DataUsageModal
-                        open={true}
-                        onClose={handleCloseModal}
-                    />
-                )}
-                {activeModal === 'EXPIRED_TASKS' && (
-                    <ExpiredTaskListModal
-                        open={true}
-                        onClose={handleCloseModal}
-                        onEditTask={handleTaskClick} 
-                    />
-                )}
-                {activeModal === 'AI_CHAT' && (
-                    <AIChatModal
-                        open={true}
-                        onClose={handleCloseModal}
-                    />
-                )}
-
-
-
-    {/* Immediate Action Flows */}
-    {activeModal === 'IMMEDIATE_TASK' && (
-        <ImmediateTaskFlow
-            onClose={handleCloseModal}
-            onSuccess={handleCloseModal}
-            initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
-        />
-    )}
-    {activeModal === 'IMMEDIATE_EVENT' && (
-        <ImmediateEventFlow
-            onClose={handleCloseModal}
-            onSuccess={handleCloseModal}
-            initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
-        />
-    )}
-    {activeModal === 'IMMEDIATE_ALARM' && (
-        <ImmediateAlarmFlow
-            onClose={handleCloseModal}
-            onSuccess={handleCloseModal}
-            initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
-        />
-    )}
-
-    {/* Bulk Creator */}
-    {activeModal === 'BULK_CREATE' && (
-        <BulkEventCreator 
-            onBack={handleCloseModal}
-            onSuccess={() => { handleCloseModal(); setTaskRefreshTrigger(prev => prev + 1); }}
-            startWeekDate={currentDate}
-        />
-    )}
-
-    {/* Sync Status Dialog */}
-    <Dialog open={showSyncModal} onClose={() => setShowSyncModal(false)}>
-        <DialogTitle>同期ステータス</DialogTitle>
-        <DialogContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Box sx={{ 
-                    width: 12, 
-                    height: 12, 
-                    borderRadius: '50%', 
-                    bgcolor: syncError ? '#f44336' : (isSyncedRecently ? '#4caf50' : '#ff9800'),
-                    mr: 1
-                }} />
-                <Typography variant="body1">
-                    {syncError ? "認証エラー" : (isSyncedRecently ? "最新 (同期済み)" : "未同期 (時間経過)")}
-                </Typography>
+    return (
+        <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+            {/* Header */}
+            <AppHeader
+                currentDate={currentDate}
+                onDateChange={setCurrentDate}
+                isSyncing={isSyncing}
+                syncError={syncError}
+                isSyncedRecently={isSyncedRecently}
+                lastSyncedAt={lastSyncedAt}
+                onOpenSyncModal={() => setShowSyncModal(true)}
+                onOpenModal={handleOpenModal}
+            />
+            
+            {/* Main Display */}
+            <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative', mt: '60px', height: 'calc(100dvh - 60px)' }}>
+                <TimeTableSwiper 
+                    currentDate={currentDate} 
+                    onDateChange={setCurrentDate}
+                    onNewTask={handleNewEvent} 
+                    onEditTask={handleTaskClick}
+                    refreshTrigger={taskRefreshTrigger}
+                    expiredCount={expiredCount}
+                    onOpenExpired={() => setActiveModal('EXPIRED_TASKS')}
+                    googleEvents={googleEvents}
+                    tasks={tasks}
+                />
+                
+                {/* FABs */}
+                <ActionFabs onOpenModal={handleOpenModal} />
             </Box>
-            <Typography variant="body2" color="text.secondary" paragraph>
-                最終同期: {lastSyncedAt ? format(lastSyncedAt, 'yyyy/MM/dd HH:mm:ss') : '未同期'}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-                {syncError ? "Googleアカウントの認証が切れています。再ログインしてください。" : "通常は自動で同期されますが、ボタンを押して手動で更新することもできます。"}
-            </Typography>
-            {syncError && (
-                <Box sx={{ mt: 2 }}>
-                    <Button 
-                        variant="contained" 
-                        color="error"
-                        startIcon={<GoogleIcon />}
-                        fullWidth
-                        onClick={async () => {
-                            const { signIn } = await import('next-auth/react');
-                            await signIn('google', { callbackUrl: '/' });
-                        }}
-                    >
-                        Googleに再ログイン
-                    </Button>
-                </Box>
-            )}
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={() => setShowSyncModal(false)}>閉じる</Button>
-            {!syncError && (
-                <Button variant="contained" onClick={() => {
-                    setTaskRefreshTrigger(prev => prev + 1);
-                    setCalendarRefreshTrigger(prev => prev + 1);
-                    setShowSyncModal(false);
-                }}>
-                    最新にする
-                </Button>
-            )}
-        </DialogActions>
-    </Dialog>
 
-    </Box>
-  );
+            {/* All Modals */}
+            <ModalController
+                activeModal={activeModal}
+                modalData={modalData}
+                currentDate={currentDate}
+                onCloseModal={handleCloseModal}
+                onEditFromDetail={handleEditFromDetail}
+                onTaskRefresh={() => setTaskRefreshTrigger(prev => prev + 1)}
+                onCalendarRefresh={() => setCalendarRefreshTrigger(prev => prev + 1)}
+                onTaskClick={handleTaskClick}
+                showSyncModal={showSyncModal}
+                onCloseSyncModal={() => setShowSyncModal(false)}
+                isSyncing={isSyncing}
+                syncError={syncError}
+                isSyncedRecently={isSyncedRecently}
+                lastSyncedAt={lastSyncedAt}
+                unreadSummaries={unreadSummaries}
+                showUnreadModal={showUnreadModal}
+                onCloseUnreadModal={() => setShowUnreadModal(false)}
+            />
+        </Box>
+    );
 }
