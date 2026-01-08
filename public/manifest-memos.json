@@ -1,0 +1,23 @@
+{
+  "name": "Rin Memos",
+  "short_name": "Memos",
+  "description": "RinSecretary Memo Pad",
+  "id": "/memos",
+  "start_url": "/memos",
+  "scope": "/memos",
+  "display": "standalone",
+  "background_color": "#ab47bc",
+  "theme_color": "#ab47bc",
+  "icons": [
+    {
+      "src": "/icons/memo-icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/memo-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
