@@ -1,6 +1,7 @@
 import './globals.css';
 import ThemeRegistry from './ThemeRegistry';
 import { GlobalJobProvider } from './context/GlobalJobContext';
+import JobMonitor from './components/JobMonitor';
 import type { Metadata, Viewport } from 'next';
 
 export const viewport: Viewport = {
@@ -40,6 +41,7 @@ export default function RootLayout({
         <ThemeRegistry>
           <GlobalJobProvider>
             {children}
+            <JobMonitor />
           </GlobalJobProvider>
         </ThemeRegistry>
       </body>

@@ -19,6 +19,7 @@ interface SchedulerState {
     lastDailyBriefingRunDate: string | null;
     lastMailSummaryRunDate: string | null;
     lastBackupRunDate: string | null;
+    lastStorageSyncRunDate: string | null;
 }
 
 let state: SchedulerState = {
@@ -26,6 +27,7 @@ let state: SchedulerState = {
     lastDailyBriefingRunDate: null,
     lastMailSummaryRunDate: null,
     lastBackupRunDate: null,
+    lastStorageSyncRunDate: null,
 };
 
 function loadState(): void {
@@ -185,7 +187,8 @@ checkAlarms();
 checkRegularTasks();
 checkDailyBriefing();
 // Note: Backup check is handled within the interval loop mostly, but can add here if needed.
-// checkBackup(); // Avoid running immediately on restart if it happens to be 3:00, let interval handle it strictly? 
+// checkBackup();
+checkStorageSync(); // Avoid running immediately on restart if it happens to be 3:00, let interval handle it strictly? 
 // Or just let it run.
 checkBackup();
 
@@ -194,8 +197,9 @@ setInterval(() => {
     checkRegularTasks();
     checkDailyBriefing();
     checkMailSummary();
+    checkMailSummary();
     checkBackup();
-    checkBackup();
+    checkStorageSync();
 }, 60 * 1000);
 
 // --- Shared File Cleanup ---
@@ -383,6 +387,27 @@ async function checkBackup() {
         }
     } catch (e) {
         console.error("Error in checkBackup:", e);
+    }
+}
+
+async function checkStorageSync() {
+    const now = new Date();
+    const today = getTodayDateString();
+    
+    // Run at 03:00 or later, but only once per day
+    if (now.getHours() < 3) return;
+    if (state.lastStorageSyncRunDate === today) return;
+    
+    state.lastStorageSyncRunDate = today;
+    saveState();
+    console.log('Running Daily Storage Sync...', now.toISOString());
+
+    try {
+        const { syncStorageUsage } = await import('../src/lib/storage');
+        await syncStorageUsage();
+        console.log('Daily Storage Sync completed successfully.');
+    } catch (e) {
+        console.error("Error in checkStorageSync:", e);
     }
 }
  

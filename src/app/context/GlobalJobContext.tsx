@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { getJobs, cancelJob as cancelServerJob } from '@/app/actions/job';
+import { getJobs, cancelJob as cancelServerJob, deleteJob } from '@/app/actions/job';
 import { JobType } from '@/app/actions/job';
 
 // Job Definition
@@ -27,22 +27,59 @@ interface GlobalJobContextType {
     removeJob: (id: string) => void; 
     refreshServerJobs: () => Promise<void>;
     cancelJob: (id: string) => Promise<void>;
+    activeInterface: string | null;
+    setActiveInterface: (name: string | null) => void;
 }
 
 const GlobalJobContext = createContext<GlobalJobContextType | null>(null);
 
 export function GlobalJobProvider({ children }: { children: React.ReactNode }) {
     const [jobs, setJobs] = useState<Job[]>([]);
+    const [activeInterface, setActiveInterface] = useState<string | null>(null);
     
-    // Polling Interval
+    // SSE Connection
     useEffect(() => {
-        const interval = setInterval(() => {
-            refreshServerJobs();
-        }, 5000); // Poll every 5 seconds
-        
+        let eventSource: EventSource | null = null;
+
+        const connect = () => {
+            eventSource = new EventSource('/api/jobs/stream');
+            
+            eventSource.onopen = () => {
+                // Connected
+                console.log('SSE Connected');
+            };
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'update') {
+                        refreshServerJobs();
+                    }
+                } catch (e) {
+                    // Ignore keep-alive or malformed
+                }
+            };
+            
+            eventSource.onerror = (err) => {
+                console.error('SSE Error', err);
+                eventSource?.close();
+                // Browser might not auto-reconnect if we close it? 
+                // EventSource standard says it retries. But if we close it manually, we need to retry?
+                // Actually standard EventSource retries on connection lost. 
+                // But if it fails on initial connection (401 etc), it might stop.
+                // Let's rely on standard retry for now, but if closed, maybe retry in 5s.
+                setTimeout(connect, 5000); 
+            };
+        };
+
+        connect();
         refreshServerJobs(); // Initial fetch
-        
-        return () => clearInterval(interval);
+
+        return () => {
+            if (eventSource) {
+                eventSource.close();
+            }
+        };
     }, []);
 
     const refreshServerJobs = async () => {
@@ -86,8 +123,22 @@ export function GlobalJobProvider({ children }: { children: React.ReactNode }) {
         setJobs(prev => prev.map(j => j.id === id ? { ...j, ...updates } : j));
     };
 
-    const removeJob = (id: string) => {
+    const removeJob = async (id: string) => {
+        // Optimistic update
         setJobs(prev => prev.filter(j => j.id !== id));
+        
+        // Remove from DB (or mark as hidden)
+        // If it's a client job, it's just local state. If server, delete it.
+        const target = jobs.find(j => j.id === id);
+        if (target && !target.isClient) {
+            try {
+                await deleteJob(id);
+            } catch (e) {
+                console.error("Failed to delete job", e);
+                // Revert on error? Or just suppress.
+                // Suppressing is better UX for "dismiss", user doesn't care if it failed secretly as long as it's gone from view.
+            }
+        }
     };
 
     const cancelJob = async (id: string) => {
@@ -106,7 +157,7 @@ export function GlobalJobProvider({ children }: { children: React.ReactNode }) {
     };
 
     return (
-        <GlobalJobContext.Provider value={{ jobs, addClientJob, updateClientJob, removeJob, refreshServerJobs, cancelJob }}>
+        <GlobalJobContext.Provider value={{ jobs, addClientJob, updateClientJob, removeJob, refreshServerJobs, cancelJob, activeInterface, setActiveInterface }}>
             {children}
         </GlobalJobContext.Provider>
     );

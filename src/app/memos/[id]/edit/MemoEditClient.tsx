@@ -13,6 +13,7 @@ import MemoHeader from '@/app/components/MemoHeader';
 import MemoComposer, { MemoComposerRef, SaveStatus } from '@/app/components/MemoComposer';
 import MemoFileManagement, { Attachment } from '@/app/components/MemoFileManagement';
 import { Fab } from '@mui/material';
+import { useGlobalJobs } from '@/app/context/GlobalJobContext';
 
 interface MemoEditClientProps {
     memo: {
@@ -25,6 +26,13 @@ interface MemoEditClientProps {
 
 export default function MemoEditClient({ memo, isNew }: MemoEditClientProps) {
     const router = useRouter();
+    const { setActiveInterface } = useGlobalJobs();
+
+    useEffect(() => {
+        setActiveInterface('MEMO');
+        return () => setActiveInterface(null);
+    }, [setActiveInterface]);
+
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const composerRef = useRef<MemoComposerRef>(null);

@@ -40,6 +40,7 @@
     "react": "latest",
     "react-apexcharts": "^1.9.0",
     "react-dom": "latest",
+    "react-draggable": "^4.5.0",
     "react-markdown": "^10.1.0",
     "react-swipeable": "^7.0.2",
     "rehype-katex": "^7.0.1",

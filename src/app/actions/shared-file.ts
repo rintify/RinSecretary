@@ -28,14 +28,10 @@ export async function uploadSharedFile(formData: FormData) {
     if (!file) throw new Error('No file provided');
 
     // Server Total Capacity Check (3GB)
-    const { SERVER_MAX_STORAGE_BYTES } = await import('@/lib/constants');
+    const { SERVER_MAX_STORAGE_BYTES, getCurrentStorageUsage } = await import('@/lib/storage');
     
-    const [attachmentTotal, sharedTotal] = await Promise.all([
-        prisma.attachment.aggregate({ _sum: { fileSize: true } }),
-        prisma.sharedFile.aggregate({ _sum: { fileSize: true } })
-    ]);
-
-    const currentTotal = (attachmentTotal._sum.fileSize || 0) + (sharedTotal._sum.fileSize || 0);
+    // Check using cached system setting
+    const currentTotal = await getCurrentStorageUsage();
 
     if (currentTotal + file.size > SERVER_MAX_STORAGE_BYTES) {
         throw new Error('Server storage limit exceeded (3GB)');
@@ -59,6 +55,9 @@ export async function uploadSharedFile(formData: FormData) {
             userId: user.id,
         }
     });
+
+    const { updateStorageUsage } = await import('@/lib/storage');
+    await updateStorageUsage(file.size);
 
     return sharedFile;
 }
@@ -140,6 +139,9 @@ export async function saveSharedFileToMemo(sharedFileId: string) {
         }
     });
 
+    const { updateStorageUsage } = await import('@/lib/storage');
+    await updateStorageUsage(sharedFile.fileSize); // New file created
+
     revalidatePath('/memos');
     return memo;
 }
@@ -159,6 +161,9 @@ export async function deleteSharedFile(sharedFileId: string) {
             await fs.promises.unlink(filepath).catch(console.error);
         }
     }
+
+    const { updateStorageUsage } = await import('@/lib/storage');
+    await updateStorageUsage(-sharedFile.fileSize);
 
     // Delete DB record
     await prisma.sharedFile.delete({ where: { id: sharedFileId } });

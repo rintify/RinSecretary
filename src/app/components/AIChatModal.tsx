@@ -27,6 +27,7 @@ import { createMemo } from '@/app/memos/actions';
 import { useRouter } from 'next/navigation';
 import { chatWithAI, getAIConfigs } from '@/lib/ai-actions';
 import { submitJob, getJob } from '@/app/actions/job';
+import { useGlobalJobs } from '@/app/context/GlobalJobContext';
 
 
 export interface Message {
@@ -77,9 +78,26 @@ export default function AIChatModal({ open, onClose, initialMessages }: AIChatMo
     // Toast State
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const { jobs } = useGlobalJobs();
+    const { setActiveInterface } = useGlobalJobs();
+    
+    // Auto-scroll logic
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+
+    // Register Active Interface
+    useEffect(() => {
+        if (open) {
+            setActiveInterface('AI_CHAT');
+        } else {
+            setActiveInterface(null);
+        }
+        return () => {
+             // If unmounting while open, clear it
+             setActiveInterface(null); 
+        };
+    }, [open, setActiveInterface]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

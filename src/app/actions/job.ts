@@ -23,12 +23,9 @@ export async function submitJob(type: JobType, payload: any) {
         }
     });
 
-    // Trigger Async processing (Fire and Forget)
-    // In Vercel, this might be terminated if not careful, but for "Node/VPS" logic it's fine.
-    // For Vercel, usually requires Queue/Cron. 
-    // We assume the user runs this locally or on a VPS where logic continues.
-    // However, to ensure "response" returns to client before "process" finishes, we don't await processJob.
-    // But we should catch errors to avoid unhandled rejections crashing process.
+    const { notifyUser } = await import('@/lib/job-notifier');
+    notifyUser(session.user.id);
+
     processJob(job.id).catch(err => {
         console.error(`Background processing failed for job ${job.id}`, err);
     });
@@ -40,9 +37,6 @@ export async function getJobs() {
     const session = await devAuth();
     if (!session?.user?.id) return [];
 
-    // Return active jobs or recently completed ones (e.g. last 1 hour)
-    // Or just all for now and let client filter?
-    // Let's filter: Status is NOT 'COMPLETED'/'FAILED'/'CANCELLED' OR updated within last 1 hour.
     const now = new Date();
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
@@ -62,18 +56,18 @@ export async function cancelJob(jobId: string) {
     const session = await devAuth();
     if (!session?.user?.id) throw new Error('Unauthorized');
 
-    // We can only mark as Cancelled. 
-    // The processor needs to check this status periodically if it's a long running loop.
     await prisma.job.update({
         where: { id: jobId, userId: session.user.id },
         data: { status: 'CANCELLED' }
     });
     
+    const { notifyUser } = await import('@/lib/job-notifier');
+    notifyUser(session.user.id);
+    
     revalidatePath('/');
     return { success: true };
 }
 
-// Polling Helper
 export async function getJob(jobId: string) {
     const session = await devAuth();
     if (!session?.user?.id) return null;
@@ -81,4 +75,19 @@ export async function getJob(jobId: string) {
     return await prisma.job.findUnique({
         where: { id: jobId, userId: session.user.id }
     });
+}
+
+export async function deleteJob(jobId: string) {
+    const session = await devAuth();
+    if (!session?.user?.id) throw new Error('Unauthorized');
+
+    await prisma.job.delete({
+        where: { id: jobId, userId: session.user.id }
+    });
+    
+    const { notifyUser } = await import('@/lib/job-notifier');
+    notifyUser(session.user.id);
+    
+    revalidatePath('/');
+    return { success: true };
 }

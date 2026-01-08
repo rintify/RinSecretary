@@ -27,6 +27,8 @@ import {
 import CustomDatePicker from '../ui/CustomDatePicker';
 import { useRouter } from 'next/navigation';
 import { subDays } from 'date-fns';
+import JobListModal from '../modals/JobListModal';
+import { useGlobalJobs } from '@/app/context/GlobalJobContext';
 
 const getBusinessDate = () => {
     const now = new Date();
@@ -61,6 +63,7 @@ export default function AppHeader({
 }: AppHeaderProps) {
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const [jobListOpen, setJobListOpen] = useState(false);
     const router = useRouter();
 
     const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => setAnchorEl(event.currentTarget);
@@ -167,6 +170,13 @@ export default function AppHeader({
                     open={Boolean(anchorEl)}
                     onClose={handleMenuClose}
                 >
+                    <MenuItem onClick={() => { handleMenuClose(); setJobListOpen(true); }}>
+                        <ListItemIcon>
+                            <TaskIcon fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText>ジョブ一覧</ListItemText>
+                    </MenuItem>
+                    <Divider />
                     <MenuItem onClick={() => { handleMenuClose(); onOpenModal('EXPIRED_TASKS'); }}>
                         <ListItemIcon>
                             <WarningIcon fontSize="small" color="error" />
@@ -229,8 +239,8 @@ export default function AppHeader({
                         </ListItemIcon>
                         <ListItemText>メール要約履歴</ListItemText>
                     </MenuItem>
-                    <MenuItem onClick={async () => { 
-                        handleMenuClose(); 
+                    <MenuItem onClick={async () => {
+                        handleMenuClose();
                         const { logout } = await import('@/lib/actions');
                         await logout();
                     }}>
@@ -243,6 +253,39 @@ export default function AppHeader({
                     </MenuItem>
                 </Menu>
             </Box>
+
+            <JobListModal 
+                open={jobListOpen} 
+                onClose={() => setJobListOpen(false)}
+                onViewResult={(job) => {
+                    // Handle view result similarly to JobMonitor if needed, 
+                    // or maybe JobListModal handles detailed view internally?
+                    // JobListModal prop onViewResult expects a callback.
+                    // For now let's just log or implement a basic alert if we don't have the context here easily.
+                    // Actually AppHeader doesn't have the logic to show AI Chat modal easily without prop drilling or context.
+                    // Ideally JobMonitor handles the "View" because it has the AIChatModal.
+                    // But here we are in AppHeader.
+                    // Let's assume GlobalJobContext or a separate UI context should handle "Open AI Chat Result".
+                    // For now, let's just let JobListModal handle it if it can, or pass a dummy.
+                    // Actually, let's look at `JobMonitor`: it has local state for `viewingAiJob`.
+                    // We might need to lift that up or duplicate it.
+                    // Given the constraint, for now, we'll implement a basic alert or handle it if easy.
+                    // Wait, `onOpenModal('AI_CHAT')` exists!
+                    // If we can pass data to `onOpenModal`, that would be great.
+                    // `onOpenModal` signature is just `(modal: ModalType) => void`.
+                    // We might need to just show the modal and let it load history? 
+                    // No, `AIChatModal` takes `initialMessages`.
+                    
+                    // Allow simple viewing for now:
+                    if (job.type === 'AI_CHAT' && job.result) {
+                        // We can't easily open the AI Chat Modal with specific messages from here 
+                        // without changing AppHeader props or using a global UI context.
+                        // Let's implement a simplified view or just log it for now as a limitation.
+                        console.log('View result requested for', job.id);
+                        alert('詳細は現在ジョブモニターから確認してください');
+                    }
+                }}
+            />
         </Box>
     );
 }

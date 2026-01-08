@@ -7,7 +7,7 @@ import TimeTable from './TimeTable';
 import { TaskLocal } from './TimeTable';
 // Import Swiper React components
 import { Swiper, SwiperSlide } from 'swiper/react';
-import JobMonitor from './JobMonitor';
+
 import { Swiper as SwiperClass } from 'swiper/types';
 import { Virtual } from 'swiper/modules';
 
@@ -106,7 +106,7 @@ export default function TimeTableSwiper({
     return (
         <Box sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ px: 2, pt: 1, zIndex: 10 }}>
-                <JobMonitor />
+
             </Box>
             <Swiper
                 modules={[Virtual]}

@@ -10,8 +10,23 @@ import fs from 'fs';
 import { extractTitle, extractThumbnail } from '@/lib/memo-utils';
 
 const UPLOAD_DIR = process.env.UPLOADS_DIR || join(process.cwd(), 'data/uploads');
-import { SERVER_MAX_STORAGE_BYTES } from '@/lib/constants';
+import { getCurrentStorageUsage, updateStorageUsage, SERVER_MAX_STORAGE_BYTES, ensureDir } from '@/lib/storage';
+
 const MAX_TOTAL_SIZE = SERVER_MAX_STORAGE_BYTES; // 3GB
+
+async function unlinkAttachmentFile(attachment: { filePath: string }) {
+    const filename = attachment.filePath.split('/').pop();
+    if (filename) {
+        const filepath = join(UPLOAD_DIR, filename);
+        try {
+            if (fs.existsSync(filepath)) {
+                await unlink(filepath);
+            }
+        } catch (e) {
+            console.error('File unlink failed', e);
+        }
+    }
+}
 
 export async function getMemos({ 
     skip = 0, 
@@ -57,28 +72,6 @@ export async function getMemos({
     });
 
     return memos;
-}
-
-
-
-const ensureDir = (dir: string) => {
-    if (!fs.existsSync(dir)){
-        fs.mkdirSync(dir, { recursive: true });
-    }
-};
-
-async function unlinkAttachmentFile(attachment: { filePath: string }) {
-    const filename = attachment.filePath.split('/').pop();
-    if (filename) {
-        const filepath = join(UPLOAD_DIR, filename);
-        try {
-            if (fs.existsSync(filepath)) {
-                await unlink(filepath);
-            }
-        } catch (e) {
-            console.error('File unlink failed', e);
-        }
-    }
 }
 
 // ...existing code...
@@ -198,6 +191,7 @@ export async function deleteMemo(id: string) {
   // 関連ファイルの物理削除
   for (const att of memo.attachments) {
       await unlinkAttachmentFile(att);
+      await updateStorageUsage(-att.fileSize);
   }
 
   await prisma.memo.delete({
@@ -229,6 +223,7 @@ export async function deleteMemos(ids: string[]) {
   for (const memo of memos) {
       for (const att of memo.attachments) {
           await unlinkAttachmentFile(att);
+          await updateStorageUsage(-att.fileSize);
       }
   }
 
@@ -262,14 +257,10 @@ export async function createMemoWithFile(formData: FormData) {
     });
 
     try {
-        const [attachmentTotal, sharedTotal] = await Promise.all([
-            prisma.attachment.aggregate({ _sum: { fileSize: true } }),
-            prisma.sharedFile.aggregate({ _sum: { fileSize: true } })
-        ]);
-        const currentTotalSize = (attachmentTotal._sum.fileSize || 0) + (sharedTotal._sum.fileSize || 0);
+        const currentTotalSize = await getCurrentStorageUsage();
 
         if (currentTotalSize + file.size > SERVER_MAX_STORAGE_BYTES) {
-            throw new Error('Over storage limit');
+            throw new Error('Over storage limit (Cached Check)');
         }
 
         const buffer = Buffer.from(await file.arrayBuffer());
@@ -310,6 +301,10 @@ export async function createMemoWithFile(formData: FormData) {
         });
 
         revalidatePath('/memos');
+        
+        // Update storage usage
+        await updateStorageUsage(file.size);
+        
         return { success: true, memoId: memo.id };
 
     } catch (e) {
@@ -334,14 +329,10 @@ export async function uploadAttachment(formData: FormData, memoId: string) {
     if (!file) throw new Error('No file provided');
 
     // サーバー全体の合計サイズチェック
-    const [attachmentTotal, sharedTotal] = await Promise.all([
-        prisma.attachment.aggregate({ _sum: { fileSize: true } }),
-        prisma.sharedFile.aggregate({ _sum: { fileSize: true } })
-    ]);
-    const currentTotalSize = (attachmentTotal._sum.fileSize || 0) + (sharedTotal._sum.fileSize || 0);
+    const currentTotalSize = await getCurrentStorageUsage();
 
     if (currentTotalSize + file.size > SERVER_MAX_STORAGE_BYTES) {
-        throw new Error('サーバーの総アップロード容量制限(3GB)を超えています');
+        throw new Error('サーバーの総アップロード容量制限(3GB)を超えています (Cached Check)');
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -365,6 +356,9 @@ export async function uploadAttachment(formData: FormData, memoId: string) {
     });
 
     revalidatePath(`/memos/${memoId}`);
+    
+    await updateStorageUsage(file.size);
+
     return attachment;
 }
 
@@ -389,6 +383,7 @@ export async function deleteAttachment(attachmentId: string) {
     if (attachment.memo.userId !== user?.id) throw new Error('Forbidden');
 
     await unlinkAttachmentFile(attachment);
+    await updateStorageUsage(-attachment.fileSize);
 
     await prisma.attachment.delete({ where: { id: attachmentId }});
     revalidatePath(`/memos/${attachment.memoId}`);

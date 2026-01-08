@@ -67,6 +67,10 @@ export async function processJob(jobId: string) {
                 result: JSON.stringify(result) 
             }
         });
+        
+        const { notifyUser } = await import('./job-notifier');
+        notifyUser(job.userId);
+        
         console.log(`JobProcessor: Job ${jobId} completed`);
 
     } catch (e: any) {
@@ -78,5 +82,8 @@ export async function processJob(jobId: string) {
                 result: JSON.stringify({ error: e.message || 'Unknown Error' }) 
             }
         });
+        
+        const { notifyUser } = await import('./job-notifier');
+        notifyUser(job.userId);
     }
 }

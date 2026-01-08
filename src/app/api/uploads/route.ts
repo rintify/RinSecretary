@@ -6,14 +6,7 @@ import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 
-import { SERVER_MAX_STORAGE_BYTES } from '@/lib/constants';
-const MAX_TOTAL_SIZE = SERVER_MAX_STORAGE_BYTES; // 3GB
-
-const ensureDir = (dir: string) => {
-    if (!fs.existsSync(dir)){
-        fs.mkdirSync(dir, { recursive: true });
-    }
-};
+import { getCurrentStorageUsage, updateStorageUsage, SERVER_MAX_STORAGE_BYTES } from '@/lib/storage';
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -30,14 +23,10 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // サーバー全体の合計サイズチェック
-    const [attachmentTotal, sharedTotal] = await Promise.all([
-        prisma.attachment.aggregate({ _sum: { fileSize: true } }),
-        prisma.sharedFile.aggregate({ _sum: { fileSize: true } })
-    ]);
-    const currentTotalSize = (attachmentTotal._sum.fileSize || 0) + (sharedTotal._sum.fileSize || 0);
+    const currentTotalSize = await getCurrentStorageUsage();
 
     if (currentTotalSize + file.size > SERVER_MAX_STORAGE_BYTES) {
-        return NextResponse.json({ error: 'サーバーの総アップロード容量制限(3GB)を超えています' }, { status: 400 });
+        return NextResponse.json({ error: 'サーバーの総アップロード容量制限(3GB)を超えています (Cached Check)' }, { status: 400 });
     }
 
     const nameParts = file.name.split('.');
@@ -46,11 +35,18 @@ export async function POST(request: Request) {
     
     // UPLOADS_DIR from env or default to root/data/uploads which maps to volume in docker
     const uploadDir = process.env.UPLOADS_DIR || join(process.cwd(), 'data/uploads');
-    ensureDir(uploadDir);
+    
+    // ensureDir logic inline or imported. Since ensureDir was local and simple, let's just use import if available or inline.
+    // Actually ensuring dir existence via fs directly here is fine.
+    if (!fs.existsSync(uploadDir)){
+        fs.mkdirSync(uploadDir, { recursive: true });
+    }
 
     const filepath = join(uploadDir, filename);
     await writeFile(filepath, buffer);
     
+    await updateStorageUsage(file.size);
+
     return NextResponse.json({ url: `/api/uploads/${filename}` });
   } catch (error) {
     console.error('Upload failed:', error);
