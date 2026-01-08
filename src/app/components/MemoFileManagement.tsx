@@ -19,6 +19,7 @@ import {
 import Image from 'next/image';
 import { getAttachments, deleteAttachment, uploadAttachment } from '@/app/memos/actions';
 import { MEMO_COLOR } from '../utils/colors';
+import { useGlobalJobs } from '../context/GlobalJobContext';
 
 export interface Attachment {
     id: string;
@@ -43,6 +44,7 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+    const { addClientJob, updateClientJob } = useGlobalJobs();
 
     const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, id: string) => {
         setAnchorEl(event.currentTarget);
@@ -77,14 +79,26 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
         if (!file) return;
 
         setLoading(true);
+        const jobId = `upload-${Date.now()}`;
+        
         try {
+            addClientJob({
+                id: jobId,
+                type: 'UPLOAD',
+                title: `アップロード: ${file.name}`,
+                payload: null
+            });
+
             const formData = new FormData();
             formData.append('file', file);
             const newFile = await uploadAttachment(formData, memoId);
             setAttachments(prev => [newFile, ...prev]);
             onFilesChange?.();
+            
+            updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
         } catch (e: any) {
             console.error(e);
+            updateClientJob(jobId, { status: 'FAILED', error: e.message || 'アップロード失敗' });
             alert(e.message || 'アップロードに失敗しました');
         } finally {
             setLoading(false);

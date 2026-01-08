@@ -5,10 +5,12 @@ import { Add as AddIcon, ArrowBack as ArrowBackIcon, Edit as EditIcon, ContentPa
 import Link from 'next/link';
 import { MEMO_COLOR } from '../utils/colors';
 import { createEmptyMemo, createMemo, createMemoWithFile } from './actions';
+import { useGlobalJobs } from '../context/GlobalJobContext';
 
 export function MemoListFabs() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
+    const { addClientJob, updateClientJob } = useGlobalJobs();
 
     const handleCreate = async () => {
         if (loading) return;
@@ -39,9 +41,26 @@ export function MemoListFabs() {
                     if (imageType) {
                         const blob = await item.getType(imageType);
                         const file = new File([blob], "pasted_image.png", { type: imageType });
-                        const formData = new FormData();
-                        formData.append('file', file);
-                        await createMemoWithFile(formData);
+                        
+                        const jobId = `paste-fab-${Date.now()}`;
+                        try {
+                            addClientJob({
+                                id: jobId,
+                                type: 'UPLOAD',
+                                title: `アップロード: ${file.name}`,
+                                payload: null
+                            });
+
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            await createMemoWithFile(formData);
+
+                            updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
+                        } catch(err: any) {
+                             updateClientJob(jobId, { status: 'FAILED', error: err.message || 'アップロード失敗' });
+                             throw err;
+                        }
+
                         router.refresh();
                         setLoading(false);
                         return;

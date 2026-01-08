@@ -10,6 +10,7 @@ import { MEMO_COLOR } from '../utils/colors';
 import { OnMount } from '@monaco-editor/react';
 import SharedEditor from './SharedEditor';
 import ConflictDialog from './ConflictDialog';
+import { useGlobalJobs } from '../context/GlobalJobContext';
 
 export type SaveStatus = 'unsaved' | 'saving' | 'saved';
 
@@ -58,6 +59,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [internalMemoId, setInternalMemoId] = useState<string | undefined>(memoId);
+    const { addClientJob, updateClientJob } = useGlobalJobs();
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
     
@@ -445,58 +447,60 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
 
             if (!id) throw new Error('Could not determine memo ID');
 
-            const formData = new FormData();
-            formData.append('file', file);
+            const jobId = `upload-composer-${Date.now()}`;
+            addClientJob({
+                id: jobId,
+                type: 'UPLOAD',
+                title: `アップロード: ${file.name}`,
+                payload: null
+            });
 
-            const attachment = await uploadAttachment(formData, id);
-            
-            const isImage = file.type.startsWith('image/');
-            const markdown = isImage 
-                ? `\n![${file.name}](${attachment.filePath})` 
-                : `\n[${file.name}](${attachment.filePath})`;
-            
-            // Insert at cursor position if editor is available
-            if (editorMode === 'monaco' && editorInstanceRef.current) {
-                const editor = editorInstanceRef.current;
-                const contribution = editor.getContribution('snippetController2');
-                if (contribution) {
-                    contribution.insert(markdown);
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const attachment = await uploadAttachment(formData, id);
+                updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
+                
+                const isImage = file.type.startsWith('image/');
+                const markdown = isImage 
+                    ? `\n![${file.name}](${attachment.filePath})` 
+                    : `\n[${file.name}](${attachment.filePath})`;
+                
+                // Insert at cursor position if editor is available
+                if (editorMode === 'monaco' && editorInstanceRef.current) {
+                    const editor = editorInstanceRef.current;
+                    const contribution = editor.getContribution('snippetController2');
+                    if (contribution) {
+                        contribution.insert(markdown);
+                    } else {
+                        const position = editor.getPosition();
+                        const range = {
+                            startLineNumber: position?.lineNumber || 1,
+                            startColumn: position?.column || 1,
+                            endLineNumber: position?.lineNumber || 1,
+                            endColumn: position?.column || 1,
+                        };
+                        editor.executeEdits('insert-upload', [{
+                            range: range,
+                            text: markdown,
+                            forceMoveMarkers: true
+                        }]);
+                    }
+                    editor.focus();
+                } else if (editorMode === 'plain') {
+                     if (textareaRef.current) {
+                        const textarea = textareaRef.current;
+                        setContent(prev => prev + markdown + '\n');
+                     } else {
+                        setContent(prev => prev + markdown + '\n');
+                     }
                 } else {
-                    const position = editor.getPosition();
-                    const range = {
-                        startLineNumber: position?.lineNumber || 1,
-                        startColumn: position?.column || 1,
-                        endLineNumber: position?.lineNumber || 1,
-                        endColumn: position?.column || 1,
-                    };
-                    editor.executeEdits('insert-upload', [{
-                        range: range,
-                        text: markdown,
-                        forceMoveMarkers: true
-                    }]);
+                    setContent(prev => prev + markdown + '\n');
                 }
-                // Push change to state immediately so standard onChange handles it
-                // Actually SharedEditor onChange might be enough if executeEdits triggers it. 
-                // Monaco executeEdits usually DOES trigger ModelContentChanged.
-                // However, let's ensure we focus back.
-                editor.focus();
-            } else if (editorMode === 'plain') {
-                 // Plain text append or insert if textarea has focus? 
-                 // If dragging, we probably lost focus or it was never focused. 
-                 // Append is safest default for drag-drop.
-                 if (textareaRef.current) {
-                    const textarea = textareaRef.current;
-                    // If we have a selection, substitute. If not, append to end or cursor?
-                    // Drop usually happens at mouse pointer, which is hard to map to text cursor without complex logic.
-                    // Let's just append for drag-drop simplicity or stick to cursor if it was focused.
-                    // Current behavior for drag-drop (not paste) is usually append to end if not dropping *into* editor content specifically.
-                    setContent(prev => prev + markdown + '\n');
-                 } else {
-                    setContent(prev => prev + markdown + '\n');
-                 }
-            } else {
-                // Fallback to append if no editor ref (should shouldn't happen usually)
-                setContent(prev => prev + markdown + '\n');
+            } catch (err: any) {
+                updateClientJob(jobId, { status: 'FAILED', error: err.message || 'アップロード失敗' });
+                throw err;
             }
 
         } catch (e) {

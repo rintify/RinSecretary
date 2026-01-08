@@ -22,6 +22,7 @@ import { deleteMemos, createMemoWithFile, createMemo, getMemos } from './actions
 import { MEMO_COLOR } from '../utils/colors';
 import { Folder as FolderIcon } from '@mui/icons-material';
 import CircularProgress from '@mui/material/CircularProgress';
+import { useGlobalJobs } from '../context/GlobalJobContext';
 
 type Attachment = {
     id: string;
@@ -58,6 +59,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
 
     const dragCounter = useRef(0);
     const router = useRouter();
+    const { addClientJob, updateClientJob } = useGlobalJobs();
 
     // Pull to Refresh State
     const [pullStartY, setPullStartY] = useState(0);
@@ -248,9 +250,25 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 if (files && files.length > 0) {
                     for (let i = 0; i < files.length; i++) {
                         const file = files[i];
-                        const formData = new FormData();
-                        formData.append('file', file);
-                        await createMemoWithFile(formData);
+                        const jobId = `paste-${Date.now()}-${i}`;
+                        
+                        try {
+                            addClientJob({
+                                id: jobId,
+                                type: 'UPLOAD',
+                                title: `アップロード: ${file.name}`,
+                                payload: null
+                            });
+
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            await createMemoWithFile(formData);
+                            
+                            updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
+                        } catch (err: any) {
+                             updateClientJob(jobId, { status: 'FAILED', error: err.message || 'アップロード失敗' });
+                             throw err;
+                        }
                     }
                     handled = true;
                 }
@@ -349,10 +367,26 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
             setUploading(true);
             const files = Array.from(e.dataTransfer.files);
             try {
+                let index = 0;
                 for (const file of files) {
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    await createMemoWithFile(formData);
+                    const jobId = `drop-${Date.now()}-${index++}`;
+                    try {
+                        addClientJob({
+                            id: jobId,
+                            type: 'UPLOAD',
+                            title: `アップロード: ${file.name}`,
+                            payload: null
+                        });
+
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        await createMemoWithFile(formData);
+                        
+                        updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
+                    } catch (err: any) {
+                         updateClientJob(jobId, { status: 'FAILED', error: err.message || 'アップロード失敗' });
+                         throw err;
+                    }
                 }
             } catch (error) {
                 console.error('File upload failed', error);
