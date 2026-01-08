@@ -1,5 +1,7 @@
 ---
+trigger: glob
 description: データベース（Prisma）の変更を安全に本番へデプロイするためのルール
+globs: *.prisma
 ---
 
 ## 概要

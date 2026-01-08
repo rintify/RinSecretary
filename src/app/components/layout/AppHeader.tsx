@@ -6,23 +6,11 @@ import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { 
     IconButton, Box, Tooltip, Button, 
-    Menu, MenuItem, ListItemIcon, ListItemText, 
     CircularProgress, Divider
 } from '@mui/material';
 import { 
     Menu as MenuIcon, 
     MyLocation as MyLocationIcon,
-    AccessTime as AccessTimeIcon,
-    Settings as SettingsIcon,
-    Warning as WarningIcon,
-    Notifications as AlarmIcon,
-    DataUsage as DataUsageIcon,
-    Chat as ChatIcon,
-    Email as MailIcon,
-    Google as GoogleIcon,
-    CloudUpload as BackupIcon,
-    TaskAlt as TaskIcon,
-    AppRegistration as BulkIcon,
 } from '@mui/icons-material';
 import CustomDatePicker from '../ui/CustomDatePicker';
 import { useRouter } from 'next/navigation';
@@ -51,6 +39,8 @@ interface AppHeaderProps {
     onOpenModal: (modal: ModalType, data?: any) => void;
 }
 
+import NavigationDrawer from './NavigationDrawer';
+
 export default function AppHeader({
     currentDate,
     onDateChange,
@@ -62,12 +52,9 @@ export default function AppHeader({
     onOpenModal,
 }: AppHeaderProps) {
     const [showDatePicker, setShowDatePicker] = useState(false);
-    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const [jobListOpen, setJobListOpen] = useState(false);
     const router = useRouter();
-
-    const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => setAnchorEl(event.currentTarget);
-    const handleMenuClose = () => setAnchorEl(null);
 
     return (
         <Box sx={{ 
@@ -162,96 +149,16 @@ export default function AppHeader({
                 <IconButton onClick={() => onDateChange(getBusinessDate())} size="small" sx={{ mr: 0, color: 'text.secondary' }}>
                     <MyLocationIcon />
                 </IconButton>
-                <IconButton onClick={handleMenuOpen}>
+                <IconButton onClick={() => setDrawerOpen(true)}>
                     <MenuIcon />
                 </IconButton>
-                <Menu
-                    anchorEl={anchorEl}
-                    open={Boolean(anchorEl)}
-                    onClose={handleMenuClose}
-                >
-                    <MenuItem onClick={() => { handleMenuClose(); setJobListOpen(true); }}>
-                        <ListItemIcon>
-                            <TaskIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText>ジョブ一覧</ListItemText>
-                    </MenuItem>
-                    <Divider />
-                    <MenuItem onClick={() => { handleMenuClose(); onOpenModal('EXPIRED_TASKS'); }}>
-                        <ListItemIcon>
-                            <WarningIcon fontSize="small" color="error" />
-                        </ListItemIcon>
-                        <ListItemText sx={{ color: 'error.main' }}>期限切れタスク</ListItemText>
-                    </MenuItem>
-                    <MenuItem onClick={() => { handleMenuClose(); onOpenModal('FREE_TIME'); }}>
-                        <ListItemIcon>
-                            <AccessTimeIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText>空き時間</ListItemText>
-                    </MenuItem>
-                    <MenuItem onClick={() => { handleMenuClose(); onOpenModal('BULK_CREATE'); }}>
-                        <ListItemIcon>
-                            <BulkIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText>一括作成</ListItemText>
-                    </MenuItem>
-                    <MenuItem onClick={() => { handleMenuClose(); onOpenModal('SETTINGS'); }}>
-                        <ListItemIcon>
-                            <SettingsIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText>設定</ListItemText>
-                    </MenuItem>
-                    <MenuItem onClick={() => { handleMenuClose(); onOpenModal('REGULAR_TASK_SETTINGS'); }}>
-                        <ListItemIcon>
-                            <TaskIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText>定期タスク設定</ListItemText>
-                    </MenuItem>
-                    <Divider />
-                    <MenuItem onClick={() => { handleMenuClose(); onOpenModal('DATA_USAGE'); }}>
-                        <ListItemIcon>
-                            <DataUsageIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText>通信量</ListItemText>
-                    </MenuItem>
-                    <MenuItem onClick={() => { handleMenuClose(); onOpenModal('MAIL_SETTINGS'); }}>
-                        <ListItemIcon>
-                            <MailIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText>メール設定</ListItemText>
-                    </MenuItem>
-                    <MenuItem onClick={() => { handleMenuClose(); onOpenModal('GOOGLE_SETTINGS'); }}>
-                        <ListItemIcon>
-                            <GoogleIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText>Google設定</ListItemText>
-                    </MenuItem>
-                    <MenuItem onClick={() => { handleMenuClose(); onOpenModal('BACKUP_SETTINGS'); }}>
-                        <ListItemIcon>
-                            <BackupIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText>バックアップ設定</ListItemText>
-                    </MenuItem>
-                    <Divider />
-                    <MenuItem onClick={() => { handleMenuClose(); router.push('/mail-summaries'); }}>
-                        <ListItemIcon>
-                            <MailIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText>メール要約履歴</ListItemText>
-                    </MenuItem>
-                    <MenuItem onClick={async () => {
-                        handleMenuClose();
-                        const { logout } = await import('@/lib/actions');
-                        await logout();
-                    }}>
-                        <ListItemIcon>
-                            <Box sx={{ color: 'error.main', display: 'flex' }}>
-                                <SettingsIcon fontSize="small" sx={{ opacity: 0 }} />
-                            </Box>
-                        </ListItemIcon>
-                        <ListItemText primaryTypographyProps={{ color: 'error' }}>ログアウト</ListItemText>
-                    </MenuItem>
-                </Menu>
+                
+                <NavigationDrawer
+                    open={drawerOpen}
+                    onClose={() => setDrawerOpen(false)}
+                    onOpenModal={onOpenModal}
+                    onOpenJobList={() => setJobListOpen(true)}
+                />
             </Box>
 
             <JobListModal 
