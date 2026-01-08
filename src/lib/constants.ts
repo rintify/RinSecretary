@@ -1,0 +1,1 @@
+export const SERVER_MAX_STORAGE_BYTES = 3 * 1024 * 1024 * 1024; // 3GB

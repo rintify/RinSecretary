@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { isSameDay, subDays } from 'date-fns';
-import { Box } from '@mui/material';
+import { Box, Backdrop, CircularProgress, Typography } from '@mui/material';
 
 // Hooks
 import { useCalendarData } from './hooks/useCalendarData';
@@ -14,6 +14,7 @@ import AppHeader, { ModalType } from './components/layout/AppHeader';
 import ActionFabs from './components/layout/ActionFabs';
 import ModalController from './components/modals/ModalController';
 import TimeTableSwiper from './components/TimeTableSwiper';
+import { useSharedFileListener } from './hooks/useSharedFileListener';
 
 const getBusinessDate = () => {
     const now = new Date();
@@ -57,10 +58,28 @@ export default function Home() {
     } = useMailSummary();
 
     // Modal handlers
-    const handleOpenModal = (modal: ModalType, data?: any) => {
+    const handleOpenModal = React.useCallback((modal: ModalType, data?: any) => {
         setModalData(data ?? null);
         setActiveModal(modal);
-    };
+    }, []);
+
+    // Shared File Listener (Drag & Drop / Paste / Polling)
+    const { handlePaste, handleDrop, handleDragOver, isUploading } = useSharedFileListener({ 
+        onOpenModal: handleOpenModal, 
+        currentDate 
+    });
+
+    React.useEffect(() => {
+        window.addEventListener('paste', handlePaste as any);
+        window.addEventListener('drop', handleDrop as any);
+        window.addEventListener('dragover', handleDragOver as any);
+
+        return () => {
+            window.removeEventListener('paste', handlePaste as any);
+            window.removeEventListener('drop', handleDrop as any);
+            window.removeEventListener('dragover', handleDragOver as any);
+        };
+    }, [handlePaste, handleDrop, handleDragOver]);
 
     const handleNewEvent = (startTime?: string) => {
         setModalData({ startTime });
@@ -162,6 +181,19 @@ export default function Home() {
                 showUnreadModal={showUnreadModal}
                 onCloseUnreadModal={() => setShowUnreadModal(false)}
             />
+            {/* Loading Overlay */}
+            <Backdrop
+                sx={{ 
+                    color: '#fff', 
+                    zIndex: (theme) => theme.zIndex.modal + 100,
+                    flexDirection: 'column',
+                    gap: 2
+                }}
+                open={!!isUploading}
+            >
+                <CircularProgress color="inherit" />
+                <Typography variant="h6">アップロード中...</Typography>
+            </Backdrop>
         </Box>
     );
 }

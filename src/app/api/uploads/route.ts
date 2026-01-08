@@ -6,7 +6,8 @@ import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 
-const MAX_TOTAL_SIZE = 3 * 1024 * 1024 * 1024; // 3GB
+import { SERVER_MAX_STORAGE_BYTES } from '@/lib/constants';
+const MAX_TOTAL_SIZE = SERVER_MAX_STORAGE_BYTES; // 3GB
 
 const ensureDir = (dir: string) => {
     if (!fs.existsSync(dir)){
@@ -29,13 +30,13 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // サーバー全体の合計サイズチェック
-    const totalSizeResult = await prisma.attachment.aggregate({
-        _sum: {
-            fileSize: true
-        }
-    });
-    const currentTotalSize = totalSizeResult._sum.fileSize || 0;
-    if (currentTotalSize + file.size > MAX_TOTAL_SIZE) {
+    const [attachmentTotal, sharedTotal] = await Promise.all([
+        prisma.attachment.aggregate({ _sum: { fileSize: true } }),
+        prisma.sharedFile.aggregate({ _sum: { fileSize: true } })
+    ]);
+    const currentTotalSize = (attachmentTotal._sum.fileSize || 0) + (sharedTotal._sum.fileSize || 0);
+
+    if (currentTotalSize + file.size > SERVER_MAX_STORAGE_BYTES) {
         return NextResponse.json({ error: 'サーバーの総アップロード容量制限(3GB)を超えています' }, { status: 400 });
     }
 

@@ -232,3 +232,14 @@ model BackupConfig {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model SharedFile {
+  id        String   @id @default(cuid())
+  fileName  String
+  filePath  String
+  fileSize  Int
+  mimeType  String
+  createdAt DateTime @default(now())
+  
+  userId    String   @default("legacy")
+}

@@ -32,6 +32,7 @@ const ImmediateTaskFlow = dynamic(() => import('../immediate/ImmediateTaskFlow')
 const ImmediateEventFlow = dynamic(() => import('../immediate/ImmediateEventFlow'), { ssr: false });
 const ImmediateAlarmFlow = dynamic(() => import('../immediate/ImmediateAlarmFlow'), { ssr: false });
 const MailSummaryResultModal = dynamic(() => import('../mail/MailSummaryResultModal'), { ssr: false });
+const SharedItemModal = dynamic(() => import('./SharedItemModal'), { ssr: false });
 
 const SlideTransition = React.forwardRef(function Transition(
     props: TransitionProps & { children: React.ReactElement<any, any>; },
@@ -234,6 +235,15 @@ export default function ModalController({
             {/* AI Chat Modal */}
             {activeModal === 'AI_CHAT' && (
                 <AIChatModal open={true} onClose={onCloseModal} />
+            )}
+
+            {/* Immediate Action Flows */}
+            {activeModal === 'SHARED_ITEM' && (
+                <SharedItemModal
+                    open={true}
+                    onClose={onCloseModal}
+                    sharedFile={modalData}
+                />
             )}
 
             {/* Immediate Action Flows */}

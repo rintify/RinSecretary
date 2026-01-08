@@ -10,7 +10,8 @@ import fs from 'fs';
 import { extractTitle, extractThumbnail } from '@/lib/memo-utils';
 
 const UPLOAD_DIR = process.env.UPLOADS_DIR || join(process.cwd(), 'data/uploads');
-const MAX_TOTAL_SIZE = 3 * 1024 * 1024 * 1024; // 3GB
+import { SERVER_MAX_STORAGE_BYTES } from '@/lib/constants';
+const MAX_TOTAL_SIZE = SERVER_MAX_STORAGE_BYTES; // 3GB
 
 export async function getMemos({ 
     skip = 0, 
@@ -258,11 +259,13 @@ export async function createMemoWithFile(formData: FormData) {
     });
 
     try {
-        const totalSizeResult = await prisma.attachment.aggregate({
-            _sum: { fileSize: true }
-        });
-        const currentTotalSize = totalSizeResult._sum.fileSize || 0;
-        if (currentTotalSize + file.size > MAX_TOTAL_SIZE) {
+        const [attachmentTotal, sharedTotal] = await Promise.all([
+            prisma.attachment.aggregate({ _sum: { fileSize: true } }),
+            prisma.sharedFile.aggregate({ _sum: { fileSize: true } })
+        ]);
+        const currentTotalSize = (attachmentTotal._sum.fileSize || 0) + (sharedTotal._sum.fileSize || 0);
+
+        if (currentTotalSize + file.size > SERVER_MAX_STORAGE_BYTES) {
             throw new Error('Over storage limit');
         }
 
@@ -328,13 +331,13 @@ export async function uploadAttachment(formData: FormData, memoId: string) {
     if (!file) throw new Error('No file provided');
 
     // サーバー全体の合計サイズチェック
-    const totalSizeResult = await prisma.attachment.aggregate({
-        _sum: {
-            fileSize: true
-        }
-    });
-    const currentTotalSize = totalSizeResult._sum.fileSize || 0;
-    if (currentTotalSize + file.size > MAX_TOTAL_SIZE) {
+    const [attachmentTotal, sharedTotal] = await Promise.all([
+        prisma.attachment.aggregate({ _sum: { fileSize: true } }),
+        prisma.sharedFile.aggregate({ _sum: { fileSize: true } })
+    ]);
+    const currentTotalSize = (attachmentTotal._sum.fileSize || 0) + (sharedTotal._sum.fileSize || 0);
+
+    if (currentTotalSize + file.size > SERVER_MAX_STORAGE_BYTES) {
         throw new Error('サーバーの総アップロード容量制限(3GB)を超えています');
     }
 

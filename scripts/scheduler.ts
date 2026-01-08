@@ -195,7 +195,58 @@ setInterval(() => {
     checkDailyBriefing();
     checkMailSummary();
     checkBackup();
+    checkBackup();
 }, 60 * 1000);
+
+// --- Shared File Cleanup ---
+async function checkExpiredSharedFiles() {
+    // Run every minute
+    const now = new Date();
+    // 7 minutes ago
+    const expiredThreshold = new Date(now.getTime() - 7 * 60 * 1000);
+
+    try {
+        const expiredFiles = await prisma.sharedFile.findMany({
+            where: {
+                createdAt: { lt: expiredThreshold }
+            }
+        });
+
+        if (expiredFiles.length > 0) {
+            console.log(`Found ${expiredFiles.length} expired shared files.`);
+            
+            const UPLOAD_DIR = process.env.UPLOADS_DIR || path.join(process.cwd(), 'data/uploads');
+
+            for (const file of expiredFiles) {
+                 // Delete physical file
+                const filename = file.filePath.split('/').pop();
+                if (filename) {
+                    const filepath = path.join(UPLOAD_DIR, filename);
+                    if (fs.existsSync(filepath)) {
+                        try {
+                            fs.unlinkSync(filepath);
+                            console.log(`Deleted expired file: ${filename}`);
+                        } catch (e) {
+                            console.error(`Failed to delete file ${filename}`, e);
+                        }
+                    }
+                }
+                
+                // Delete DB record
+                await prisma.sharedFile.delete({ where: { id: file.id } });
+            }
+        }
+    } catch (e) {
+        console.error("Error in checkExpiredSharedFiles:", e);
+    }
+}
+
+// Initial check
+checkExpiredSharedFiles();
+// Add to interval
+setInterval(() => {
+    checkExpiredSharedFiles();
+}, 10 * 60 * 1000);
 
 async function checkDailyBriefing() {
     const now = new Date();
