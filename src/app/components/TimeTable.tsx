@@ -108,11 +108,7 @@ const DayColumn = ({
                 </Box>
             );
         }
-        return (
-            <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
-                <Typography variant="body1">No tasks for today.</Typography>
-            </Box>
-        );
+        return null;
     }
 
     return (
@@ -231,7 +227,8 @@ export default function TimeTable({
     refreshTrigger,
     expiredCount,
     onOpenExpired,
-    items
+    items,
+    isLoading
 }: { 
     date: Date;
     onNewTask?: (startTime?: string) => void;
@@ -240,8 +237,9 @@ export default function TimeTable({
     expiredCount?: number;
     onOpenExpired?: () => void;
     items: TaskLocal[];
+    isLoading?: boolean;
 }) {
-  const [isLoading, setIsLoading] = useState(false);
+
   
   // Previously merged here, now passed pre-merged
   const allTasks = items;
@@ -346,7 +344,7 @@ export default function TimeTable({
     })
     : allTasks;
 
-  if (!isClient) return <div style={{ padding: 20 }}>Loading...</div>;
+  if (!isClient) return null;
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -354,7 +352,7 @@ export default function TimeTable({
              <DayColumn 
                 date={date} 
                 tasks={visibleTasks} 
-                onEditTask={onEditTask} 
+                onEditTask={onEditTask}
                 isLoading={isLoading}
                 // Props for Sub-header injection
                 hasDeadlineWarning={hasDeadlineWarning}

@@ -151,6 +151,7 @@ export default function Home() {
                         expiredCount={expiredCount}
                         onOpenExpired={() => setActiveModal('EXPIRED_TASKS')}
                         items={items}
+                        isSyncing={isSyncing}
                     />
                     
                     {/* FABs */}

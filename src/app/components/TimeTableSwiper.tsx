@@ -25,6 +25,7 @@ interface TimeTableSwiperProps {
     onOpenExpired?: () => void;
 
     items: TaskLocal[];
+    isSyncing?: boolean;
 }
 
 // Range of virtual slides. 
@@ -42,7 +43,8 @@ export default function TimeTableSwiper({
     refreshTrigger,
     expiredCount,
     onOpenExpired,
-    items
+    items,
+    isSyncing
 }: TimeTableSwiperProps) {
     const swiperRef = useRef<SwiperClass | null>(null);
     const [mounted, setMounted] = useState(false);
@@ -96,6 +98,7 @@ export default function TimeTableSwiper({
                      expiredCount={expiredCount}
                      onOpenExpired={onOpenExpired}
                      items={items}
+                     isLoading={isSyncing}
                  />
             </Box>
         );
@@ -145,6 +148,7 @@ export default function TimeTableSwiper({
                                     expiredCount={expiredCount}
                                     onOpenExpired={onOpenExpired}
                                     items={items}
+                                    isLoading={isSyncing}
                                 />
                             </Box>
                         </SwiperSlide>
