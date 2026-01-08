@@ -9,6 +9,8 @@ import { ALARM_COLOR } from '../utils/colors';
 import { ja } from 'date-fns/locale';
 import CustomDatePicker from './ui/CustomDatePicker';
 import CustomTimePicker from './ui/CustomTimePicker';
+import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 
 interface AlarmFormProps {
     alarmId?: string;
@@ -22,6 +24,8 @@ interface AlarmFormProps {
 export default function AlarmForm({ alarmId, initialValues, initialTime, onSuccess, isModal = false, initialDate }: AlarmFormProps) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
+    const { showToast } = useToast();
+    const { confirm } = useConfirm();
 
     // Form State
     const [title, setTitle] = useState('');
@@ -153,7 +157,7 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
 
         } catch (error) {
             console.error(error);
-            alert('An error occurred');
+            showToast('エラーが発生しました', 'error');
         } finally {
             setLoading(false);
         }
@@ -161,7 +165,7 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
 
     const handleDelete = async () => {
         if (!alarmId) return;
-        if (!confirm('Are you sure you want to delete this alarm?')) return;
+        if (!await confirm('このアラームを削除しますか？', { severity: 'error', confirmText: '削除', title: 'アラームの削除' })) return;
         setLoading(true);
         try {
              const { deleteAlarm } = await import('@/lib/alarm-actions');
@@ -174,7 +178,7 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
              }
         } catch(e) {
             console.error(e);
-            alert('Error deleting alarm');
+            showToast('アラームの削除に失敗しました', 'error');
         } finally {
             setLoading(false);
         }

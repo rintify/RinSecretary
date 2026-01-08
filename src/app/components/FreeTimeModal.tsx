@@ -18,7 +18,9 @@ import { ToggleButton, ToggleButtonGroup } from '@mui/material'; // ensure impor
 import { fetchGoogleEvents } from '@/lib/calendar-actions';
 import { getAlarms } from '@/lib/alarm-actions';
 import CustomDatePicker from './ui/CustomDatePicker';
+
 import CustomTimePicker from './ui/CustomTimePicker';
+import { useToast } from '@/app/context/ToastContext';
 
 interface FreeTimeModalProps {
     onClose: () => void;
@@ -38,7 +40,7 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
     
     // Picker State
     const [pickerConfig, setPickerConfig] = useState<{ type: 'date' | 'time', target: 'start' | 'end' | 'startTime' | 'endTime' } | null>(null);
-
+    const { showToast } = useToast();
     const [loading, setLoading] = useState(false);
 
     // Helpers
@@ -223,12 +225,12 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             }
             
             await navigator.clipboard.writeText(resultText);
-            // alert("Copied!"); // Simple feedback or close?
+            showToast('抽出結果をクリップボードにコピーしました', 'success');
             onClose();
 
         } catch (e) {
             console.error(e);
-            alert("Error calculating free time");
+            showToast('抽出に失敗しました', 'error');
         } finally {
             setLoading(false);
         }

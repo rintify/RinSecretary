@@ -20,6 +20,8 @@ import Image from 'next/image';
 import { getAttachments, deleteAttachment, uploadAttachment } from '@/app/memos/actions';
 import { MEMO_COLOR } from '../utils/colors';
 import { useGlobalJobs } from '../context/GlobalJobContext';
+import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 
 export interface Attachment {
     id: string;
@@ -44,7 +46,10 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+
     const { addClientJob, updateClientJob } = useGlobalJobs();
+    const { showToast } = useToast();
+    const { confirm } = useConfirm();
 
     const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, id: string) => {
         setAnchorEl(event.currentTarget);
@@ -99,7 +104,8 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
         } catch (e: any) {
             console.error(e);
             updateClientJob(jobId, { status: 'FAILED', error: e.message || 'アップロード失敗' });
-            alert(e.message || 'アップロードに失敗しました');
+            updateClientJob(jobId, { status: 'FAILED', error: e.message || 'アップロード失敗' });
+            showToast(e.message || 'アップロードに失敗しました', 'error');
         } finally {
             setLoading(false);
             e.target.value = ''; // Reset input
@@ -129,13 +135,14 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('ファイルを削除しますか？')) return;
+        if (!await confirm('ファイルを削除しますか？', { severity: 'error', confirmText: '削除', title: 'ファイルの削除' })) return;
         try {
             await deleteAttachment(id);
             setAttachments(prev => prev.filter(f => f.id !== id));
             onFilesChange?.();
+            showToast('ファイルを削除しました', 'success');
         } catch (e) {
-            alert('削除に失敗しました');
+            showToast('削除に失敗しました', 'error');
         }
     };
 

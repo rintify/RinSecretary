@@ -6,6 +6,7 @@ import CustomTimePicker from '../ui/CustomTimePicker';
 import SimpleTextInputModal from '../ui/SimpleTextInputModal';
 import { createAlarm } from '@/lib/alarm-actions';
 import { ALARM_COLOR } from '../../utils/colors';
+import { useToast } from '../../context/ToastContext';
 
 interface ImmediateAlarmFlowProps {
     onClose: () => void;
@@ -18,6 +19,7 @@ export default function ImmediateAlarmFlow({ onClose, onSuccess, initialDate = n
     const [time, setTime] = useState(initialDate);
     const [title, setTitle] = useState('');
     const isProceeding = useRef(false);
+    const { showToast } = useToast();
 
     const handleTimeConfirm = (date: Date) => {
         isProceeding.current = true;
@@ -39,7 +41,7 @@ export default function ImmediateAlarmFlow({ onClose, onSuccess, initialDate = n
             onSuccess(time);
         } catch (e) {
             console.error(e);
-            alert('Error creating alarm');
+            showToast('アラーム作成に失敗しました', 'error');
             onClose();
         }
     };

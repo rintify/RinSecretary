@@ -13,6 +13,8 @@ import CustomTimePicker from './ui/CustomTimePicker';
 import { Reorder, useDragControls } from 'framer-motion';
 
 import { useTimeRange } from '../hooks/useTimeRange';
+import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 
 interface TaskFormProps {
     taskId?: string;
@@ -71,6 +73,8 @@ export default function TaskForm(props: TaskFormProps) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [fetching, setFetching] = useState(!!taskId);
+    const { showToast } = useToast();
+    const { confirm } = useConfirm();
 
     // Form State
     const [title, setTitle] = useState('');
@@ -273,11 +277,11 @@ export default function TaskForm(props: TaskFormProps) {
                     router.refresh();
                 }
             } else {
-                alert('Failed to save task');
+                showToast('タスクの保存に失敗しました', 'error');
             }
         } catch (error) {
             console.error(error);
-            alert('An error occurred');
+            showToast('エラーが発生しました', 'error');
         } finally {
             setLoading(false);
         }
@@ -285,7 +289,7 @@ export default function TaskForm(props: TaskFormProps) {
 
     const handleDelete = async () => {
         if (!taskId) return;
-        if (!confirm('Are you sure you want to delete this task?')) return;
+        if (!await confirm('このタスクを削除しますか？', { severity: 'error', confirmText: '削除', title: 'タスクの削除' })) return;
         setLoading(true);
         try {
              const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
@@ -298,7 +302,7 @@ export default function TaskForm(props: TaskFormProps) {
              }
         } catch(e) {
             console.error(e);
-            alert('Error deleting task');
+            showToast('タスクの削除に失敗しました', 'error');
         } finally {
             setLoading(false);
         }

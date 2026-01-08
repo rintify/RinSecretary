@@ -22,6 +22,8 @@ import {
 } from '@mui/icons-material';
 import { getPushoverSettings, updatePushoverSettings, sendTestPushoverNotification, sendTestDiscordNotification } from '@/lib/user-actions';
 import { getAIConfigs, saveAIConfig, deleteAIConfig } from '@/lib/ai-actions';
+import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 
 
 interface AIConfig {
@@ -44,7 +46,10 @@ let settingsCache: { pushoverUserKey: string | null; pushoverToken: string | nul
 export default function SettingsModal({ onClose }: SettingsModalProps) {
     const [userKey, setUserKey] = useState('');
     const [token, setToken] = useState('');
+
     const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
+    const { showToast } = useToast();
+    const { confirm } = useConfirm();
 
     // AI Config State
     const [aiConfigs, setAiConfigs] = useState<AIConfig[]>([]);
@@ -98,7 +103,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
     const handleSaveConfig = async () => {
         if (!configName || !configApiKey) {
-            setMessage({ text: '名前とAPIキーは必須です', type: 'error' });
+            showToast('名前とAPIキーは必須です', 'error');
             return;
         }
 
@@ -116,24 +121,26 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             await loadConfigs();
             setIsEditingConfig(false);
             resetConfigForm();
-            setMessage({ text: 'AI設定を保存しました', type: 'success' });
+            setIsEditingConfig(false);
+            resetConfigForm();
+            showToast('AI設定を保存しました', 'success');
         } catch (e) {
             console.error(e);
-            setMessage({ text: '保存に失敗しました', type: 'error' });
+            showToast('保存に失敗しました', 'error');
         } finally {
             setSaving(false);
         }
     };
 
     const handleDeleteConfig = async (id: string) => {
-        if(!confirm('この設定を削除してもよろしいですか？')) return;
+        if(!await confirm('この設定を削除してもよろしいですか？', { severity: 'error', confirmText: '削除', title: '設定の削除' })) return;
         try {
             await deleteAIConfig(id);
             await loadConfigs();
-            setMessage({ text: '設定を削除しました', type: 'success' });
+            showToast('設定を削除しました', 'success');
         } catch(e) {
             console.error(e);
-            setMessage({ text: '削除に失敗しました', type: 'error' });
+            showToast('削除に失敗しました', 'error');
         }
     };
 
@@ -173,11 +180,12 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             
 
             
-            setMessage({ text: '設定を保存しました', type: 'success' });
+            
+            showToast('設定を保存しました', 'success');
             setTimeout(onClose, 800);
         } catch(e) {
              console.error(e);
-             setMessage({ text: '保存に失敗しました', type: 'error' });
+             showToast('保存に失敗しました', 'error');
         } finally {
             setSaving(false);
         }
@@ -188,9 +196,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         setMessage(null);
         const res = await sendTestPushoverNotification(userKey, token);
         if (res.success) {
-                setMessage({ text: 'テスト通知を送信しました', type: 'success' });
+                showToast('テスト通知を送信しました', 'success');
         } else {
-                setMessage({ text: '送信失敗: ' + res.error, type: 'error' });
+                showToast('送信失敗: ' + res.error, 'error');
         }
         setTesting(false);
     };
@@ -201,9 +209,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         setMessage(null);
         const res = await sendTestDiscordNotification(discordWebhookUrl);
         if (res.success) {
-            setMessage({ text: 'Discordテスト通知を送信しました', type: 'success' });
+            showToast('Discordテスト通知を送信しました', 'success');
         } else {
-            setMessage({ text: 'Discord送信失敗: ' + res.error, type: 'error' });
+            showToast('Discord送信失敗: ' + res.error, 'error');
         }
         setTesting(false);
     };
@@ -240,11 +248,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             </AppBar>
 
             <Container maxWidth="md" sx={{ mt: 3 }}>
-                {message && (
-                    <Alert severity={message.type} sx={{ mb: 3 }} onClose={() => setMessage(null)}>
-                        {message.text}
-                    </Alert>
-                )}
+
 
                 <Stack spacing={4}>
                     {/* AI Settings Section */}

@@ -8,6 +8,7 @@ import {
 } from '@mui/material';
 import { CloudUpload as BackupIcon, History as HistoryIcon } from '@mui/icons-material';
 import { getBackupSettings, updateBackupSettings, manualBackup } from '@/lib/backup-actions';
+import { useToast } from '@/app/context/ToastContext';
 
 interface BackupSettingsModalProps {
     open: boolean;
@@ -22,6 +23,7 @@ export default function BackupSettingsModal({ open, onClose }: BackupSettingsMod
     const [lastBackup, setLastBackup] = useState<Date | null>(null);
     const [lastStatus, setLastStatus] = useState<string | null>(null);
     const [lastError, setLastError] = useState<string | null>(null);
+    const { showToast } = useToast();
 
     useEffect(() => {
         if (open) {
@@ -40,10 +42,11 @@ export default function BackupSettingsModal({ open, onClose }: BackupSettingsMod
         setLoading(true);
         try {
             await updateBackupSettings({ isEnabled, folderName });
+            showToast('設定を保存しました', 'success');
             onClose();
         } catch (e) {
             console.error(e);
-            alert('保存に失敗しました');
+            showToast('保存に失敗しました', 'error');
         } finally {
             setLoading(false);
         }
@@ -54,18 +57,18 @@ export default function BackupSettingsModal({ open, onClose }: BackupSettingsMod
         try {
             const res = await manualBackup();
             if (res.success) {
-                alert('バックアップが完了しました');
+                showToast('バックアップが完了しました', 'success');
                 setLastBackup(new Date());
                 setLastStatus('SUCCESS');
                 setLastError(null);
             } else {
-                alert('バックアップに失敗しました: ' + res.error);
+                showToast('バックアップに失敗しました: ' + res.error, 'error');
                 setLastStatus('FAILED');
                 setLastError(res.error);
             }
         } catch (e) {
             console.error(e);
-            alert('エラーが発生しました');
+            showToast('エラーが発生しました', 'error');
         } finally {
             setBackuping(false);
         }

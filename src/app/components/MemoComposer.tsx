@@ -11,6 +11,8 @@ import { OnMount } from '@monaco-editor/react';
 import SharedEditor from './SharedEditor';
 import ConflictDialog from './ConflictDialog';
 import { useGlobalJobs } from '../context/GlobalJobContext';
+import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 
 export type SaveStatus = 'unsaved' | 'saving' | 'saved';
 
@@ -59,7 +61,10 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [internalMemoId, setInternalMemoId] = useState<string | undefined>(memoId);
+
     const { addClientJob, updateClientJob } = useGlobalJobs();
+    const { showToast } = useToast();
+    const { confirm } = useConfirm();
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
     
@@ -264,7 +269,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
 
     // 削除処理（Server Actions）
     const handleDelete = async () => {
-        if (!isNew && !confirm('このメモを削除しますか？')) return;
+        if (!isNew && !await confirm('このメモを削除しますか？', { severity: 'error', confirmText: '削除', title: 'メモの削除' })) return;
         
         // isSavedRef.current = true; // Use status instead? Or just ignore save on delete.
         // If we delete, we don't want auto-save to kick in.
@@ -505,7 +510,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
 
         } catch (e) {
             console.error(e);
-            alert('Upload failed');
+            showToast('アップロードに失敗しました', 'error');
         } finally {
             setUploading(false);
         }

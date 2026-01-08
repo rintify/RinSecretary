@@ -24,6 +24,7 @@ import { ja } from 'date-fns/locale';
 import { blockSender } from '@/lib/mail-actions';
 import { createTask } from '@/lib/task-actions';
 import { deleteMyMailSummary } from '@/lib/mail-scheduler-actions';
+import { useConfirm } from '@/app/context/ConfirmContext';
 
 export default function MailSummariesPage() {
     const router = useRouter();
@@ -32,8 +33,10 @@ export default function MailSummariesPage() {
     const [blocking, setBlocking] = useState<string | null>(null);
     const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string }>({ open: false, message: '' });
+
     const [generating, setGenerating] = useState(false);
     const [genStatus, setGenStatus] = useState<string>("");
+    const { confirm } = useConfirm();
     
     // Result Modal State
     const [resultModalOpen, setResultModalOpen] = useState(false);
@@ -60,7 +63,7 @@ export default function MailSummariesPage() {
     }, []);
 
     const handleBlock = async (email: string) => {
-        if(!confirm(`${email} からのメールを今後除外しますか？\n（実際にはブロックされず、AI要約から除外されるだけです）`)) return;
+        if(!await confirm(`${email} からのメールを今後除外しますか？\n（実際にはブロックされず、AI要約から除外されるだけです）`, { title: '除外確認', severity: 'warning' })) return;
         
         setBlocking(email);
         try {
@@ -93,7 +96,7 @@ export default function MailSummariesPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if(!confirm("この要約カードを削除しますか？")) return;
+        if(!await confirm("この要約カードを削除しますか？", { severity: 'error', confirmText: '削除' })) return;
         try {
             await deleteMyMailSummary(id);
             setSummaries(prev => prev.filter(c => c.id !== id));

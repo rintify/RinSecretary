@@ -10,6 +10,8 @@ import {
 import { Close as CloseIcon, Delete as DeleteIcon, Save as SaveIcon } from '@mui/icons-material';
 import { getMailSettings, saveMailSettings, getBlockedSenders, unblockSender } from '@/lib/mail-actions';
 import { getAIConfigs } from '@/lib/ai-actions';
+import { useToast } from '@/app/context/ToastContext';
+import { useConfirm } from '@/app/context/ConfirmContext';
 
 interface MailSettingsModalProps {
     onClose: () => void;
@@ -34,6 +36,8 @@ export default function MailSettingsModal({ onClose }: MailSettingsModalProps) {
     const [blockedList, setBlockedList] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const { showToast } = useToast();
+    const { confirm } = useConfirm();
 
     useEffect(() => {
         const loadData = async () => {
@@ -66,23 +70,24 @@ export default function MailSettingsModal({ onClose }: MailSettingsModalProps) {
         setSaving(true);
         try {
             await saveMailSettings(mailModelId, mailPrompt);
-            alert('設定を保存しました');
+            showToast('設定を保存しました', 'success');
         } catch (e) {
             console.error(e);
-            alert('保存に失敗しました');
+            showToast('保存に失敗しました', 'error');
         } finally {
             setSaving(false);
         }
     };
 
     const handleUnblock = async (id: string, email: string) => {
-        if (!confirm(`${email} のブロックを解除しますか？`)) return;
+        if (!await confirm(`${email} のブロックを解除しますか？`, { severity: 'warning', confirmText: '解除', title: 'ブロック解除' })) return;
         try {
             await unblockSender(id);
             setBlockedList(prev => prev.filter(item => item.id !== id));
+            showToast('ブロックを解除しました', 'success');
         } catch (e) {
             console.error(e);
-            alert('解除に失敗しました');
+            showToast('解除に失敗しました', 'error');
         }
     };
 

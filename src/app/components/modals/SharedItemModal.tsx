@@ -14,6 +14,7 @@ import {
 import { saveSharedFileToMemo } from '@/app/actions/shared-file';
 
 import { deleteSharedFile } from '@/app/actions/shared-file';
+import { useToast } from '@/app/context/ToastContext';
 
 export interface SharedFile {
     id: string;
@@ -33,6 +34,7 @@ interface SharedItemModalProps {
 export default function SharedItemModal({ open, onClose, sharedFile }: SharedItemModalProps) {
     const [saving, setSaving] = useState(false);
     const [isOwner, setIsOwner] = useState(false);
+    const { showToast } = useToast();
 
     // Keep active if owner and open? 
     // Actually the requirement is "onClose" -> delete.
@@ -73,7 +75,7 @@ export default function SharedItemModal({ open, onClose, sharedFile }: SharedIte
         setSaving(true);
         try {
             await saveSharedFileToMemo(sharedFile.id);
-            alert('メモに保存しました');
+            showToast('メモに保存しました', 'success');
             // If saved, do we still delete on close?
             // "Save to memo" makes a copy. The shared temporary file can still be deleted.
             // But if they save, maybe they want to keep the shared link active?
@@ -84,7 +86,7 @@ export default function SharedItemModal({ open, onClose, sharedFile }: SharedIte
             handleClose(); 
         } catch (e) {
             console.error(e);
-            alert('保存に失敗しました');
+            showToast('保存に失敗しました', 'error');
             setSaving(false);
         }
     };

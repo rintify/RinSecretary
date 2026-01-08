@@ -4,7 +4,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { uploadSharedFile, getLatestSharedFile } from '@/app/actions/shared-file';
 import { ModalType } from '../components/layout/AppHeader';
+
 import { useGlobalJobs } from '../context/GlobalJobContext';
+import { useToast } from '../context/ToastContext';
 
 interface UseSharedFileListenerProps {
     onOpenModal: (modal: ModalType, data?: any) => void;
@@ -13,6 +15,7 @@ interface UseSharedFileListenerProps {
 
 export function useSharedFileListener({ onOpenModal }: UseSharedFileListenerProps) {
     const { addClientJob, updateClientJob } = useGlobalJobs();
+    const { showToast } = useToast();
     const lastShownIdRef = useRef<string | null>(null);
 
     // Check for new items on mount (once)
@@ -95,7 +98,7 @@ export function useSharedFileListener({ onOpenModal }: UseSharedFileListenerProp
         } catch (e: any) {
             console.error('Upload failed', e);
             updateClientJob(jobId, { status: 'FAILED', error: 'アップロード失敗' });
-            alert('アップロードに失敗しました');
+            showToast('アップロードに失敗しました', 'error');
         }
     };
 

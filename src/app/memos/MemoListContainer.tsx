@@ -23,6 +23,8 @@ import { MEMO_COLOR } from '../utils/colors';
 import { Folder as FolderIcon } from '@mui/icons-material';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useGlobalJobs } from '../context/GlobalJobContext';
+import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 
 type Attachment = {
     id: string;
@@ -60,6 +62,8 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
     const dragCounter = useRef(0);
     const router = useRouter();
     const { addClientJob, updateClientJob } = useGlobalJobs();
+    const { showToast } = useToast();
+    const { confirm } = useConfirm();
 
     // Pull to Refresh State
     const [pullStartY, setPullStartY] = useState(0);
@@ -287,7 +291,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 }
             } catch (err) {
                 console.error('Global paste failed', err);
-                alert('貼り付けに失敗しました');
+                showToast('貼り付けに失敗しました', 'error');
             } finally {
                 setUploading(false);
             }
@@ -328,7 +332,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
 
     const executeDelete = async () => {
         if (selectedIds.size === 0) return;
-        if (!confirm(`${selectedIds.size}件のメモを削除しますか？`)) return;
+        if (!await confirm(`${selectedIds.size}件のメモを削除しますか？`, { severity: 'error', confirmText: '削除', title: 'メモの削除' })) return;
 
         await deleteMemos(Array.from(selectedIds));
         cancelSelectionMode();
@@ -390,7 +394,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 }
             } catch (error) {
                 console.error('File upload failed', error);
-                alert('ファイルのアップロードに失敗しました');
+                showToast('ファイルのアップロードに失敗しました', 'error');
             } finally {
                 setUploading(false);
             }

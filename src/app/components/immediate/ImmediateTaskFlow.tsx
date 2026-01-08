@@ -6,6 +6,7 @@ import CustomTimePicker from '../ui/CustomTimePicker';
 import SimpleTextInputModal from '../ui/SimpleTextInputModal';
 import { useRouter } from 'next/navigation';
 import { TASK_COLOR } from '../../utils/colors';
+import { useToast } from '../../context/ToastContext';
 
 interface ImmediateTaskFlowProps {
     onClose: () => void;
@@ -19,6 +20,7 @@ export default function ImmediateTaskFlow({ onClose, onSuccess, initialDate = ne
     const [title, setTitle] = useState('');
     const router = useRouter();
     const isProceeding = useRef(false);
+    const { showToast } = useToast();
 
     const handleTimeConfirm = (date: Date) => {
         isProceeding.current = true;
@@ -47,12 +49,12 @@ export default function ImmediateTaskFlow({ onClose, onSuccess, initialDate = ne
             if (res.ok) {
                 onSuccess(deadline);
             } else {
-                alert('Failed to create task');
+                showToast('タスク作成に失敗しました', 'error');
                 onClose();
             }
         } catch (e) {
             console.error(e);
-            alert('Error creating task');
+            showToast('エラーが発生しました', 'error');
             onClose();
         }
     };

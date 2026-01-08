@@ -6,11 +6,14 @@ import Link from 'next/link';
 import { MEMO_COLOR } from '../utils/colors';
 import { createEmptyMemo, createMemo, createMemoWithFile } from './actions';
 import { useGlobalJobs } from '../context/GlobalJobContext';
+import { useToast } from '../context/ToastContext';
 
 export function MemoListFabs() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
+
     const { addClientJob, updateClientJob } = useGlobalJobs();
+    const { showToast } = useToast();
 
     const handleCreate = async () => {
         if (loading) return;
@@ -21,7 +24,8 @@ export function MemoListFabs() {
         } catch (e) {
             console.error(e);
             setLoading(false);
-            alert('メモ作成に失敗しました');
+            setLoading(false);
+            showToast('メモ作成に失敗しました', 'error');
         }
     };
 
@@ -89,14 +93,14 @@ export function MemoListFabs() {
             }
 
             // If we reached here, we couldn't handle the paste
-            alert('貼り付け可能なデータが見つかりませんでした。\n画像以外のファイルは、ボタンからの貼り付けに対応していない場合があります。\nその場合はドラッグ&ドロップをお試しください。');
+            showToast('貼り付け可能なデータが見つかりませんでした。\n画像以外のファイルは、ボタンからの貼り付けに対応していない場合があります。\nその場合はドラッグ&ドロップをお試しください。', 'warning');
             
         } catch (e) {
             console.error(e);
             if (e instanceof Error && e.name === 'NotAllowedError') {
-                 alert('クリップボードへのアクセスが許可されていません');
+                 showToast('クリップボードへのアクセスが許可されていません', 'error');
             } else {
-                 alert('貼り付けに失敗しました');
+                 showToast('貼り付けに失敗しました', 'error');
             }
         } finally {
             setLoading(false);

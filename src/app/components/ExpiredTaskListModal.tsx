@@ -13,7 +13,9 @@ import { getExpiredTasks, extendTaskDeadline, ignoreExpiredTask, ExtensionType }
 import { motion, AnimatePresence } from 'framer-motion';
 import TaskItem from './TaskItem';
 import TaskDetailModal from './TaskDetailModal';
+
 import TaskForm from './TaskForm';
+import { useToast } from '@/app/context/ToastContext';
 
 // Transition for full screen dialog
 const Transition = React.forwardRef(function Transition(
@@ -61,6 +63,7 @@ export default function ExpiredTaskListModal({ open, onClose, onEditTask }: Expi
     // Menu State
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+    const { showToast } = useToast();
 
     const fetchTasks = async () => {
         setLoading(true);
@@ -112,7 +115,7 @@ export default function ExpiredTaskListModal({ open, onClose, onEditTask }: Expi
             setTasks(prev => prev.filter(t => t.id !== taskId));
         } catch (e) {
             console.error('Failed to extend task', e);
-            alert('期限の延長に失敗しました');
+            showToast('期限の延長に失敗しました', 'error');
         } finally {
             setExtendingId(null);
         }
@@ -131,7 +134,7 @@ export default function ExpiredTaskListModal({ open, onClose, onEditTask }: Expi
             fetchTasks(); 
         } catch (e) {
             console.error('Failed to ignore task', e);
-            alert('操作に失敗しました');
+            showToast('操作に失敗しました', 'error');
         } finally {
             setExtendingId(null);
         }

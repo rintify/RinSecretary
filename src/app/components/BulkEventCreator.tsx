@@ -20,6 +20,7 @@ import React, {  // Add React here
 } from 'react';
 import { createGoogleEvent, fetchGoogleEvents } from '@/lib/calendar-actions';
 import { getPalette, updatePalette } from '@/app/actions/palette';
+import { useToast } from '../context/ToastContext';
 
 interface BulkEventCreatorProps {
   onBack: () => void;
@@ -72,6 +73,7 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
   // Persistence: Key = 'yyyy-MM-dd', Value = Array(288) of color keys
   const [paintedData, setPaintedData] = useState<Record<string, string[]>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const { showToast } = useToast();
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -367,7 +369,7 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
           
       } catch (e) {
           console.error(e);
-          alert('Error creating events');
+          showToast('イベントの作成に失敗しました', 'error');
       } finally {
           setIsSaving(false);
       }

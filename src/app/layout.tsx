@@ -1,6 +1,8 @@
 import './globals.css';
 import ThemeRegistry from './ThemeRegistry';
 import { GlobalJobProvider } from './context/GlobalJobContext';
+import { ToastProvider } from './context/ToastContext';
+import { ConfirmProvider } from './context/ConfirmContext';
 import JobMonitor from './components/JobMonitor';
 import type { Metadata, Viewport } from 'next';
 
@@ -40,8 +42,12 @@ export default function RootLayout({
       <body style={{ WebkitUserSelect: 'none', userSelect: 'none' } as React.CSSProperties}>
         <ThemeRegistry>
           <GlobalJobProvider>
-            {children}
-            <JobMonitor />
+            <ToastProvider>
+                <ConfirmProvider>
+                    {children}
+                    <JobMonitor />
+                </ConfirmProvider>
+            </ToastProvider>
           </GlobalJobProvider>
         </ThemeRegistry>
       </body>

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Dialog, Box, Typography, IconButton, Tabs, Tab, Switch, Stack, TextField, Button, DialogContent } from '@mui/material';
 import { Close as CloseIcon, Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { useToast } from '@/app/context/ToastContext';
+import { useConfirm } from '@/app/context/ConfirmContext';
 
 interface RegularTaskSettingsModalProps {
     open: boolean;
@@ -24,6 +26,8 @@ export default function RegularTaskSettingsModal({ open, onClose }: RegularTaskS
     const [tabIndex, setTabIndex] = useState(0);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const { showToast } = useToast();
+    const { confirm } = useConfirm();
 
     // Config states
     const [dailyConfig, setDailyConfig] = useState<RegularTaskConfig>({ type: 'DAILY', checklist: [] });
@@ -65,18 +69,18 @@ export default function RegularTaskSettingsModal({ open, onClose }: RegularTaskS
     };
 
     const handleGenerate = async () => {
-        if (!confirm('Execute manual task generation?')) return;
+        if (!await confirm('Execute manual task generation?', { title: 'Manual Generation' })) return;
         setLoading(true);
         try {
             const res = await fetch('/api/regular-tasks/generate', { method: 'POST' });
             if(res.ok) {
-                 alert('Generation triggered.');
+                 showToast('Generation triggered.', 'success');
             } else {
                  throw new Error('Failed');
             }
         } catch (e) {
             console.error(e);
-            alert('Error triggering generation');
+            showToast('Error triggering generation', 'error');
         } finally {
             setLoading(false);
         }
@@ -90,10 +94,11 @@ export default function RegularTaskSettingsModal({ open, onClose }: RegularTaskS
                 saveConfig(weeklyConfig)
             ]);
             
+            
             onClose();
         } catch (e) {
             console.error(e);
-            alert('Failed to save settings');
+            showToast('Failed to save settings', 'error');
         } finally {
             setSaving(false);
         }

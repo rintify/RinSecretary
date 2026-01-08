@@ -8,6 +8,7 @@ import SimpleTextInputModal from '../ui/SimpleTextInputModal';
 import { createGoogleEvent } from '@/lib/calendar-actions';
 import { addMinutes } from 'date-fns';
 import { EVENT_COLOR } from '../../utils/colors';
+import { useToast } from '../../context/ToastContext';
 
 interface ImmediateEventFlowProps {
     onClose: () => void;
@@ -21,6 +22,7 @@ export default function ImmediateEventFlow({ onClose, onSuccess, initialDate = n
     const [duration, setDuration] = useState(60);
     const [title, setTitle] = useState('');
     const isProceeding = useRef(false);
+    const { showToast } = useToast();
 
     const handleTimeConfirm = (date: Date) => {
         isProceeding.current = true;
@@ -49,7 +51,7 @@ export default function ImmediateEventFlow({ onClose, onSuccess, initialDate = n
             onSuccess(startTime);
         } catch (e) {
             console.error(e);
-            alert('Error creating event');
+            showToast('イベント作成に失敗しました', 'error');
             onClose();
         }
     };

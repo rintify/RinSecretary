@@ -23,6 +23,8 @@ import AddIcon from '@mui/icons-material/Add';
 import GoogleIcon from '@mui/icons-material/Google';
 import { signIn } from 'next-auth/react';
 import { getLinkedGoogleAccounts, unlinkGoogleAccount } from '@/lib/account-actions';
+import { useToast } from '@/app/context/ToastContext';
+import { useConfirm } from '@/app/context/ConfirmContext';
 
 interface GoogleSettingsModalProps {
     open: boolean;
@@ -33,6 +35,8 @@ export default function GoogleSettingsModal({ open, onClose }: GoogleSettingsMod
     const [accounts, setAccounts] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const { showToast } = useToast();
+    const { confirm } = useConfirm();
 
     const loadAccounts = async () => {
         setLoading(true);
@@ -59,15 +63,16 @@ export default function GoogleSettingsModal({ open, onClose }: GoogleSettingsMod
     };
 
     const handleUnlink = async (accountId: string) => {
-        if (!confirm('このアカウントの連携を解除してもよろしいですか？')) return;
+        if (!await confirm('このアカウントの連携を解除してもよろしいですか？', { severity: 'warning', confirmText: '解除', title: '連携解除' })) return;
         
         setActionLoading(accountId);
         try {
             await unlinkGoogleAccount(accountId);
             await loadAccounts();
+            showToast('連携を解除しました', 'success');
         } catch (e) {
             console.error(e);
-            alert('連携解除に失敗しました');
+            showToast('連携解除に失敗しました', 'error');
         } finally {
             setActionLoading(null);
         }
