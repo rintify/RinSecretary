@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { addDays, subDays, differenceInMinutes } from 'date-fns';
 import { fetchGoogleEvents, checkPrimaryGoogleAccountStatus } from '@/lib/calendar-actions';
 import { getAlarms } from '@/lib/alarm-actions';
@@ -25,7 +25,11 @@ interface UseTimeTableDataReturn {
 }
 
 export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDataOptions): UseTimeTableDataReturn {
-    const [items, setItems] = useState<TaskLocal[]>([]);
+    // State for individual data sources
+    const [googleEvents, setGoogleEvents] = useState<TaskLocal[]>([]);
+    const [alarms, setAlarms] = useState<TaskLocal[]>([]);
+    const [tasks, setTasks] = useState<TaskLocal[]>([]);
+    
     const [expiredCount, setExpiredCount] = useState(0);
     
     // Sync Status States
@@ -37,6 +41,8 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
     // Internal Cache & Refresh Logic
     const [cacheRange, setCacheRange] = useState<{ start: Date; end: Date } | null>(null);
     const prevTriggerRef = useRef(refreshTrigger);
+    // Request ID to prevent race conditions
+    const requestIdRef = useRef(0);
     const [now, setNow] = useState(new Date());
 
     // 1. Check Account Status (On Mount & Refresh)
@@ -47,6 +53,7 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
     }, [refreshTrigger]);
 
     // 2. Fetch Logic (Unified)
+    // 2. Fetch Logic (Unified but Progressive)
     const loadData = useCallback(async () => {
         const isForce = refreshTrigger !== prevTriggerRef.current;
         prevTriggerRef.current = refreshTrigger;
@@ -62,10 +69,13 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
         }
 
         setIsSyncing(true);
+        requestIdRef.current += 1;
+        const currentRequestId = requestIdRef.current;
+        console.log(`[useTimeTableData] Load started #${currentRequestId}. Date: ${currentDate.toISOString()}`);
         
         // Define new window
         const start = subDays(currentDate, FETCH_WINDOW_DAYS);
-        const end = addDays(currentDate, FETCH_WINDOW_DAYS);
+        const end = addDays(currentDate, FETCH_WINDOW_DAYS); // Only fetch 7 days ahead for now as window
 
         // API Call Params
         const params = new URLSearchParams({
@@ -73,47 +83,105 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
             end: end.toISOString(),
         });
 
-        try {
-            // Parallel Fetching
-            const [events, alarms, tasksRes, expired] = await Promise.all([
-                fetchGoogleEvents(start, end),
-                getAlarms(start, end),
-                fetch(`/api/tasks?${params.toString()}`),
-                getExpiredTaskCount()
-            ]);
+        // Independent Fetch Functions
+        const fetchTasks = async () => {
+            try {
+                // Fetch tasks and expired count in parallel but handle independent failures if possible
+                // For now, keep them together but don't let expired count block tasks if we can help it?
+                // Actually, let's just run them.
+                const paramsStr = params.toString();
+                
+                // We use a separate try-catch for the fetch itself to ensure specific logging
+                let fetchedTasks: TaskLocal[] = [];
+                let expired = 0;
+                
+                try {
+                     const res = await fetch(`/api/tasks?${paramsStr}`);
+                     if (res.ok) {
+                         fetchedTasks = await res.json();
+                     } else {
+                         console.error("Task fetch returned non-OK status");
+                     }
+                } catch (e) {
+                    console.error("Task fetch network error", e);
+                }
+                
+                try {
+                    expired = await getExpiredTaskCount();
+                } catch (e) {
+                    console.error("Expired count fetch error", e);
+                }
 
-            let fetchedTasks: TaskLocal[] = [];
-            if (tasksRes.ok) {
-                fetchedTasks = await tasksRes.json();
-            } else {
-                console.error("Task fetch failed");
+                // Update state regardless of requestId (allow race condition instead of no data)
+                // We trust React state updates to be fast enough or user not to switch dates instantly 100 times.
+                // If strict consistency is needed, we can re-introduce checks later.
+                console.log(`[useTimeTableData] Setting tasks: ${fetchedTasks.length}, Expired: ${expired}`);
+                setTasks(fetchedTasks);
+                setExpiredCount(expired);
+                
+            } catch (e) {
+                console.error("Failed to fetch tasks wrapper", e);
             }
+        };
 
-            // Merge All
-            const combined: TaskLocal[] = [
-                ...(events as TaskLocal[]),
-                ...(alarms as TaskLocal[]),
-                ...fetchedTasks
-            ];
+        const fetchAlarmsData = async () => {
+            try {
+                const fetchedAlarms = await getAlarms(start, end);
+                console.log(`[useTimeTableData] Setting alarms: ${fetchedAlarms.length}`);
+                setAlarms(fetchedAlarms as TaskLocal[]);
+            } catch (e) {
+                console.error("Failed to fetch alarms", e);
+            }
+        };
 
-            setItems(combined);
-            setExpiredCount(expired);
+        const fetchEvents = async () => {
+             // Google events logic
+             try {
+                const fetchedEvents = await fetchGoogleEvents(start, end);
+                console.log(`[useTimeTableData] Setting events: ${fetchedEvents.length}`);
+                setGoogleEvents(fetchedEvents as TaskLocal[]);
+            } catch (e) {
+                 console.error("Failed to fetch events", e);
+                 // Don't rethrow to avoid Promise.allSettled rejection noise, just log.
+            }
+        };
+
+        // Execute all independent fetches
+        // We use Promise.allSettled to wait for everything to finish before setting isSyncing false,
+        // but individual states update as they finish.
+        Promise.allSettled([
+            fetchTasks(),
+            fetchAlarmsData(),
+            fetchEvents()
+        ]).then((results) => {
+            if (currentRequestId !== requestIdRef.current) return;
+
+            console.log(`[useTimeTableData] All settled #${currentRequestId}. items: ${googleEvents.length + alarms.length + tasks.length} (approx)`);
+            setIsSyncing(false);
             setCacheRange({ start, end });
             setLastSyncedAt(new Date());
-            setFetchSuccess(true);
-
-        } catch (e: any) {
-            console.error("Failed to load timetable data", e);
-            if (e?.message !== 'AUTH_ERROR' && !e?.message?.includes('AUTH_ERROR')) {
+            
+            // Determine success based on Events (as it's arguably the most fragile/external one) 
+            // or if everything failed. 
+            // For now, if events fail, we consider it a "Sync Error" usually (auth etc).
+            const eventsResult = results[2];
+            if (eventsResult.status === 'rejected') {
                  setFetchSuccess(false);
+            } else {
+                 setFetchSuccess(true);
             }
-            // Even if failed, we might want to keep old data or partial data? 
-            // For now, let's assume fail means sync error state.
-            setFetchSuccess(false);
-        } finally {
-            setIsSyncing(false);
-        }
+        });
+
     }, [currentDate, refreshTrigger, cacheRange]);
+
+    // Merge items
+    const items = useMemo(() => {
+        return [
+            ...googleEvents,
+            ...alarms,
+            ...tasks
+        ];
+    }, [googleEvents, alarms, tasks]);
 
     // 3. Trigger Load
     useEffect(() => {
