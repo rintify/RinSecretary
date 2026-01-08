@@ -9,22 +9,14 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import { extractTitle, extractThumbnail } from '@/lib/memo-utils';
 
-const UPLOAD_DIR = process.env.UPLOADS_DIR || join(process.cwd(), 'data/uploads');
-import { getCurrentStorageUsage, updateStorageUsage, SERVER_MAX_STORAGE_BYTES, ensureDir } from '@/lib/storage';
+import { getCurrentStorageUsage, updateStorageUsage, SERVER_MAX_STORAGE_BYTES, ensureDir, UPLOAD_DIR, unlinkFile } from '@/lib/storage';
 
 const MAX_TOTAL_SIZE = SERVER_MAX_STORAGE_BYTES; // 3GB
 
 async function unlinkAttachmentFile(attachment: { filePath: string }) {
     const filename = attachment.filePath.split('/').pop();
     if (filename) {
-        const filepath = join(UPLOAD_DIR, filename);
-        try {
-            if (fs.existsSync(filepath)) {
-                await unlink(filepath);
-            }
-        } catch (e) {
-            console.error('File unlink failed', e);
-        }
+        await unlinkFile(filename);
     }
 }
 
@@ -359,17 +351,25 @@ export async function uploadAttachment(formData: FormData, memoId: string) {
     
     await updateStorageUsage(file.size);
 
-    return attachment;
+    return {
+        ...attachment,
+        fileSize: Number(attachment.fileSize)
+    };
 }
 
 export async function getAttachments(memoId: string) {
     const session = await devAuth();
     if (!session?.user?.email) throw new Error('Unauthorized'); // 厳密には所有権チェックもすべきだが、詳細画面で呼ばれる前提
     
-    return prisma.attachment.findMany({ 
+    const attachments = await prisma.attachment.findMany({ 
         where: { memoId }, 
         orderBy: { createdAt: 'desc' }
     });
+
+    return attachments.map(att => ({
+        ...att,
+        fileSize: Number(att.fileSize)
+    }));
 }
 
 export async function deleteAttachment(attachmentId: string) {

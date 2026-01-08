@@ -220,6 +220,7 @@ async function checkExpiredSharedFiles() {
             console.log(`Found ${expiredFiles.length} expired shared files.`);
             
             const UPLOAD_DIR = process.env.UPLOADS_DIR || path.join(process.cwd(), 'data/uploads');
+            const { updateStorageUsage } = await import('../src/lib/storage');
 
             for (const file of expiredFiles) {
                  // Delete physical file
@@ -235,6 +236,9 @@ async function checkExpiredSharedFiles() {
                         }
                     }
                 }
+                
+                // Update storage usage
+                await updateStorageUsage(-file.fileSize);
                 
                 // Delete DB record
                 await prisma.sharedFile.delete({ where: { id: file.id } });

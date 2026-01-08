@@ -7,7 +7,7 @@ import { format } from 'date-fns';
 import fs from 'fs';
 import path from 'path';
 
-const UPLOAD_DIR = process.env.UPLOADS_DIR || path.join(process.cwd(), 'data/uploads');
+import { UPLOAD_DIR } from './storage';
 
 export async function getBackupSettings() {
     const session = await devAuth();

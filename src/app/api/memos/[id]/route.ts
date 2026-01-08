@@ -83,11 +83,24 @@ export async function DELETE(
 
   const id = params.id;
   
-  const existing = await prisma.memo.findUnique({ where: { id } });
+  const existing = await prisma.memo.findUnique({ 
+    where: { id },
+    include: { attachments: true }
+  });
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   
   const user = await prisma.user.findUnique({ where: { email: session.user.email } });
   if (existing.userId !== user?.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  // Delete physical files and update storage usage
+  const { unlinkFile, updateStorageUsage } = await import('@/lib/storage');
+  for (const att of existing.attachments) {
+    const filename = att.filePath.split('/').pop();
+    if (filename) {
+      await unlinkFile(filename);
+      await updateStorageUsage(-att.fileSize);
+    }
+  }
 
   await prisma.memo.delete({ where: { id } });
 

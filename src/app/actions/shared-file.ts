@@ -9,14 +9,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import { extractTitle, extractThumbnail } from '@/lib/memo-utils';
 
-const UPLOAD_DIR = process.env.UPLOADS_DIR || join(process.cwd(), 'data/uploads');
-
-
-const ensureDir = (dir: string) => {
-    if (!fs.existsSync(dir)){
-        fs.mkdirSync(dir, { recursive: true });
-    }
-};
+import { UPLOAD_DIR, ensureDir, SERVER_MAX_STORAGE_BYTES, getCurrentStorageUsage, updateStorageUsage } from '@/lib/storage';
 
 export async function uploadSharedFile(formData: FormData) {
     const session = await devAuth();
@@ -27,8 +20,6 @@ export async function uploadSharedFile(formData: FormData) {
     const file = formData.get('file') as File;
     if (!file) throw new Error('No file provided');
 
-    // Server Total Capacity Check (3GB)
-    const { SERVER_MAX_STORAGE_BYTES, getCurrentStorageUsage } = await import('@/lib/storage');
     
     // Check using cached system setting
     const currentTotal = await getCurrentStorageUsage();
@@ -56,10 +47,12 @@ export async function uploadSharedFile(formData: FormData) {
         }
     });
 
-    const { updateStorageUsage } = await import('@/lib/storage');
     await updateStorageUsage(file.size);
-
-    return sharedFile;
+ 
+    return {
+        ...sharedFile,
+        fileSize: Number(sharedFile.fileSize)
+    };
 }
 
 export async function getLatestSharedFile() {
@@ -84,7 +77,10 @@ export async function getLatestSharedFile() {
         orderBy: { createdAt: 'desc' }
     });
 
-    return latest;
+    return latest ? {
+        ...latest,
+        fileSize: Number(latest.fileSize)
+    } : null;
 }
 
 export async function saveSharedFileToMemo(sharedFileId: string) {
@@ -139,7 +135,6 @@ export async function saveSharedFileToMemo(sharedFileId: string) {
         }
     });
 
-    const { updateStorageUsage } = await import('@/lib/storage');
     await updateStorageUsage(sharedFile.fileSize); // New file created
 
     revalidatePath('/memos');
@@ -162,7 +157,6 @@ export async function deleteSharedFile(sharedFileId: string) {
         }
     }
 
-    const { updateStorageUsage } = await import('@/lib/storage');
     await updateStorageUsage(-sharedFile.fileSize);
 
     // Delete DB record

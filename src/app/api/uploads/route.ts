@@ -6,7 +6,7 @@ import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 
-import { getCurrentStorageUsage, updateStorageUsage, SERVER_MAX_STORAGE_BYTES } from '@/lib/storage';
+import { getCurrentStorageUsage, updateStorageUsage, SERVER_MAX_STORAGE_BYTES, UPLOAD_DIR } from '@/lib/storage';
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -33,11 +33,9 @@ export async function POST(request: Request) {
     const ext = nameParts.length > 1 ? `.${nameParts.pop()}` : '';
     const filename = `${randomUUID()}${ext}`;
     
-    // UPLOADS_DIR from env or default to root/data/uploads which maps to volume in docker
-    const uploadDir = process.env.UPLOADS_DIR || join(process.cwd(), 'data/uploads');
+    // UPLOADS_DIR from storage.ts
+    const uploadDir = UPLOAD_DIR;
     
-    // ensureDir logic inline or imported. Since ensureDir was local and simple, let's just use import if available or inline.
-    // Actually ensuring dir existence via fs directly here is fine.
     if (!fs.existsSync(uploadDir)){
         fs.mkdirSync(uploadDir, { recursive: true });
     }

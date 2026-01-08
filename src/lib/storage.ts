@@ -52,15 +52,20 @@ export async function getCurrentStorageUsage(): Promise<number> {
     return await syncStorageUsage();
 }
 
-export async function updateStorageUsage(deltaBytes: number) {
+export async function updateStorageUsage(deltaBytes: number | bigint) {
     try {
-        const current = await getCurrentStorageUsage();
-        const newValue = Math.max(0, current + deltaBytes);
+        const delta = typeof deltaBytes === 'bigint' ? Number(deltaBytes) : deltaBytes;
         
-        await prisma.systemSetting.upsert({
-            where: { key: STORAGE_KEY },
-            update: { value: newValue.toString() },
-            create: { key: STORAGE_KEY, value: newValue.toString() }
+        await prisma.$transaction(async (tx) => {
+            const setting = await tx.systemSetting.findUnique({ where: { key: STORAGE_KEY } });
+            const current = setting ? parseInt(setting.value, 10) : 0;
+            const newValue = Math.max(0, current + delta);
+            
+            await tx.systemSetting.upsert({
+                where: { key: STORAGE_KEY },
+                update: { value: newValue.toString() },
+                create: { key: STORAGE_KEY, value: newValue.toString() }
+            });
         });
     } catch (e) {
         console.error('Failed to update storage usage', e);

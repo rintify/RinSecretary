@@ -181,7 +181,7 @@ model Attachment {
   id        String   @id @default(cuid())
   fileName  String
   filePath  String
-  fileSize  Int
+  fileSize  BigInt
   mimeType  String
   
   memoId    String
@@ -238,7 +238,7 @@ model SharedFile {
   id        String   @id @default(cuid())
   fileName  String
   filePath  String
-  fileSize  Int
+  fileSize  BigInt
   mimeType  String
   createdAt DateTime @default(now())
   
