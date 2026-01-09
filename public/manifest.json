@@ -2,6 +2,7 @@
   "name": "RinSecretary",
   "short_name": "RinSec",
   "description": "Task & Schedule Management",
+  "id": "/time",
   "start_url": "/time",
   "scope": "/time",
   "display": "standalone",

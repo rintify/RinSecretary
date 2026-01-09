@@ -108,7 +108,8 @@ const DayColumn = ({
                 </Box>
             );
         }
-        return null;
+        // Always return a container to maintain layout stability
+        return <Box sx={{ px: 2, pb: 2, pt: 2, height: '100%', overflowY: 'auto' }} />;
     }
 
     return (

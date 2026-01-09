@@ -52,7 +52,6 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
             .catch(() => setPrimaryAccountValid(false));
     }, [refreshTrigger]);
 
-    // 2. Fetch Logic (Unified)
     // 2. Fetch Logic (Unified but Progressive)
     const loadData = useCallback(async () => {
         const isForce = refreshTrigger !== prevTriggerRef.current;
@@ -75,7 +74,7 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
         
         // Define new window
         const start = subDays(currentDate, FETCH_WINDOW_DAYS);
-        const end = addDays(currentDate, FETCH_WINDOW_DAYS); // Only fetch 7 days ahead for now as window
+        const end = addDays(currentDate, FETCH_WINDOW_DAYS); 
 
         // API Call Params
         const params = new URLSearchParams({
@@ -83,22 +82,19 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
             end: end.toISOString(),
         });
 
-        // Independent Fetch Functions
-        const fetchTasks = async () => {
+        // Independent Fetch Functions - return true if success, false if failed
+        const fetchTasks = async (): Promise<boolean> => {
             try {
-                // Fetch tasks and expired count in parallel but handle independent failures if possible
-                // For now, keep them together but don't let expired count block tasks if we can help it?
-                // Actually, let's just run them.
                 const paramsStr = params.toString();
-                
-                // We use a separate try-catch for the fetch itself to ensure specific logging
-                let fetchedTasks: TaskLocal[] = [];
+                let fetchedTasks: TaskLocal[] | null = null;
                 let expired = 0;
+                let taskSuccess = false;
                 
                 try {
                      const res = await fetch(`/api/tasks?${paramsStr}`);
                      if (res.ok) {
                          fetchedTasks = await res.json();
+                         taskSuccess = true;
                      } else {
                          console.error("Task fetch returned non-OK status");
                      }
@@ -112,43 +108,56 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
                     console.error("Expired count fetch error", e);
                 }
 
-                // Update state regardless of requestId (allow race condition instead of no data)
-                // We trust React state updates to be fast enough or user not to switch dates instantly 100 times.
-                // If strict consistency is needed, we can re-introduce checks later.
-                console.log(`[useTimeTableData] Setting tasks: ${fetchedTasks.length}, Expired: ${expired}`);
-                setTasks(fetchedTasks);
+                // Check race condition
+                if (currentRequestId !== requestIdRef.current) return false;
+
+                // Update state ONLY if fetch successful to prevent clearing data on error
+                if (fetchedTasks) {
+                    setTasks(fetchedTasks);
+                }
                 setExpiredCount(expired);
                 
+                console.log(`[useTimeTableData] Tasks updated (Req #${currentRequestId}): ${fetchedTasks?.length}, Expired: ${expired}`);
+                return taskSuccess;
+
             } catch (e) {
                 console.error("Failed to fetch tasks wrapper", e);
+                return false;
             }
         };
 
-        const fetchAlarmsData = async () => {
+        const fetchAlarmsData = async (): Promise<boolean> => {
             try {
                 const fetchedAlarms = await getAlarms(start, end);
-                console.log(`[useTimeTableData] Setting alarms: ${fetchedAlarms.length}`);
+
+                if (currentRequestId !== requestIdRef.current) return false;
+
+                console.log(`[useTimeTableData] Alarms updated (Req #${currentRequestId}): ${fetchedAlarms.length}`);
                 setAlarms(fetchedAlarms as TaskLocal[]);
+                return true;
             } catch (e) {
                 console.error("Failed to fetch alarms", e);
+                return false;
             }
         };
 
-        const fetchEvents = async () => {
+        const fetchEvents = async (): Promise<boolean> => {
              // Google events logic
              try {
                 const fetchedEvents = await fetchGoogleEvents(start, end);
-                console.log(`[useTimeTableData] Setting events: ${fetchedEvents.length}`);
+
+                if (currentRequestId !== requestIdRef.current) return false;
+
+                console.log(`[useTimeTableData] Events updated (Req #${currentRequestId}): ${fetchedEvents.length}`);
                 setGoogleEvents(fetchedEvents as TaskLocal[]);
+                return true;
             } catch (e) {
                  console.error("Failed to fetch events", e);
-                 // Don't rethrow to avoid Promise.allSettled rejection noise, just log.
+                 return false;
             }
         };
 
         // Execute all independent fetches
-        // We use Promise.allSettled to wait for everything to finish before setting isSyncing false,
-        // but individual states update as they finish.
         Promise.allSettled([
             fetchTasks(),
             fetchAlarmsData(),
@@ -156,20 +165,28 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
         ]).then((results) => {
             if (currentRequestId !== requestIdRef.current) return;
 
-            console.log(`[useTimeTableData] All settled #${currentRequestId}. items: ${googleEvents.length + alarms.length + tasks.length} (approx)`);
+            console.log(`[useTimeTableData] All settled #${currentRequestId}.`);
             setIsSyncing(false);
             setCacheRange({ start, end });
             setLastSyncedAt(new Date());
             
-            // Determine success based on Events (as it's arguably the most fragile/external one) 
-            // or if everything failed. 
-            // For now, if events fail, we consider it a "Sync Error" usually (auth etc).
-            const eventsResult = results[2];
-            if (eventsResult.status === 'rejected') {
-                 setFetchSuccess(false);
-            } else {
-                 setFetchSuccess(true);
-            }
+            // Check results
+            let allSuccess = true;
+            results.forEach((result, idx) => {
+                const name = idx === 0 ? 'Tasks' : idx === 1 ? 'Alarms' : 'Events';
+                if (result.status === 'rejected') {
+                    console.error(`${name} promise rejected`, result.reason);
+                    allSuccess = false;
+                } else {
+                    // result.value is boolean (true if success)
+                    if (result.value === false) {
+                        console.error(`${name} fetch returned failure`);
+                        allSuccess = false;
+                    }
+                }
+            });
+
+            setFetchSuccess(allSuccess);
         });
 
     }, [currentDate, refreshTrigger, cacheRange]);

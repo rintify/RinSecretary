@@ -86,6 +86,22 @@ export default function TimeTableSwiper({
         }
     };
 
+    // Force Swiper update when data changes (fixes sync/rendering issues)
+    useEffect(() => {
+        if (swiperRef.current) {
+            // Delay to ensure DOM is painted/ready
+            requestAnimationFrame(() => {
+                if (swiperRef.current) {
+                    swiperRef.current.virtual.update(true);
+                    swiperRef.current.update();
+                    
+                    // Force global resize event as a safety net (triggers Swiper's internal resize observer)
+                    window.dispatchEvent(new Event('resize'));
+                }
+            });
+        }
+    }, [items, isSyncing]);
+
     if (!mounted) {
         // Render fallback (static TimeTable for currentDate)
         return (
@@ -117,7 +133,8 @@ export default function TimeTableSwiper({
                 virtual={{
                     slides: slides,
                     addSlidesAfter: 2, // Preload neighbor
-                    addSlidesBefore: 2
+                    addSlidesBefore: 2,
+                    renderExternalUpdate: false // Allow React to manage updates
                 }}
                 onSwiper={(swiper) => {
                     swiperRef.current = swiper;
@@ -130,6 +147,8 @@ export default function TimeTableSwiper({
                 onSlideChange={handleSlideChange}
                 style={{ width: '100%', height: '100%' }}
                 touchStartPreventDefault={false}
+                observer={true}
+                observeParents={true}
             >
                 {slides.map((slideIndex, index) => {
                     // Calculate date for this specific slide index
