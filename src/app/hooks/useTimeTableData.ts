@@ -83,9 +83,49 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
     }, [refreshTrigger]);
 
     // Update 'now' for sync status calculation
+    // Update 'now' for sync status calculation with Idle Check
     const [now, setNow] = useState(new Date());
+    const lastActivityRef = useRef(Date.now());
+    const lastUpdateRef = useRef(Date.now());
+
     useEffect(() => {
-        const timer = setInterval(() => setNow(new Date()), 60000);
+        // Function to handle user activity
+        const handleActivity = () => {
+            const current = Date.now();
+            // Throttle activity updates to once per second to avoid performance issues
+            if (current - lastActivityRef.current > 1000) {
+                lastActivityRef.current = current;
+                
+                // If the display is stale (more than 1 minute old), update immediately upon waking up
+                // This ensures the user sees the correct status as soon as they interact
+                if (current - lastUpdateRef.current > 60000) {
+                    const newDate = new Date();
+                    setNow(newDate);
+                    lastUpdateRef.current = newDate.getTime();
+                }
+            }
+        };
+
+        // Events to detect user presence
+        const events = ['mousedown', 'keydown', 'touchstart', 'mousemove', 'scroll'];
+        events.forEach(event => window.addEventListener(event, handleActivity));
+        
+        return () => {
+            events.forEach(event => window.removeEventListener(event, handleActivity));
+        };
+    }, []);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            const current = Date.now();
+            // If user has been inactive for more than 5 minutes, stop updating to save resources
+            // Updates will resume immediately when any interaction is detected
+            if (current - lastActivityRef.current < 5 * 60 * 1000) {
+                const newDate = new Date();
+                setNow(newDate);
+                lastUpdateRef.current = newDate.getTime();
+            }
+        }, 60000);
         return () => clearInterval(timer);
     }, []);
 
