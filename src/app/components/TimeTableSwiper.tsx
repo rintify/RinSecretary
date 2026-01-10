@@ -33,6 +33,7 @@ interface TimeTableSwiperProps {
         tasks: number | null; 
         alarms: number | null 
     }) => void;
+    onDataError?: (error: boolean) => void;
 }
 
 // Range of virtual slides. 
@@ -53,7 +54,8 @@ export default function TimeTableSwiper({
     // items, // Removed
     isSyncing,
     onLoadingChange,
-    onDataFreshness
+    onDataFreshness,
+    onDataError
 }: TimeTableSwiperProps) {
     const swiperRef = useRef<SwiperClass | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
@@ -144,6 +146,7 @@ export default function TimeTableSwiper({
                      // isLoading={isSyncing} // Removed
                      onLoadingChange={onLoadingChange}
                      onDataFreshness={onDataFreshness}
+                     onDataError={onDataError}
                  />
             </Box>
         );
@@ -202,6 +205,7 @@ export default function TimeTableSwiper({
                                     // isLoading={isSyncing} // Removed
                                     onLoadingChange={onLoadingChange}
                                     onDataFreshness={onDataFreshness}
+                                    onDataError={onDataError}
                                 />
                             </Box>
                         </SwiperSlide>

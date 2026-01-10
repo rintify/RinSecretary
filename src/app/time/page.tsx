@@ -55,7 +55,8 @@ export default function Home() {
         isSyncedRecently, 
         syncError,
         refresh,
-        updateSyncTimestamp
+        updateSyncTimestamp,
+        setFetchError
     } = useTimeTableData({ 
         currentDate, 
         refreshTrigger: numericTrigger + taskRefreshTrigger 
@@ -192,6 +193,7 @@ export default function Home() {
                         isSyncing={globalIsSyncing} // Pass global for fallback spinner if needed
                         onLoadingChange={handleChildLoadingChange}
                         onDataFreshness={handleDataFreshness}
+                        onDataError={setFetchError}
                     />
                     
                     {/* FABs */}

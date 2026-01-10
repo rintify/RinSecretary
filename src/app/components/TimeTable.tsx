@@ -233,7 +233,8 @@ export default function TimeTable({
     // items, // Removed
     // isLoading // Removed (handled internally)
     onLoadingChange,
-    onDataFreshness
+    onDataFreshness,
+    onDataError
 }: { 
     date: Date;
     onNewTask?: (startTime?: string) => void;
@@ -249,6 +250,7 @@ export default function TimeTable({
         tasks: number | null; 
         alarms: number | null 
     }) => void;
+    onDataError?: (error: boolean) => void;
 }) {
 
   // Independent Data Fetching
@@ -285,6 +287,13 @@ export default function TimeTable({
         }
       }
   }, [sourceTimestamp, onDataFreshness]);
+
+  // Report error to parent
+  useEffect(() => {
+    if (onDataError) {
+        onDataError(error);
+    }
+  }, [error, onDataError]);
 
   useEffect(() => {
     setIsClient(true);

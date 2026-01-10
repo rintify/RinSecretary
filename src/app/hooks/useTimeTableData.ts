@@ -28,6 +28,7 @@ interface UseTimeTableDataReturn {
     primaryAccountValid: boolean | null;
     refresh: () => void;
     updateSyncTimestamp: (key: 'events' | 'tasks' | 'alarms', ts: number | { server: number; client: number }) => void;
+    setFetchError: (error: boolean) => void;
 }
 
 export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDataOptions): UseTimeTableDataReturn {
@@ -131,12 +132,15 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
 
     const timeSinceSync = lastSyncedAt.global ? differenceInMinutes(now, lastSyncedAt.global) : 999;
     
+    // Track global sync error (e.g. auth failure or fetch failure)
+    const [fetchError, setFetchError] = useState(false);
+    
     // Note: We can't easily know if *child* fetches failed here without prop drilling callbacks.
     // For now, "Sync Error" in header will just reflect Auth status.
     // If the user wants red dot on child failure, we'd need a context or callback.
     // Let's stick to Auth status for now as per plan, "Red Dot in header might only reflect Global state".
     const isSyncedRecently = primaryAccountValid === true && timeSinceSync < 5;
-    const syncError = primaryAccountValid === false;
+    const syncError = primaryAccountValid === false || fetchError;
 
     return {
         items: [], // Empty array as this hook no longer fetches items
@@ -147,6 +151,7 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
         syncError,
         primaryAccountValid,
         refresh: () => {}, // Refresh is triggered by prop change down the tree
-        updateSyncTimestamp
+        updateSyncTimestamp,
+        setFetchError
     };
 }

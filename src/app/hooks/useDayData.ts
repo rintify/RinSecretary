@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { addDays, subDays } from 'date-fns';
 import { fetchGoogleEvents } from '@/lib/calendar-actions';
-import { getAlarms } from '@/lib/alarm-actions';
+
 import { TaskLocal } from '../components/TimeTable';
 
 interface UseDayDataOptions {
@@ -83,12 +83,18 @@ export function useDayData({ date, refreshTrigger }: UseDayDataOptions): UseDayD
 
         const fetchAlarmsData = async (): Promise<boolean> => {
             try {
-                const fetchedAlarms = await getAlarms(start, end);
-                if (currentRequestId === requestIdRef.current) {
-                    setAlarms(fetchedAlarms as TaskLocal[]);
-                    setSourceTimestamp(prev => ({ ...prev, alarms: Date.now() }));
+                const paramsStr = params.toString();
+                const res = await fetch(`/api/alarms?${paramsStr}`);
+                
+                if (res.ok) {
+                    const fetchedAlarms = await res.json();
+                    if (currentRequestId === requestIdRef.current) {
+                        setAlarms(fetchedAlarms);
+                        setSourceTimestamp(prev => ({ ...prev, alarms: Date.now() }));
+                    }
+                    return true;
                 }
-                return true;
+                return false;
             } catch (e) {
                 console.error("Alarm fetch error", e);
                 return false;
@@ -127,7 +133,7 @@ export function useDayData({ date, refreshTrigger }: UseDayDataOptions): UseDayD
             
             setIsLoading(false);
             
-            // If any failed, mark as error? Or just partial?
+            // If any failed, mark as error
             const hasError = results.some(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value));
             setError(hasError);
         });
