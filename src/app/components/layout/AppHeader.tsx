@@ -36,7 +36,7 @@ interface AppHeaderProps {
     isSyncedRecently: boolean;
     lastSyncedAt: {
         global: Date | null;
-        events: Date | null;
+        events: { server: Date | null; client: Date | null } | null;
         tasks: Date | null;
         alarms: Date | null;
     };

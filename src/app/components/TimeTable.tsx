@@ -238,13 +238,17 @@ export default function TimeTable({
     date: Date;
     onNewTask?: (startTime?: string) => void;
     onEditTask?: (task: TaskLocal) => void;
-    refreshTrigger?: number;
+    refreshTrigger?: number | { timestamp: number; force: boolean };
     expiredCount?: number;
     onOpenExpired?: () => void;
     // items: TaskLocal[];
     // isLoading?: boolean;
     onLoadingChange?: (isLoading: boolean) => void;
-    onDataFreshness?: (data: { events: number | null; tasks: number | null; alarms: number | null }) => void;
+    onDataFreshness?: (data: { 
+        events: { server: number | null; client: number | null } | null; 
+        tasks: number | null; 
+        alarms: number | null 
+    }) => void;
 }) {
 
   // Independent Data Fetching

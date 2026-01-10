@@ -19,7 +19,7 @@ interface UseTimeTableDataReturn {
     isSyncing: boolean;
     lastSyncedAt: {
         global: Date | null;
-        events: Date | null;
+        events: { server: Date | null; client: Date | null } | null;
         tasks: Date | null;
         alarms: Date | null;
     };
@@ -27,7 +27,7 @@ interface UseTimeTableDataReturn {
     syncError: boolean;
     primaryAccountValid: boolean | null;
     refresh: () => void;
-    updateSyncTimestamp: (key: 'events' | 'tasks' | 'alarms', ts: number) => void;
+    updateSyncTimestamp: (key: 'events' | 'tasks' | 'alarms', ts: number | { server: number; client: number }) => void;
 }
 
 export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDataOptions): UseTimeTableDataReturn {
@@ -41,22 +41,30 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
     const [primaryAccountValid, setPrimaryAccountValid] = useState<boolean | null>(null);
     const [lastSyncedAt, setLastSyncedAt] = useState<{
         global: Date | null;
-        events: Date | null;
+        events: { server: Date | null; client: Date | null } | null;
         tasks: Date | null;
         alarms: Date | null;
     }>({ global: null, events: null, tasks: null, alarms: null });
 
-    const updateSyncTimestamp = useCallback((key: 'events' | 'tasks' | 'alarms', ts: number) => {
+    const updateSyncTimestamp = useCallback((key: 'events' | 'tasks' | 'alarms', ts: number | { server: number; client: number }) => {
         setLastSyncedAt(prev => {
-            const date = new Date(ts);
-            // Global is max of all
-            const newTs = { ...prev, [key]: date };
+            const newTs = { ...prev };
+            
+            if (key === 'events' && typeof ts === 'object') {
+                newTs.events = {
+                    server: new Date(ts.server),
+                    client: new Date(ts.client)
+                };
+            } else if (typeof ts === 'number') {
+                (newTs as any)[key] = new Date(ts);
+            }
             
             // Re-calculate global latest
-            const dates = [newTs.events, newTs.tasks, newTs.alarms].filter(d => d !== null) as Date[];
-            const maxDate = dates.length > 0 ? new Date(Math.max(...dates.map(d => d.getTime()))) : null;
+            const eventDate = newTs.events?.client || null;
+            const dates = [eventDate, newTs.tasks, newTs.alarms].filter(d => d !== null) as Date[];
+            const minDate = dates.length > 0 ? new Date(Math.min(...dates.map(d => d.getTime()))) : null;
             
-            return { ...newTs, global: maxDate };
+            return { ...newTs, global: minDate };
         });
     }, []);
     

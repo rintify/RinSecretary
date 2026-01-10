@@ -31,7 +31,7 @@ export default function Home() {
     
     // Refresh triggers
     const [taskRefreshTrigger, setTaskRefreshTrigger] = useState(0);
-    const [calendarRefreshTrigger, setCalendarRefreshTrigger] = useState(0);
+    const [calendarRefreshTrigger, setCalendarRefreshTrigger] = useState<number | { timestamp: number; force: boolean }>(0);
 
     // Custom hooks for data fetching (non-blocking)
     // Loading State Aggregation
@@ -44,6 +44,9 @@ export default function Home() {
     }, []);
 
     // Unified Data Fetching (Now only Global Checks)
+    // We only need numeric trigger here for useEffect dependency
+    const numericTrigger = typeof calendarRefreshTrigger === 'number' ? calendarRefreshTrigger : calendarRefreshTrigger.timestamp;
+
     const { 
         // items, // Removed
         expiredCount,
@@ -55,7 +58,7 @@ export default function Home() {
         updateSyncTimestamp
     } = useTimeTableData({ 
         currentDate, 
-        refreshTrigger: calendarRefreshTrigger + taskRefreshTrigger 
+        refreshTrigger: numericTrigger + taskRefreshTrigger 
     });
 
     const globalIsSyncing = isSyncing || childLoadingCount > 0;
@@ -78,8 +81,14 @@ export default function Home() {
         currentDate 
     });
 
-    const handleDataFreshness = useCallback((data: { events: number | null; tasks: number | null; alarms: number | null }) => {
-        if (data.events) updateSyncTimestamp('events', data.events);
+    const handleDataFreshness = useCallback((data: { 
+        events: { server: number | null; client: number | null } | null; 
+        tasks: number | null; 
+        alarms: number | null 
+    }) => {
+        if (data.events && data.events.server && data.events.client) {
+            updateSyncTimestamp('events', { server: data.events.server, client: data.events.client });
+        }
         if (data.tasks) updateSyncTimestamp('tasks', data.tasks);
         if (data.alarms) updateSyncTimestamp('alarms', data.alarms);
     }, [updateSyncTimestamp]);
@@ -132,7 +141,10 @@ export default function Home() {
 
         // Trigger updates - simplified trigger which will propagate to children
         if (isCalendar) {
-            setCalendarRefreshTrigger(prev => prev + 1);
+            setCalendarRefreshTrigger(prev => {
+                const val = typeof prev === 'number' ? prev : prev.timestamp;
+                return val + 1;
+            });
         }
         if (isTask) {
             setTaskRefreshTrigger(prev => prev + 1);
@@ -166,7 +178,14 @@ export default function Home() {
                         onDateChange={setCurrentDate}
                         onNewTask={handleNewEvent} 
                         onEditTask={handleTaskClick}
-                        refreshTrigger={taskRefreshTrigger + calendarRefreshTrigger}
+                        refreshTrigger={
+                            // If calendar trigger is object (forced), pass it directly (timestamp handles change).
+                            // If task trigger changed more recently than calendar, we might loose force flag, but force is immediate.
+                            // Better logic: 
+                            typeof calendarRefreshTrigger === 'object' 
+                                ? { timestamp: calendarRefreshTrigger.timestamp + taskRefreshTrigger, force: calendarRefreshTrigger.force }
+                                : (calendarRefreshTrigger + taskRefreshTrigger)
+                        }
                         expiredCount={expiredCount}
                         onOpenExpired={() => setActiveModal('EXPIRED_TASKS')}
                         // items={items} // Removed
@@ -187,7 +206,14 @@ export default function Home() {
                     onCloseModal={handleCloseModal}
                     onEditFromDetail={handleEditFromDetail}
                     onTaskRefresh={() => setTaskRefreshTrigger(prev => prev + 1)}
-                    onCalendarRefresh={() => setCalendarRefreshTrigger(prev => prev + 1)}
+                    onCalendarRefresh={(force = false) => {
+                        if (force) {
+                            setCalendarRefreshTrigger({ timestamp: Date.now(), force: true });
+                        } else {
+                            // If currently object, switch to number (or just update timestamp but force=false)
+                            setCalendarRefreshTrigger(Date.now());
+                        }
+                    }}
                     onTaskClick={handleTaskClick}
                     showSyncModal={showSyncModal}
                     onCloseSyncModal={() => setShowSyncModal(false)}

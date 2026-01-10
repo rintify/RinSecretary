@@ -20,7 +20,7 @@ interface TimeTableSwiperProps {
     onDateChange: (newDate: Date) => void;
     onNewTask: (time?: string) => void;
     onEditTask: (task: any) => void;
-    refreshTrigger: number;
+    refreshTrigger: number | { timestamp: number; force: boolean };
     expiredCount?: number;
     onOpenExpired?: () => void;
 
@@ -28,7 +28,11 @@ interface TimeTableSwiperProps {
     isSyncing?: boolean;
     onLoadingChange?: (isLoading: boolean) => void;
 
-    onDataFreshness?: (data: { events: number | null; tasks: number | null; alarms: number | null }) => void;
+    onDataFreshness?: (data: { 
+        events: { server: number | null; client: number | null } | null; 
+        tasks: number | null; 
+        alarms: number | null 
+    }) => void;
 }
 
 // Range of virtual slides. 

@@ -99,10 +99,11 @@ interface CacheEntry {
     rangeEnd: number;
 }
 const eventCache = new Map<string, CacheEntry>();
-const CACHE_TTL = 60 * 1000; // 1 minute
+// 5 minutes
+const CACHE_TTL = 5 * 60 * 1000; 
 console.log('calendar-actions: Cache initialized/cleared');
 
-export async function fetchGoogleEvents(start: Date, end: Date) {
+export async function fetchGoogleEvents(start: Date, end: Date, forceRefresh: boolean = false) {
   const session = await auth();
   if (!session?.user?.id) {
     console.error('fetchGoogleEvents: No session or user ID');
@@ -116,7 +117,7 @@ export async function fetchGoogleEvents(start: Date, end: Date) {
   const reqStart = start.getTime();
   const reqEnd = end.getTime();
 
-  if (cached) {
+  if (!forceRefresh && cached) {
       const age = now - cached.fetchedAt;
       const coversRange = cached.rangeStart <= reqStart && cached.rangeEnd >= reqEnd;
       
@@ -134,10 +135,10 @@ export async function fetchGoogleEvents(start: Date, end: Date) {
       }
   }
 
-  // Cache miss or expired or out of range -> Bulk Fetch
-  // Fetch a larger window: requested range +/- 45 days 
-  const fetchStart = subDays(start, 45);
-  const fetchEnd = addDays(end, 45);
+  // Cache miss or expired or out of range or forced -> Bulk Fetch
+  // Fetch a larger window: requested range +/- 14 days 
+  const fetchStart = subDays(start, 14);
+  const fetchEnd = addDays(end, 14);
 
   console.log(`fetchGoogleEvents: Fetching for user ${userId} from ${fetchStart} to ${fetchEnd} (Bulk)`);
   const events = await getGoogleCalendarEvents(userId, fetchStart, fetchEnd);

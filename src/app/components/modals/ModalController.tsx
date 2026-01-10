@@ -57,7 +57,7 @@ interface ModalControllerProps {
     onCloseModal: (arg?: any) => void;
     onEditFromDetail: () => void;
     onTaskRefresh: () => void;
-    onCalendarRefresh: () => void;
+    onCalendarRefresh: (force?: boolean) => void;
     onTaskClick: (task: any) => void;
     // Sync Status Dialog
     showSyncModal: boolean;
@@ -67,7 +67,7 @@ interface ModalControllerProps {
     isSyncedRecently: boolean;
     lastSyncedAt: {
         global: Date | null;
-        events: Date | null;
+        events: { server: Date | null; client: Date | null } | null;
         tasks: Date | null;
         alarms: Date | null;
     };
@@ -304,9 +304,17 @@ export default function ModalController({
                         最終同期: {lastSyncedAt.global ? formatDistanceToNow(lastSyncedAt.global, { addSuffix: true, includeSeconds: true, locale: ja }) : '未同期'}
                     </Typography>
                     <Box sx={{ ml: 2, mb: 2 }}>
-                        <Typography variant="caption" display="block" color="text.secondary">
-                            Googleカレンダー: {lastSyncedAt.events ? formatDistanceToNow(lastSyncedAt.events, { addSuffix: true, includeSeconds: true, locale: ja }) : '-'}
-                        </Typography>
+                        <Box sx={{ mb: 1 }}>
+                            <Typography variant="caption" display="block" color="text.secondary" sx={{ fontWeight: 'bold' }}>
+                                Googleカレンダー:
+                            </Typography>
+                            <Typography variant="caption" display="block" color="text.secondary" sx={{ ml: 1 }}>
+                                ・アプリ取得: {lastSyncedAt.events?.client ? formatDistanceToNow(lastSyncedAt.events.client, { addSuffix: true, includeSeconds: true, locale: ja }) : '-'}
+                            </Typography>
+                            <Typography variant="caption" display="block" color="text.secondary" sx={{ ml: 1 }}>
+                                ・Google同期: {lastSyncedAt.events?.server ? formatDistanceToNow(lastSyncedAt.events.server, { addSuffix: true, includeSeconds: true, locale: ja }) : '-'}
+                            </Typography>
+                        </Box>
                         <Typography variant="caption" display="block" color="text.secondary">
                             タスク: {lastSyncedAt.tasks ? formatDistanceToNow(lastSyncedAt.tasks, { addSuffix: true, includeSeconds: true, locale: ja }) : '-'}
                         </Typography>
@@ -339,7 +347,7 @@ export default function ModalController({
                     {!syncError && (
                         <Button variant="contained" onClick={() => {
                             onTaskRefresh();
-                            onCalendarRefresh();
+                            onCalendarRefresh(true); // Force refresh
                             onCloseSyncModal();
                         }}>
                             最新にする

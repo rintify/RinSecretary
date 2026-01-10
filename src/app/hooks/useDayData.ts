@@ -6,7 +6,7 @@ import { TaskLocal } from '../components/TimeTable';
 
 interface UseDayDataOptions {
     date: Date;
-    refreshTrigger: number;
+    refreshTrigger: number | { timestamp: number; force: boolean };
 }
 
 interface UseDayDataReturn {
@@ -15,7 +15,7 @@ interface UseDayDataReturn {
     error: boolean;
     refresh: () => void;
     sourceTimestamp: {
-        events: number | null;
+        events: { server: number | null; client: number | null } | null;
         tasks: number | null;
         alarms: number | null;
     };
@@ -30,7 +30,7 @@ export function useDayData({ date, refreshTrigger }: UseDayDataOptions): UseDayD
     const [error, setError] = useState(false);
     
     const [sourceTimestamp, setSourceTimestamp] = useState<{
-        events: number | null;
+        events: { server: number | null; client: number | null } | null;
         tasks: number | null;
         alarms: number | null;
     }>({ events: null, tasks: null, alarms: null });
@@ -40,6 +40,10 @@ export function useDayData({ date, refreshTrigger }: UseDayDataOptions): UseDayD
 
     // Use primitive keys for dependencies to avoid infinite loops on new Date objects
     const dateKey = date.getTime();
+    
+    // Parse trigger
+    const triggerValue = typeof refreshTrigger === 'number' ? refreshTrigger : refreshTrigger.timestamp;
+    const isForceRefresh = typeof refreshTrigger === 'object' && refreshTrigger.force;
 
     const loadData = useCallback(async () => {
         setIsLoading(true);
@@ -93,12 +97,18 @@ export function useDayData({ date, refreshTrigger }: UseDayDataOptions): UseDayD
 
         const fetchEvents = async (): Promise<boolean> => {
              try {
-                const result = await fetchGoogleEvents(start, end);
+                const result = await fetchGoogleEvents(start, end, isForceRefresh);
                 if (currentRequestId === requestIdRef.current) {
                     setGoogleEvents(result.events as TaskLocal[]);
                     // Only update timestamp if we get a valid one
                     if (result.fetchedAt > 0) {
-                        setSourceTimestamp(prev => ({ ...prev, events: result.fetchedAt }));
+                        setSourceTimestamp(prev => ({ 
+                            ...prev, 
+                            events: { 
+                                server: result.fetchedAt, 
+                                client: Date.now() 
+                            } 
+                        }));
                     }
                 }
                 return true;
@@ -122,7 +132,7 @@ export function useDayData({ date, refreshTrigger }: UseDayDataOptions): UseDayD
             setError(hasError);
         });
 
-    }, [dateKey, refreshTrigger]);
+    }, [dateKey, triggerValue, isForceRefresh]);
 
     useEffect(() => {
         loadData();
