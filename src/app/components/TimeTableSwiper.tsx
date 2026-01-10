@@ -24,8 +24,11 @@ interface TimeTableSwiperProps {
     expiredCount?: number;
     onOpenExpired?: () => void;
 
-    items: TaskLocal[];
+    // items: TaskLocal[]; // Removed
     isSyncing?: boolean;
+    onLoadingChange?: (isLoading: boolean) => void;
+
+    onDataFreshness?: (data: { events: number | null; tasks: number | null; alarms: number | null }) => void;
 }
 
 // Range of virtual slides. 
@@ -43,8 +46,10 @@ export default function TimeTableSwiper({
     refreshTrigger,
     expiredCount,
     onOpenExpired,
-    items,
-    isSyncing
+    // items, // Removed
+    isSyncing,
+    onLoadingChange,
+    onDataFreshness
 }: TimeTableSwiperProps) {
     const swiperRef = useRef<SwiperClass | null>(null);
     const [mounted, setMounted] = useState(false);
@@ -86,21 +91,7 @@ export default function TimeTableSwiper({
         }
     };
 
-    // Force Swiper update when data changes (fixes sync/rendering issues)
-    useEffect(() => {
-        if (swiperRef.current) {
-            // Delay to ensure DOM is painted/ready
-            requestAnimationFrame(() => {
-                if (swiperRef.current) {
-                    swiperRef.current.virtual.update(true);
-                    swiperRef.current.update();
-                    
-                    // Force global resize event as a safety net (triggers Swiper's internal resize observer)
-                    window.dispatchEvent(new Event('resize'));
-                }
-            });
-        }
-    }, [items, isSyncing]);
+    // Force Swiper update removed - not needed as children fetch data independently now
 
     if (!mounted) {
         // Render fallback (static TimeTable for currentDate)
@@ -113,8 +104,10 @@ export default function TimeTableSwiper({
                      refreshTrigger={refreshTrigger}
                      expiredCount={expiredCount}
                      onOpenExpired={onOpenExpired}
-                     items={items}
-                     isLoading={isSyncing}
+                     // items={items} // Removed
+                     // isLoading={isSyncing} // Removed
+                     onLoadingChange={onLoadingChange}
+                     onDataFreshness={onDataFreshness}
                  />
             </Box>
         );
@@ -166,8 +159,10 @@ export default function TimeTableSwiper({
                                     refreshTrigger={refreshTrigger}
                                     expiredCount={expiredCount}
                                     onOpenExpired={onOpenExpired}
-                                    items={items}
-                                    isLoading={isSyncing}
+                                    // items={items} // Removed
+                                    // isLoading={isSyncing} // Removed
+                                    onLoadingChange={onLoadingChange}
+                                    onDataFreshness={onDataFreshness}
                                 />
                             </Box>
                         </SwiperSlide>

@@ -120,10 +120,10 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
       const weekEnd = addDays(weekStart, 7);
       
       try {
-        const events = await fetchGoogleEvents(weekStart, weekEnd);
+        const result = await fetchGoogleEvents(weekStart, weekEnd);
         const slotsMap: Record<string, Map<number, number>> = {};
         
-        events.forEach((event: any) => {
+        result.events.forEach((event: any) => {
           if (!event.startTime || !event.endTime) return;
           
           const start = new Date(event.startTime);

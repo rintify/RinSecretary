@@ -6,8 +6,9 @@ import { Dialog, DialogContent, Box, DialogTitle, DialogActions, Typography, But
 import { Google as GoogleIcon } from '@mui/icons-material';
 import Slide from '@mui/material/Slide';
 import { TransitionProps } from '@mui/material/transitions';
-import { isSameDay, subDays, format } from 'date-fns';
+import { isSameDay, subDays, format, formatDistanceToNow } from 'date-fns';
 import { ModalType } from '../layout/AppHeader';
+import { ja } from 'date-fns/locale';
 
 // Static imports for frequently used lightweight modals
 import TaskForm from '../TaskForm';
@@ -64,7 +65,12 @@ interface ModalControllerProps {
     isSyncing: boolean;
     syncError: boolean;
     isSyncedRecently: boolean;
-    lastSyncedAt: Date | null;
+    lastSyncedAt: {
+        global: Date | null;
+        events: Date | null;
+        tasks: Date | null;
+        alarms: Date | null;
+    };
     // Mail Summary
     unreadSummaries: any[];
     showUnreadModal: boolean;
@@ -295,8 +301,19 @@ export default function ModalController({
                         </Typography>
                     </Box>
                     <Typography variant="body2" color="text.secondary" paragraph>
-                        最終同期: {lastSyncedAt ? format(lastSyncedAt, 'yyyy/MM/dd HH:mm:ss') : '未同期'}
+                        最終同期: {lastSyncedAt.global ? formatDistanceToNow(lastSyncedAt.global, { addSuffix: true, includeSeconds: true, locale: ja }) : '未同期'}
                     </Typography>
+                    <Box sx={{ ml: 2, mb: 2 }}>
+                        <Typography variant="caption" display="block" color="text.secondary">
+                            Googleカレンダー: {lastSyncedAt.events ? formatDistanceToNow(lastSyncedAt.events, { addSuffix: true, includeSeconds: true, locale: ja }) : '-'}
+                        </Typography>
+                        <Typography variant="caption" display="block" color="text.secondary">
+                            タスク: {lastSyncedAt.tasks ? formatDistanceToNow(lastSyncedAt.tasks, { addSuffix: true, includeSeconds: true, locale: ja }) : '-'}
+                        </Typography>
+                        <Typography variant="caption" display="block" color="text.secondary">
+                            アラーム: {lastSyncedAt.alarms ? formatDistanceToNow(lastSyncedAt.alarms, { addSuffix: true, includeSeconds: true, locale: ja }) : '-'}
+                        </Typography>
+                    </Box>
                     <Typography variant="caption" color="text.secondary">
                         {syncError ? "Googleアカウントの認証が切れています。再ログインしてください。" : "通常は自動で同期されますが、ボタンを押して手動で更新することもできます。"}
                     </Typography>

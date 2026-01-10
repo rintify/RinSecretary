@@ -1,6 +1,6 @@
 'use client'; 
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { isSameDay, subDays } from 'date-fns';
 import { Box, Backdrop, CircularProgress, Typography } from '@mui/material';
 
@@ -34,19 +34,31 @@ export default function Home() {
     const [calendarRefreshTrigger, setCalendarRefreshTrigger] = useState(0);
 
     // Custom hooks for data fetching (non-blocking)
-    // Unified Data Fetching
+    // Loading State Aggregation
+    const [childLoadingCount, setChildLoadingCount] = useState(0);
+    const handleChildLoadingChange = useCallback((isLoading: boolean) => {
+        setChildLoadingCount(prev => {
+            const newCount = prev + (isLoading ? 1 : -1);
+            return Math.max(0, newCount);
+        });
+    }, []);
+
+    // Unified Data Fetching (Now only Global Checks)
     const { 
-        items,
+        // items, // Removed
         expiredCount,
         isSyncing, 
         lastSyncedAt, 
         isSyncedRecently, 
         syncError,
-        refresh
+        refresh,
+        updateSyncTimestamp
     } = useTimeTableData({ 
         currentDate, 
         refreshTrigger: calendarRefreshTrigger + taskRefreshTrigger 
     });
+
+    const globalIsSyncing = isSyncing || childLoadingCount > 0;
 
     const { 
         unreadSummaries, 
@@ -65,6 +77,12 @@ export default function Home() {
         onOpenModal: handleOpenModal, 
         currentDate 
     });
+
+    const handleDataFreshness = useCallback((data: { events: number | null; tasks: number | null; alarms: number | null }) => {
+        if (data.events) updateSyncTimestamp('events', data.events);
+        if (data.tasks) updateSyncTimestamp('tasks', data.tasks);
+        if (data.alarms) updateSyncTimestamp('alarms', data.alarms);
+    }, [updateSyncTimestamp]);
 
     React.useEffect(() => {
         window.addEventListener('paste', handlePaste as any);
@@ -109,9 +127,10 @@ export default function Home() {
         setActiveModal('NONE');
         setModalData(null);
         
-        const isCalendar = closingModal.includes('EVENT') || closingModal.includes('ALARM') || closingModal === 'SETTINGS' || closingModal === 'FREE_TIME';
-        const isTask = closingModal.includes('TASK') || closingModal === 'BULK_CREATE' || closingModal === 'SETTINGS' || closingModal === 'FREE_TIME' || closingModal === 'EXPIRED_TASKS' || closingModal === 'REGULAR_TASK_SETTINGS';
+        const isCalendar = activeModal.includes('EVENT') || activeModal.includes('ALARM') || activeModal === 'SETTINGS' || activeModal === 'FREE_TIME';
+        const isTask = activeModal.includes('TASK') || activeModal === 'BULK_CREATE' || activeModal === 'SETTINGS' || activeModal === 'FREE_TIME' || activeModal === 'EXPIRED_TASKS' || activeModal === 'REGULAR_TASK_SETTINGS';
 
+        // Trigger updates - simplified trigger which will propagate to children
         if (isCalendar) {
             setCalendarRefreshTrigger(prev => prev + 1);
         }
@@ -132,7 +151,7 @@ export default function Home() {
                 <AppHeader
                     currentDate={currentDate}
                     onDateChange={setCurrentDate}
-                    isSyncing={isSyncing}
+                    isSyncing={globalIsSyncing}
                     syncError={syncError}
                     isSyncedRecently={isSyncedRecently}
                     lastSyncedAt={lastSyncedAt}
@@ -147,11 +166,13 @@ export default function Home() {
                         onDateChange={setCurrentDate}
                         onNewTask={handleNewEvent} 
                         onEditTask={handleTaskClick}
-                        refreshTrigger={taskRefreshTrigger}
+                        refreshTrigger={taskRefreshTrigger + calendarRefreshTrigger}
                         expiredCount={expiredCount}
                         onOpenExpired={() => setActiveModal('EXPIRED_TASKS')}
-                        items={items}
-                        isSyncing={isSyncing}
+                        // items={items} // Removed
+                        isSyncing={globalIsSyncing} // Pass global for fallback spinner if needed
+                        onLoadingChange={handleChildLoadingChange}
+                        onDataFreshness={handleDataFreshness}
                     />
                     
                     {/* FABs */}

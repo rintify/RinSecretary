@@ -13,7 +13,7 @@ interface TimeTableCarouselProps {
     onNewTask: (time?: string) => void;
     onEditTask: (task: any) => void;
     refreshTrigger: number;
-    items: TaskLocal[];
+    // items: TaskLocal[]; // Removed
 }
 
 export default function TimeTableCarousel({
@@ -22,7 +22,6 @@ export default function TimeTableCarousel({
     onNewTask,
     onEditTask,
     refreshTrigger,
-    items
 }: TimeTableCarouselProps) {
     const x = useMotionValue(0);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -121,7 +120,7 @@ export default function TimeTableCarousel({
                         onNewTask={onNewTask}
                         onEditTask={onEditTask}
                         refreshTrigger={refreshTrigger}
-                        items={items}
+                        // items={items} // Removed
                     />
                 </Box>
                 
@@ -132,7 +131,7 @@ export default function TimeTableCarousel({
                         onNewTask={onNewTask}
                         onEditTask={onEditTask}
                         refreshTrigger={refreshTrigger}
-                        items={items}
+                        // items={items} // Removed
                     />
                 </Box>
 
@@ -143,7 +142,7 @@ export default function TimeTableCarousel({
                         onNewTask={onNewTask}
                         onEditTask={onEditTask}
                         refreshTrigger={refreshTrigger}
-                        items={items}
+                        // items={items} // Removed
                     />
                 </Box>
             </motion.div>

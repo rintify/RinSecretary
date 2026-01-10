@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { 
     IconButton, Box, Tooltip, Button, 
@@ -34,7 +34,12 @@ interface AppHeaderProps {
     isSyncing: boolean;
     syncError: boolean;
     isSyncedRecently: boolean;
-    lastSyncedAt: Date | null;
+    lastSyncedAt: {
+        global: Date | null;
+        events: Date | null;
+        tasks: Date | null;
+        alarms: Date | null;
+    };
     onOpenSyncModal: () => void;
     onOpenModal: (modal: ModalType, data?: any) => void;
 }
@@ -98,7 +103,7 @@ export default function AppHeader({
                     onChange={onDateChange}
                 />
                 
-                <Tooltip title={isSyncing ? "同期中..." : (syncError ? "認証エラー：再ログインしてください" : `最終同期: ${lastSyncedAt ? format(lastSyncedAt, 'HH:mm') : '未同期'}`)}>
+                <Tooltip title={isSyncing ? "同期中..." : (syncError ? "認証エラー：再ログインしてください" : `最終同期: ${lastSyncedAt.global ? formatDistanceToNow(lastSyncedAt.global, { addSuffix: true, includeSeconds: true, locale: ja }) : '未同期'}`)}>
                     <Box 
                         onClick={onOpenSyncModal}
                         sx={{ 

@@ -106,7 +106,7 @@ export async function fetchGoogleEvents(start: Date, end: Date) {
   const session = await auth();
   if (!session?.user?.id) {
     console.error('fetchGoogleEvents: No session or user ID');
-    return [];
+    return { events: [], fetchedAt: 0 };
   }
   const userId = session.user.id;
 
@@ -121,14 +121,16 @@ export async function fetchGoogleEvents(start: Date, end: Date) {
       const coversRange = cached.rangeStart <= reqStart && cached.rangeEnd >= reqEnd;
       
       if (age < CACHE_TTL && coversRange) {
-          console.log(`fetchGoogleEvents: Serving from cache for user ${userId}`);
+          // console.log(`fetchGoogleEvents: Serving from cache for user ${userId}`);
           // Filter cached events for the requested specific range
-          return mapEvents(cached.events.filter((e: any) => {
+          const filtered = mapEvents(cached.events.filter((e: any) => {
              const eStart = new Date(e.start.dateTime || e.start.date).getTime();
              const eEnd = new Date(e.end.dateTime || e.end.date).getTime();
              // Overlap logic
              return eEnd > reqStart && eStart < reqEnd;
           }));
+
+          return { events: filtered, fetchedAt: cached.fetchedAt };
       }
   }
 
@@ -150,11 +152,13 @@ export async function fetchGoogleEvents(start: Date, end: Date) {
   });
 
   // Return filtered for current request
-  return mapEvents(events.filter((e: any) => {
+  const filtered = mapEvents(events.filter((e: any) => {
      const eStart = new Date(e.start.dateTime || e.start.date).getTime();
      const eEnd = new Date(e.end.dateTime || e.end.date).getTime();
      return eEnd > reqStart && eStart < reqEnd;
   }));
+
+  return { events: filtered, fetchedAt: now };
 }
 
 function mapEvents(events: any[]) {

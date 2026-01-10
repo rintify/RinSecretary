@@ -221,6 +221,8 @@ const DayColumn = ({
     );
 };
 
+import { useDayData } from '../hooks/useDayData';
+
 export default function TimeTable({ 
     date,
     onNewTask,
@@ -228,8 +230,10 @@ export default function TimeTable({
     refreshTrigger,
     expiredCount,
     onOpenExpired,
-    items,
-    isLoading
+    // items, // Removed
+    // isLoading // Removed (handled internally)
+    onLoadingChange,
+    onDataFreshness
 }: { 
     date: Date;
     onNewTask?: (startTime?: string) => void;
@@ -237,17 +241,46 @@ export default function TimeTable({
     refreshTrigger?: number;
     expiredCount?: number;
     onOpenExpired?: () => void;
-    items: TaskLocal[];
-    isLoading?: boolean;
+    // items: TaskLocal[];
+    // isLoading?: boolean;
+    onLoadingChange?: (isLoading: boolean) => void;
+    onDataFreshness?: (data: { events: number | null; tasks: number | null; alarms: number | null }) => void;
 }) {
 
+  // Independent Data Fetching
+  const { tasks: items, isLoading, error, sourceTimestamp } = useDayData({ 
+      date, 
+      refreshTrigger: refreshTrigger || 0 
+  });
   
-  // Previously merged here, now passed pre-merged
   const allTasks = items;
   
   const [isClient, setIsClient] = useState(false);
   const [now, setNow] = useState(new Date());
   const [showHistory, setShowHistory] = useState(false);
+
+  // Report loading state to parent
+  useEffect(() => {
+    if (onLoadingChange) {
+        onLoadingChange(isLoading);
+    }
+    // Cleanup on unmount -> prevent stuck loading state
+    return () => {
+        if (onLoadingChange && isLoading) {
+            onLoadingChange(false);
+        }
+    };
+  }, [isLoading, onLoadingChange]);
+
+  // Report freshness to parent
+  useEffect(() => {
+      if (sourceTimestamp && onDataFreshness) {
+        // Only call if at least one timestamp is present
+        if (sourceTimestamp.events || sourceTimestamp.tasks || sourceTimestamp.alarms) {
+            onDataFreshness(sourceTimestamp);
+        }
+      }
+  }, [sourceTimestamp, onDataFreshness]);
 
   useEffect(() => {
     setIsClient(true);
