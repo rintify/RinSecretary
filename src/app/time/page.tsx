@@ -172,7 +172,7 @@ export default function Home() {
                 />
                 
                 {/* Main Display */}
-                <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative', mt: '60px', height: 'calc(100dvh - 60px)' }}>
+                <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative', mt: '60px' }}>
                     <TimeTableSwiper 
                         currentDate={currentDate} 
                         onDateChange={setCurrentDate}

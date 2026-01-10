@@ -56,7 +56,9 @@ export default function TimeTableSwiper({
     onDataFreshness
 }: TimeTableSwiperProps) {
     const swiperRef = useRef<SwiperClass | null>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
     const [mounted, setMounted] = useState(false);
+    const [isLayoutReady, setIsLayoutReady] = useState(false);
     
     // We anchor the swiper to the date it was initially mounted with (or the first non-null date)
     // This stable anchor prevents index shifting during swipes.
@@ -83,6 +85,32 @@ export default function TimeTableSwiper({
         setMounted(true);
     }, []);
 
+    // Layout Observer for PWA/Container Resizing
+    useEffect(() => {
+        if (!mounted || !containerRef.current) return;
+
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const { height, width } = entry.contentRect;
+                if (height > 0 && width > 0) {
+                    setIsLayoutReady(true);
+                }
+            }
+
+            if (swiperRef.current && !swiperRef.current.destroyed) {
+                requestAnimationFrame(() => {
+                     swiperRef.current?.update();
+                });
+            }
+        });
+
+        observer.observe(containerRef.current);
+
+        return () => {
+            observer.disconnect();
+        };
+    }, [mounted]);
+
     const handleSlideChange = (swiper: SwiperClass) => {
         const activeIndex = swiper.activeIndex;
         // Calculate new date based on index diff from INITIAL
@@ -97,10 +125,14 @@ export default function TimeTableSwiper({
 
     // Force Swiper update removed - not needed as children fetch data independently now
 
-    if (!mounted) {
-        // Render fallback (static TimeTable for currentDate)
+    // Render fallback (static TimeTable) until layout is ready
+    // This prevents Swiper from initializing with 0 height
+    if (!mounted || !isLayoutReady) {
         return (
-            <Box sx={{ height: '100%', width: '100%', overflow: 'hidden' }}>
+            <Box 
+                ref={containerRef} // Attach ref here too for early detection
+                sx={{ height: '100%', width: '100%', overflow: 'hidden' }}
+            >
                 <TimeTable 
                      date={currentDate}
                      onNewTask={onNewTask}
@@ -118,7 +150,10 @@ export default function TimeTableSwiper({
     }
 
     return (
-        <Box sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Box 
+            ref={containerRef}
+            sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}
+        >
             <Box sx={{ px: 2, pt: 1, zIndex: 10 }}>
 
             </Box>
@@ -142,7 +177,7 @@ export default function TimeTableSwiper({
                     }
                 }}
                 onSlideChange={handleSlideChange}
-                style={{ width: '100%', height: '100%' }}
+                style={{ width: '100%', flex: 1 }}
                 touchStartPreventDefault={false}
                 observer={true}
                 observeParents={true}
