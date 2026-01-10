@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { addDays, subDays } from 'date-fns';
-import { fetchGoogleEvents } from '@/lib/calendar-actions';
+
 
 import { TaskLocal } from '../components/TimeTable';
 
@@ -103,21 +103,33 @@ export function useDayData({ date, refreshTrigger }: UseDayDataOptions): UseDayD
 
         const fetchEvents = async (): Promise<boolean> => {
              try {
-                const result = await fetchGoogleEvents(start, end, isForceRefresh);
-                if (currentRequestId === requestIdRef.current) {
-                    setGoogleEvents(result.events as TaskLocal[]);
-                    // Only update timestamp if we get a valid one
-                    if (result.fetchedAt > 0) {
-                        setSourceTimestamp(prev => ({ 
-                            ...prev, 
-                            events: { 
-                                server: result.fetchedAt, 
-                                client: Date.now() 
-                            } 
-                        }));
-                    }
+                // Add force refresh flag to params
+                const eventParams = new URLSearchParams(params);
+                if (isForceRefresh) {
+                    eventParams.append('force', 'true');
                 }
-                return true;
+                
+                const res = await fetch(`/api/events?${eventParams.toString()}`);
+                
+                if (res.ok) {
+                    const result = await res.json();
+                    if (currentRequestId === requestIdRef.current) {
+                        setGoogleEvents(result.events);
+                        
+                        // Update timestamp
+                        if (result.fetchedAt > 0) {
+                             setSourceTimestamp(prev => ({ 
+                                ...prev, 
+                                events: { 
+                                    server: result.fetchedAt, 
+                                    client: Date.now() 
+                                } 
+                            }));
+                        }
+                    }
+                    return true;
+                }
+                return false;
             } catch (e) {
                  console.error("Event fetch error", e);
                  return false;
