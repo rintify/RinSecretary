@@ -25,6 +25,8 @@ interface UseTimeTableDataReturn {
     };
     isSyncedRecently: boolean;
     syncError: boolean;
+    authError: boolean;
+    fetchError: boolean;
     primaryAccountValid: boolean | null;
     refresh: () => void;
     updateSyncTimestamp: (key: 'events' | 'tasks' | 'alarms', ts: number | { server: number; client: number }) => void;
@@ -140,7 +142,8 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
     // If the user wants red dot on child failure, we'd need a context or callback.
     // Let's stick to Auth status for now as per plan, "Red Dot in header might only reflect Global state".
     const isSyncedRecently = primaryAccountValid === true && timeSinceSync < 5;
-    const syncError = primaryAccountValid === false || fetchError;
+    const authError = primaryAccountValid === false;
+    const syncError = authError || fetchError;
 
     return {
         items: [], // Empty array as this hook no longer fetches items
@@ -149,6 +152,8 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
         lastSyncedAt,
         isSyncedRecently,
         syncError,
+        authError,
+        fetchError,
         primaryAccountValid,
         refresh: () => {}, // Refresh is triggered by prop change down the tree
         updateSyncTimestamp,

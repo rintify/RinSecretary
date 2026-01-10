@@ -64,6 +64,8 @@ interface ModalControllerProps {
     onCloseSyncModal: () => void;
     isSyncing: boolean;
     syncError: boolean;
+    authError?: boolean;
+    fetchError?: boolean;
     isSyncedRecently: boolean;
     lastSyncedAt: {
         global: Date | null;
@@ -90,6 +92,8 @@ export default function ModalController({
     onCloseSyncModal,
     isSyncing,
     syncError,
+    authError,
+    fetchError,
     isSyncedRecently,
     lastSyncedAt,
     unreadSummaries,
@@ -297,7 +301,7 @@ export default function ModalController({
                             mr: 1
                         }} />
                         <Typography variant="body1">
-                            {syncError ? "認証エラー" : (isSyncedRecently ? "最新 (同期済み)" : "未同期 (時間経過)")}
+                            {authError ? "認証エラー" : (fetchError ? "データ取得エラー" : (syncError ? "エラー" : (isSyncedRecently ? "最新 (同期済み)" : "未同期 (時間経過)")))}
                         </Typography>
                     </Box>
                     <Typography variant="body2" color="text.secondary" paragraph>
@@ -323,9 +327,14 @@ export default function ModalController({
                         </Typography>
                     </Box>
                     <Typography variant="caption" color="text.secondary">
-                        {syncError ? "Googleアカウントの認証が切れています。再ログインしてください。" : "通常は自動で同期されますが、ボタンを押して手動で更新することもできます。"}
+                        {authError 
+                            ? "Googleアカウントの認証が切れています。再ログインしてください。" 
+                            : (fetchError 
+                                ? "データの取得に失敗しました。通信環境を確認するか、しばらく待ってから「最新にする」ボタンを押してください。"
+                                : "通常は自動で同期されますが、ボタンを押して手動で更新することもできます。")
+                        }
                     </Typography>
-                    {syncError && (
+                    {authError && (
                         <Box sx={{ mt: 2 }}>
                             <Button 
                                 variant="contained" 
@@ -344,7 +353,7 @@ export default function ModalController({
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={onCloseSyncModal}>閉じる</Button>
-                    {!syncError && (
+                    {!authError && (
                         <Button variant="contained" onClick={() => {
                             onTaskRefresh();
                             onCalendarRefresh(true); // Force refresh

@@ -53,7 +53,10 @@ export default function Home() {
         isSyncing, 
         lastSyncedAt, 
         isSyncedRecently, 
+ 
         syncError,
+        authError,
+        fetchError,
         refresh,
         updateSyncTimestamp,
         setFetchError
@@ -221,6 +224,8 @@ export default function Home() {
                     onCloseSyncModal={() => setShowSyncModal(false)}
                     isSyncing={isSyncing}
                     syncError={syncError}
+                    authError={authError}
+                    fetchError={fetchError}
                     isSyncedRecently={isSyncedRecently}
                     lastSyncedAt={lastSyncedAt}
                     unreadSummaries={unreadSummaries}
