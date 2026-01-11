@@ -49,6 +49,61 @@ VPSに以下がインストールされていること：
 
 ---
 
+## 運用・ログ確認方法 (VPS)
+
+デプロイ後のVPS上でのログ確認や、定期実行タスクの監視方法です。
+
+### 1. 利用可能なサービス (Service Name)
+
+`docker compose` コマンドの末尾にサービス名（`web` や `caddy`）を指定することで、特定の対象に絞って操作できます。
+
+| サービス名 | 役割 | 内容 |
+|:---|:---|:---|
+| `web` | アプリケーション本体 | Next.js サーバー、Prisma (DB)、スケジューラ |
+| `caddy` | リバースプロキシ | SSL証明書 (HTTPS) の自動取得、ドメイン管理 |
+
+### 2. ログの確認方法
+
+```bash
+# アプリディレクトリに移動
+cd ~/rin-secretary
+
+# 全てのサービス（web + caddy）のログをリアルタイム表示
+docker compose -f deploy/docker-compose.yml --env-file .env logs -f
+
+# サービスを絞ってログを表示
+docker compose -f deploy/docker-compose.yml --env-file .env logs -f web
+docker compose -f deploy/docker-compose.yml --env-file .env logs -f caddy
+```
+
+- **Next.js & スケジューラ (`web`)**: `Starting Next.js Server...` や `Starting Scheduler...` 以降のログ。APIリクエストや定期タスクの実行状況が表示されます。
+- **リバースプロキシ (`caddy`)**: SSL証明書の取得状況や、外部からのアクセスログが表示されます。
+
+### 3. コンテナのステータス確認
+
+コンテナが正常に起動しているか、再起動を繰り返していないかを確認します。
+
+```bash
+docker compose -f deploy/docker-compose.yml --env-file .env ps
+```
+
+### 4. データベースとファイルの直接確認
+
+SQLite ファイルやアップロードされたファイルは VPS 上の `~/rin-secretary/data` にマウントされています。
+
+```bash
+# コンテナ内に入って確認する場合
+docker compose -f deploy/docker-compose.yml --env-file .env exec -it web sh
+ls -l /data/sqlite.db
+```
+
+### 5. デプロイ履歴とバックアップ
+
+- **デプロイ完了通知**: `ADMIN_DISCORD_WEBHOOK` に設定した Discord チャンネルに、デプロイ完了時に GitHub の SHA とともに通知されます。
+- **DBバックアップ**: デプロイ直前に、最新 host の `sqlite.db` が Discord に送信されます（GitHub Actions 経由）。
+
+---
+
 ## ローカル開発
 
 ```bash
