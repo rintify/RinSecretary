@@ -86,7 +86,57 @@ export default function MemoEditClient({ memo: initialMemo, isNew }: MemoEditCli
                  await db.memos.update(initialMemo.id, { lastAccessedAt: new Date() });
             }
         };
+        
+        // Also sync/cache attachments for this memo
+        const syncAttachments = async () => {
+             if (!initialMemo.id || !navigator.onLine) return;
+             
+             try {
+                 const { getAttachments } = await import('@/app/memos/actions');
+                 const { OFFLINE_FILE_SIZE_LIMIT } = await import('@/lib/constants');
+                 const { syncManager } = await import('@/lib/sync-manager');
+                 
+                 const serverFiles = await getAttachments(initialMemo.id);
+
+                 
+                // Upsert Attachments Metadata
+                 await db.transaction('rw', db.attachments, async () => {
+                    for (const sf of serverFiles) {
+                        const existing = await db.attachments.get(sf.id);
+                        await db.attachments.put({
+                            id: sf.id,
+                            memoId: sf.memoId,
+                            fileName: sf.fileName,
+                            fileSize: sf.fileSize,
+                            mimeType: sf.mimeType,
+                            createdAt: sf.createdAt,
+                            filePath: sf.filePath,
+                            lastAccessedAt: new Date(),
+                            isDirty: false, 
+                            blob: existing?.blob, 
+                        });
+                    }
+                });
+                
+                // No manual caching here. SW intercepts fetches if referenced!
+                // But wait, if we don't fetch them, SW won't cache them.
+                // We DO want to "prefetch" them so they are available offline even if user doesn't click them.
+                // So we actually SHOULD fetch them here, but we don't need to manually verify cache.
+                // Just firing `fetch(url)` is enough for SW to cache it.
+                
+                const filesToPrefetch = serverFiles.filter(f => f.fileSize <= OFFLINE_FILE_SIZE_LIMIT);
+                if (filesToPrefetch.length > 0 && navigator.onLine) {
+                     filesToPrefetch.forEach(f => {
+                         if(f.filePath) fetch(f.filePath).catch(() => {});
+                     });
+                }
+             } catch (e) {
+                 console.error('Attachment sync failed', e);
+             }
+        };
+
         init();
+        syncAttachments();
     }, [initialMemo]);
 
     const displayContent = localMemo?.content ?? initialMemo.content;

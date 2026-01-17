@@ -4,9 +4,10 @@ const withPWA = require("@ducanh2912/next-pwa").default({
   aggressiveFrontEndNavCaching: true,
   reloadOnOnline: true,
   swcMinify: true,
-  disable: process.env.NODE_ENV === "development",
+  disable: false, // Enable in Dev for testing (or controlled by env if needed, but User requested feature now)
   workboxOptions: {
-    disableDevLogs: true,
+    disableDevLogs: false,
+    importScripts: ['/sw-custom.js'],
   },
 });
 

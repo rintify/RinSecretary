@@ -59,7 +59,45 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
         []
     ) || [];
 
-    // Server Memos State (for infinite scroll)
+    // Live Query for Local Blobs (for Offline Thumbnails)
+    const localBlobs = useLiveQuery(
+        () => db.attachments.filter(a => !!a.blob).toArray(),
+        []
+    ) || [];
+
+    // Create a lookup map: filePath -> Blob URL
+    // We need to manage ObjectURLs to prevent leaks, but React Re-renders might complicate 'revoke'.
+    // For simplicity in this list view, we can rely on browser GC or simple map. 
+    // Optimization: Only create map when localBlobs changes.
+    const blobUrlMap = useRef<Record<string, string>>({});
+    
+    // Update map when blobs change
+    useEffect(() => {
+        const newMap: Record<string, string> = {};
+        localBlobs.forEach(att => {
+            if (att.blob && att.filePath) {
+                 // Reuse existing URL if possible? hard to track. 
+                 // Just create new one.
+                 newMap[att.filePath] = URL.createObjectURL(att.blob);
+            }
+        });
+        blobUrlMap.current = newMap;
+        
+        // Cleanup function? 
+        return () => {
+            Object.values(newMap).forEach(url => URL.revokeObjectURL(url));
+        };
+    }, [localBlobs]);
+    
+    const getThumbnailSrc = (path: string | undefined | null) => {
+        if (!path) return null;
+        if (blobUrlMap.current[path]) return blobUrlMap.current[path];
+        return path;
+    };
+
+    // ... (rest of code)
+
+
     const [serverMemos, setServerMemos] = useState<DisplayMemo[]>([]);
     const [nextCursor, setNextCursor] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(true);
@@ -730,11 +768,14 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                                                     position: 'relative', borderRadius: 1, overflow: 'hidden', 
                                                     bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center'
                                                 }}>
-                                                    {memo.thumbnailPath ? (
-                                                        <Image src={memo.thumbnailPath} alt="thumbnail" fill sizes="48px" style={{ objectFit: 'cover' }} />
-                                                    ) : (
-                                                        <NoteIcon sx={{ fontSize: 24, color: 'text.secondary', opacity: 0.7 }} />
-                                                    )}
+                                                    {(() => {
+                                                        const thumbSrc = getThumbnailSrc(memo.thumbnailPath);
+                                                        return thumbSrc ? (
+                                                            <Image src={thumbSrc} alt="thumbnail" fill sizes="48px" style={{ objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <NoteIcon sx={{ fontSize: 24, color: 'text.secondary', opacity: 0.7 }} />
+                                                        );
+                                                    })()}
                                                 </Box>
                                                 <ListItemText 
                                                     primary={memo.title} 
@@ -751,11 +792,14 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                                                     position: 'relative', borderRadius: 1, overflow: 'hidden', 
                                                     bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center'
                                                 }}>
-                                                    {memo.thumbnailPath ? (
-                                                        <Image src={memo.thumbnailPath} alt="thumbnail" fill sizes="56px" style={{ objectFit: 'cover' }} />
-                                                    ) : (
-                                                        <NoteIcon sx={{ fontSize: 28, color: 'text.secondary', opacity: 0.7 }} />
-                                                    )}
+                                                    {(() => {
+                                                        const thumbSrc = getThumbnailSrc(memo.thumbnailPath);
+                                                        return thumbSrc ? (
+                                                            <Image src={thumbSrc} alt="thumbnail" fill sizes="56px" style={{ objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <NoteIcon sx={{ fontSize: 28, color: 'text.secondary', opacity: 0.7 }} />
+                                                        );
+                                                    })()}
                                                 </Box>
 
                                                 <ListItemText 

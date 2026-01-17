@@ -8,6 +8,7 @@ import { join } from 'path';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import { extractTitle, extractThumbnail } from '@/lib/memo-utils';
+import { generateServerFilename } from '@/lib/file-utils';
 
 import { getCurrentStorageUsage, updateStorageUsage, SERVER_MAX_STORAGE_BYTES, ensureDir, UPLOAD_DIR, unlinkFile } from '@/lib/storage';
 
@@ -248,6 +249,8 @@ export async function createMemoWithFile(formData: FormData) {
         }
     });
 
+    let filename = '';
+    
     try {
         const currentTotalSize = await getCurrentStorageUsage();
 
@@ -256,9 +259,9 @@ export async function createMemoWithFile(formData: FormData) {
         }
 
         const buffer = Buffer.from(await file.arrayBuffer());
-        const nameParts = file.name.split('.');
-        const ext = nameParts.length > 1 ? `.${nameParts.pop()}` : '';
-        const filename = `${randomUUID()}${ext}`;
+        
+        // Use common util
+        filename = generateServerFilename(randomUUID(), file.name);
         
         ensureDir(UPLOAD_DIR);
         const filepath = join(UPLOAD_DIR, filename);
@@ -300,7 +303,23 @@ export async function createMemoWithFile(formData: FormData) {
         return { success: true, memoId: memo.id };
 
     } catch (e) {
+        // DB Failed: Cleanup memo and file
         await prisma.memo.delete({ where: { id: memo.id }});
+        
+        // Cleanup file if it was created
+        // We need filename to cleanup. 
+        // Re-generate filename logic (deterministic if we have the inputs)
+        // OR better: define filename earlier outside try block? 
+        // But here we defined it inside. 
+        
+        // Actually, 'unlinkFile' handles non-existent files gracefully.
+        // We just need to capture the filename generated inside the try block.
+        // Let's refactor to define filename outside.
+        
+        if (filename) {
+            await unlinkFile(filename);
+        }
+        
         console.error(e);
         throw e;
     }
@@ -318,6 +337,8 @@ export async function uploadAttachment(formData: FormData, memoId: string) {
     if (!memo || memo.userId !== user?.id) throw new Error('Forbidden');
 
     const file = formData.get('file') as File;
+    const fileId = formData.get('id') as string | null;
+
     if (!file) throw new Error('No file provided');
 
     // サーバー全体の合計サイズチェック
@@ -330,31 +351,60 @@ export async function uploadAttachment(formData: FormData, memoId: string) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const nameParts = file.name.split('.');
     const ext = nameParts.length > 1 ? `.${nameParts.pop()}` : '';
-    const filename = `${randomUUID()}${ext}`;
+    // Use provided ID or generate new. Note: ID collision logic below handles idempotency.
+    const attachmentId = fileId || randomUUID(); 
+    const filename = generateServerFilename(attachmentId, file.name);
+    
+    // Idempotency: Check if attachment already exists
+    if (fileId) {
+        const existing = await prisma.attachment.findUnique({
+            where: { id: fileId }
+        });
+        if (existing) {
+            // Check ownership/match
+            if (existing.memoId === memoId) {
+                // Already uploaded. Treat as success.
+                return {
+                    ...existing,
+                    fileSize: Number(existing.fileSize)
+                };
+            } else {
+                 // ID conflict with different memo? Should not happen with UUIDs, but if so, error.
+                 throw new Error('Attachment ID conflict');
+            }
+        }
+    }
     
     ensureDir(UPLOAD_DIR);
     const filepath = join(UPLOAD_DIR, filename);
     await writeFile(filepath, buffer);
     const url = `/api/uploads/${filename}`;
 
-    const attachment = await prisma.attachment.create({
-        data: {
-            fileName: file.name,
-            filePath: url,
-            fileSize: file.size,
-            mimeType: file.type || 'application/octet-stream',
-            memoId: memoId,
-        }
-    });
+    try {
+        const attachment = await prisma.attachment.create({
+            data: {
+                id: attachmentId, // Force use of local ID
+                fileName: file.name,
+                filePath: url,
+                fileSize: file.size,
+                mimeType: file.type || 'application/octet-stream',
+                memoId: memoId,
+            }
+        });
 
-    revalidatePath(`/memos/${memoId}`);
-    
-    await updateStorageUsage(file.size);
+        revalidatePath(`/memos/${memoId}`);
+        await updateStorageUsage(file.size);
 
-    return {
-        ...attachment,
-        fileSize: Number(attachment.fileSize)
-    };
+        return {
+            ...attachment,
+            fileSize: Number(attachment.fileSize)
+        };
+    } catch (e) {
+        // DB insert failed, cleanup file
+        console.error('Attachment DB insert failed, cleaning up file:', filepath);
+        await unlinkFile(filename);
+        throw e;
+    }
 }
 
 export async function getAttachments(memoId: string) {

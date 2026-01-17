@@ -5,7 +5,8 @@ import {
     Dialog, DialogTitle, DialogContent, DialogActions, 
     List, ListItem, ListItemText, ListItemSecondaryAction, 
     IconButton, Button, Typography, Box, CircularProgress,
-    Snackbar, ListItemButton, Menu, MenuItem, ListItemIcon
+    Snackbar, ListItemButton, Menu, MenuItem, ListItemIcon,
+    Badge, Tooltip
 } from '@mui/material';
 import { 
     Delete as DeleteIcon, 
@@ -14,7 +15,10 @@ import {
     CloudUpload as UploadIcon,
     Note as NoteIcon,
     MoreVert as MoreVertIcon,
-    Download as DownloadIcon
+    Download as DownloadIcon,
+    CloudOff as CloudOffIcon,
+    CloudDone as CloudDoneIcon,
+    Sync as SyncIcon
 } from '@mui/icons-material';
 import Image from 'next/image';
 import { getAttachments, deleteAttachment, uploadAttachment } from '@/app/memos/actions';
@@ -22,6 +26,10 @@ import { MEMO_COLOR } from '../utils/colors';
 import { useGlobalJobs } from '../context/GlobalJobContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
+import { OFFLINE_FILE_SIZE_LIMIT } from '@/lib/constants';
+import { db } from '@/lib/db';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { syncManager } from '@/lib/sync-manager';
 
 export interface Attachment {
     id: string;
@@ -30,6 +38,7 @@ export interface Attachment {
     fileSize: number;
     mimeType: string;
     createdAt: Date;
+    isDirty?: boolean; // UI only
 }
 
 interface MemoFileManagementProps {
@@ -41,7 +50,12 @@ interface MemoFileManagementProps {
 }
 
 export default function MemoFileManagement({ memoId, open, onClose, onSelect, onFilesChange }: MemoFileManagementProps) {
-    const [attachments, setAttachments] = useState<Attachment[]>([]);
+    // Dexie Live Query: Local First
+    const localAttachments = useLiveQuery(
+        () => db.attachments.where('memoId').equals(memoId).reverse().sortBy('createdAt'),
+        [memoId]
+    );
+
     const [loading, setLoading] = useState(false);
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -61,23 +75,51 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
         setSelectedFileId(null);
     };
 
+    // Sync Server Files to Local DB
     useEffect(() => {
-        if (open && memoId) {
-            loadFiles();
+        if (open && memoId && navigator.onLine) {
+            syncFiles();
         }
     }, [open, memoId]);
 
-    const loadFiles = async () => {
+    const syncFiles = async () => {
         setLoading(true);
         try {
-            const files = await getAttachments(memoId);
-            setAttachments(files);
+            const serverFiles = await getAttachments(memoId);
+            
+            // Upsert server files to Dexie
+
+
+            await db.transaction('rw', db.attachments, async () => {
+                for (const sf of serverFiles) {
+                    const existing = await db.attachments.get(sf.id);
+
+
+                    await db.attachments.put({
+                        id: sf.id,
+                        memoId: sf.memoId,
+                        fileName: sf.fileName,
+                        fileSize: sf.fileSize,
+                        mimeType: sf.mimeType,
+                        createdAt: sf.createdAt,
+                        filePath: sf.filePath,
+                        lastAccessedAt: new Date(),
+                        isDirty: false, 
+                        blob: existing?.blob, 
+                    });
+                }
+            });
+
+
+
         } catch (e) {
-            console.error(e);
+            console.error('Failed to sync files', e);
         } finally {
             setLoading(false);
         }
     };
+
+
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -87,6 +129,19 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
         const jobId = `upload-${Date.now()}`;
         
         try {
+            // Check Size & Offline status
+            const isOffline = !navigator.onLine;
+            const isSmall = file.size <= OFFLINE_FILE_SIZE_LIMIT;
+
+            if (isOffline && !isSmall) {
+                showToast(`オフライン時は${OFFLINE_FILE_SIZE_LIMIT / 1024 / 1024}MB以下のファイルのみ追加可能です。`, 'error');
+                setLoading(false);
+                return;
+            }
+
+            // Create ID
+            const id = crypto.randomUUID();
+
             addClientJob({
                 id: jobId,
                 type: 'UPLOAD',
@@ -94,16 +149,59 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
                 payload: null
             });
 
-            const formData = new FormData();
-            formData.append('file', file);
-            const newFile = await uploadAttachment(formData, memoId);
-            setAttachments(prev => [newFile, ...prev]);
-            onFilesChange?.();
-            
-            updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
+            // If small enough, save to Dexie first (Offline Support)
+            if (isSmall) {
+                // Ensure space
+                await syncManager.checkAndGC(file.size);
+
+                await db.attachments.add({
+
+                    id,
+                    memoId,
+                    fileName: file.name,
+                    fileSize: file.size,
+                    mimeType: file.type,
+                    createdAt: new Date(),
+                    blob: file,
+                    isDirty: true,
+                    lastAccessedAt: new Date(),
+                    // Placeholder filePath, will be updated on sync
+                    filePath: `/api/uploads/${id}.${file.name.split('.').pop()}` 
+                });
+
+                // Trigger Background Sync
+                syncManager.sync().catch(console.error);
+                
+                updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
+                onFilesChange?.();
+            } else {
+                // Large file: Direct Upload (Online Only)
+                 const formData = new FormData();
+                formData.append('file', file);
+                formData.append('id', id); // Use client ID
+
+                const newFile = await uploadAttachment(formData, memoId);
+                
+                 // Also save metadata to Dexie so it appears immediately
+                await db.attachments.put({
+                    id: newFile.id,
+                    memoId: newFile.memoId,
+                    fileName: newFile.fileName,
+                    fileSize: newFile.fileSize,
+                    mimeType: newFile.mimeType,
+                    createdAt: newFile.createdAt,
+                    filePath: newFile.filePath,
+                    lastAccessedAt: new Date(),
+                    isDirty: false,
+                    // No blob for large files
+                });
+
+                updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
+                onFilesChange?.();
+            }
+
         } catch (e: any) {
             console.error(e);
-            updateClientJob(jobId, { status: 'FAILED', error: e.message || 'アップロード失敗' });
             updateClientJob(jobId, { status: 'FAILED', error: e.message || 'アップロード失敗' });
             showToast(e.message || 'アップロードに失敗しました', 'error');
         } finally {
@@ -119,16 +217,34 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
         }
     };
 
-    const handleDownloadClick = () => {
+    const handleDownloadClick = async () => {
         if (selectedFileId) {
-            const file = attachments.find(f => f.id === selectedFileId);
+            const file = localAttachments?.find(f => f.id === selectedFileId);
             if (file) {
+                 // Check if we need to fetch and cache blob first (for < 5MB files that are missing blob)
+                 // Or just download from URL if large
+                 
+                 let downloadUrl = '';
+                 let revokeUrl = false;
+
+                if (file.blob) {
+                    downloadUrl = URL.createObjectURL(file.blob);
+                    revokeUrl = true;
+                } else {
+                     // SW will handle caching on fetch if we just use the URL
+                     downloadUrl = file.filePath || '';
+                }
+
                 const link = document.createElement('a');
-                link.href = file.filePath;
+                link.href = downloadUrl;
                 link.download = file.fileName;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+                
+                if (revokeUrl) {
+                    setTimeout(() => URL.revokeObjectURL(downloadUrl), 100);
+                }
             }
             handleMenuClose();
         }
@@ -137,8 +253,33 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
     const handleDelete = async (id: string) => {
         if (!await confirm('ファイルを削除しますか？', { severity: 'error', confirmText: '削除', title: 'ファイルの削除' })) return;
         try {
-            await deleteAttachment(id);
-            setAttachments(prev => prev.filter(f => f.id !== id));
+            // Check if Dirty (Local only)
+            const local = await db.attachments.get(id);
+            if (local && local.isDirty) {
+                 // Even if dirty (not synced), if we delete it now, we should just remove it.
+                 // Unless it was partially synced? Assuming isDirty means "newly created locally".
+                 // BUT: if it's "dirty update" of synced file? Attachment is immutable though.
+                 // So "isDirty" means "New Local File". We can safe delete.
+                 await db.attachments.delete(id);
+            } else {
+                // Server Delete - Go through SyncManager if offline
+                if (navigator.onLine) {
+                     try {
+                        await deleteAttachment(id);
+                        await db.attachments.delete(id);
+                     } catch(e) {
+                         // Failed to delete on server? Mark for deletion logic?
+                         // If server error, fallback to mark 'isDeleted'
+                         await db.attachments.update(id, { isDeleted: true });
+                         syncManager.sync().catch(console.error); // Trigger sync to retry delete
+                     }
+                } else {
+                    // Offline: Mark as deleted
+                    await db.attachments.update(id, { isDeleted: true });
+                    syncManager.sync().catch(console.error); // Attempt sync (will fail but good practice)
+                }
+            }
+            
             onFilesChange?.();
             showToast('ファイルを削除しました', 'success');
         } catch (e) {
@@ -156,20 +297,42 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
         }
     };
 
-    const handleItemClick = (file: Attachment) => {
+    const handleItemClick = async (file: any) => { 
         if (onSelect) {
-            onSelect(file);
-            onClose(); // Optional: close modal after selection if desired, or keep open. 
-            // Usually insert -> close is better UX for "insert", but user didn't specify.
-            // Let's assume we keep it open or let parent decide? 
-            // Actually, for "insert at caret", closing is usually expected?
-            // User request: "click item -> insert at caret".
-            // Let's NOT close it automatically unless standard behavior suggests so.
-            // But wait, if they want to insert multiple, keeping open is good.
-            // If I look at `MemoEditClient`, passing `onSelect` usually implies action.
-            // Let's keep it open for now, consistent with "copy" behavior.
+             const attachment: Attachment = {
+                id: file.id,
+                fileName: file.fileName,
+                filePath: file.filePath || '',
+                fileSize: file.fileSize,
+                mimeType: file.mimeType,
+                createdAt: file.createdAt
+            };
+            onSelect(attachment);
         } else {
-            handleCopy(file.filePath);
+             // View / Open logic
+             // If we have blob, open it? Or copy link?
+             // Main use case: Open/Preview
+             
+             // If image, we want to preview... but currently no preview modal here except thumbnail.
+             // If we click, maybe we want to open it in new tab?
+             
+             // Let's implement "Open in new tab" with caching if possible
+             
+            let url = file.filePath;
+            if (file.blob) {
+                 url = URL.createObjectURL(file.blob);
+            }
+            
+            // If file is not cached but is small, fetch it to view it also caches it via SW
+            if (!file.blob && file.filePath && file.fileSize <= OFFLINE_FILE_SIZE_LIMIT) {
+                   url = file.filePath; 
+            }
+            	// Else, large file or offline handling remains same (use path or blob)
+            
+            
+            if (url) {
+                window.open(url, '_blank');
+            }
         }
     };
 
@@ -178,6 +341,9 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     };
+
+    // Render logic
+    const displayedAttachments = localAttachments || [];
 
     return (
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" disableScrollLock>
@@ -188,61 +354,23 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
                 </IconButton>
             </DialogTitle>
             <DialogContent dividers sx={{ p: 0 }}>
-                {loading && attachments.length === 0 ? (
+                {loading && displayedAttachments.length === 0 ? (
                     <Box display="flex" justifyContent="center" p={3}>
                         <CircularProgress sx={{ color: MEMO_COLOR }} />
                     </Box>
-                ) : attachments.length === 0 ? (
+                ) : displayedAttachments.length === 0 ? (
                     <Typography color="text.secondary" align="center" py={3}>
                         ファイルはありません
                     </Typography>
                 ) : (
                     <List disablePadding>
-                        {attachments.map(file => (
-                            <ListItem key={file.id} divider disablePadding>
-                                <ListItemButton onClick={() => handleItemClick(file)} sx={{ py: 1, px: 2 }}>
-                                    <Box sx={{ 
-                                        mr: 2, 
-                                        flexShrink: 0, 
-                                        width: 48, 
-                                        height: 48, 
-                                        position: 'relative', 
-                                        borderRadius: 1, 
-                                        overflow: 'hidden', 
-                                        bgcolor: 'action.hover',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center'
-                                    }}>
-                                        {file.mimeType.startsWith('image/') ? (
-                                            <Image 
-                                                src={file.filePath} 
-                                                alt="thumbnail" 
-                                                fill 
-                                                sizes="48px"
-                                                style={{ objectFit: 'cover' }} 
-                                            />
-                                        ) : (
-                                            <NoteIcon sx={{ fontSize: 24, color: 'text.secondary', opacity: 0.7 }} />
-                                        )}
-                                    </Box>
-                                    <ListItemText 
-                                        primary={
-                                            <Typography variant="body2" sx={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                {file.fileName}
-                                            </Typography>
-                                        }
-                                        secondary={`${formatSize(file.fileSize)} • ${new Date(file.createdAt).toLocaleString()}`} 
-                                        secondaryTypographyProps={{ variant: 'caption' }}
-                                        sx={{ minWidth: 0 }}
-                                    />
-                                </ListItemButton>
-                                <ListItemSecondaryAction sx={{ right: 8 }}>
-                                    <IconButton edge="end" onClick={(e) => handleMenuOpen(e, file.id)} size="small">
-                                        <MoreVertIcon fontSize="small" />
-                                    </IconButton>
-                                </ListItemSecondaryAction>
-                            </ListItem>
+                        {displayedAttachments.filter(f => !f.isDeleted).map(file => (
+                            <AttachmentListItem 
+                                key={file.id} 
+                                file={file} 
+                                onClick={() => handleItemClick(file)}
+                                onMenuOpen={(e) => handleMenuOpen(e, file.id)}
+                            />
                         ))}
                     </List>
                 )}
@@ -280,5 +408,99 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
                 <Button onClick={onClose} sx={{ color: 'text.secondary' }}>閉じる</Button>
             </DialogActions>
         </Dialog>
+    );
+}
+
+function AttachmentListItem({ file, onClick, onMenuOpen }: { file: any, onClick: () => void, onMenuOpen: (e: React.MouseEvent<HTMLElement>) => void }) {
+    const [objectUrl, setObjectUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (file.blob && file.mimeType.startsWith('image/')) {
+            const url = URL.createObjectURL(file.blob);
+            setObjectUrl(url);
+            return () => {
+                URL.revokeObjectURL(url);
+            };
+        }
+        return undefined;
+    }, [file.blob, file.mimeType]);
+
+    const formatSize = (bytes: number) => {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    };
+
+    return (
+        <ListItem divider disablePadding>
+            <ListItemButton onClick={onClick} sx={{ py: 1, px: 2 }}>
+                <Box sx={{ 
+                    mr: 2, 
+                    flexShrink: 0, 
+                    width: 48, 
+                    height: 48, 
+                    position: 'relative', 
+                    borderRadius: 1, 
+                    overflow: 'hidden', 
+                    bgcolor: 'action.hover',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}>
+                    {file.mimeType.startsWith('image/') ? (
+                        <Image 
+                            src={objectUrl || file.filePath || ''} 
+                            alt="thumbnail" 
+                            fill 
+                            sizes="48px"
+                            style={{ objectFit: 'cover' }} 
+                            onError={(e) => { /* Fallback? */ }}
+                        />
+                    ) : (
+                        <NoteIcon sx={{ fontSize: 24, color: 'text.secondary', opacity: 0.7 }} />
+                    )}
+                </Box>
+                <ListItemText 
+                    primary={
+                        <Box display="flex" alignItems="center" gap={1}>
+                            <Typography variant="body2" sx={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {file.fileName}
+                            </Typography>
+                            {/* Badge Logic */}
+                            {file.isDirty ? (
+                                <Tooltip title="未同期 (オフライン)">
+                                    <Badge color="warning" variant="dot">
+                                        <CloudOffIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
+                                    </Badge>
+                                </Tooltip>
+                            ) : !file.blob ? (
+                                <Tooltip title="クラウドのみ (ローカル未保存)">
+                                    <CloudDoneIcon sx={{ fontSize: 18, color: 'success.light', opacity: 0.5 }} />
+                                </Tooltip>
+                            ) : (
+                                <Tooltip title="同期済み (端末に保存済み)">
+                                    <CloudDoneIcon sx={{ fontSize: 18, color: 'success.main' }} />
+                                </Tooltip>
+                            )}
+                            {file.fileSize > OFFLINE_FILE_SIZE_LIMIT && file.isDirty && (
+                                    <Tooltip title="サイズ超過のためオフライン同期不可">
+                                    <Badge color="error" variant="dot">
+                                        <CloudOffIcon sx={{ fontSize: 16, color: 'error.main' }} />
+                                    </Badge>
+                                </Tooltip>
+                            )}
+                        </Box>
+                    }
+                    secondary={`${formatSize(file.fileSize)} • ${new Date(file.createdAt).toLocaleString()}`} 
+                    secondaryTypographyProps={{ variant: 'caption' }}
+                    sx={{ minWidth: 0 }}
+                />
+            </ListItemButton>
+            <ListItemSecondaryAction sx={{ right: 8 }}>
+                <IconButton edge="end" onClick={onMenuOpen} size="small">
+                    <MoreVertIcon fontSize="small" />
+                </IconButton>
+            </ListItemSecondaryAction>
+        </ListItem>
     );
 }

@@ -15,6 +15,7 @@ import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { db } from '@/lib/db';
 import { syncManager } from '@/lib/sync-manager';
+import { OFFLINE_FILE_SIZE_LIMIT } from '@/lib/constants';
 
 export type SaveStatus = 'unsaved' | 'saving' | 'saved';
 
@@ -402,19 +403,26 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         try {
             let id = internalMemoId;
             if (!id) {
-                id = await saveMemo(contentRef.current); // Use ref for current content
+                // If new memo, save content first to generate ID
+                id = await saveMemo(contentRef.current); 
                 if (!id) throw new Error('Could not create memo for upload');
-                 // saveMemo updates internalMemoId
             }
             
-            // Offline check
-            if (!navigator.onLine) {
-                 showToast('オフライン時の添付ファイル追加は現在サポートされていません', 'error');
+            // Check Size & Offline status
+            const isOffline = !navigator.onLine;
+            const isSmall = file.size <= OFFLINE_FILE_SIZE_LIMIT;
+
+            if (isOffline && !isSmall) {
+                 showToast('オフライン時は5MB以下のファイルのみ追加可能です。', 'error');
                  setUploading(false);
                  return;
             }
 
             const jobId = `upload-composer-${Date.now()}`;
+            const fileId = crypto.randomUUID(); // Client-side ID for predictable path
+            const ext = file.name.split('.').pop();
+            const predictedPath = `/api/uploads/${fileId}.${ext}`;
+
             addClientJob({
                 id: jobId,
                 type: 'UPLOAD',
@@ -423,27 +431,85 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
             });
 
             try {
-                const formData = new FormData();
-                formData.append('file', file);
-                const attachment = await uploadAttachment(formData, id!);
-                updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
-                
-                const isImage = file.type.startsWith('image/');
-                const markdown = isImage 
-                    ? `\n![${file.name}](${attachment.filePath})` 
-                    : `\n[${file.name}](${attachment.filePath})`;
-                
-                insertMarkdown(markdown);
-                saveMemo(contentRef.current + markdown);
+                if (isSmall) {
+                    // Start GC Check before insertion
+                    await syncManager.checkAndGC(file.size);
+
+                    // Small File: Save to Dexie first (Offline First approach)
+                    // Even if online, saving to Dexie -> Background Sync is robust.
+                    // BUT for online, we want immediate Markdown insertion and "success".
+                    
+                    // Offline or Small: Add to local DB
+                    await db.attachments.add({
+                        id: fileId,
+                        memoId: id,
+                        fileName: file.name,
+                        fileSize: file.size,
+                        mimeType: file.type,
+                        createdAt: new Date(),
+                        blob: file, // Store blob
+                        isDirty: true, // Needs sync
+                        lastAccessedAt: new Date(),
+                        filePath: predictedPath
+                    });
+
+                    // Insert Markdown immediately
+                    const isImage = file.type.startsWith('image/');
+                    const markdown = isImage 
+                        ? `\n![${file.name}](${predictedPath})` 
+                        : `\n[${file.name}](${predictedPath})`;
+                    
+                    insertMarkdown(markdown);
+                    saveMemo(contentRef.current + markdown);
+
+                    updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
+
+                    // Trigger Sync (Fire and Forget)
+                    syncManager.sync().catch(console.error);
+
+                } else {
+                    // Large File: Online Direct Upload
+                    if (isOffline) throw new Error('Offline upload for large files not supported');
+
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('id', fileId);
+
+                    const attachment = await uploadAttachment(formData, id);
+                    
+                    // Update Local DB for consistency (so it shows in File Manager)
+                    await db.attachments.put({
+                        id: attachment.id,
+                        memoId: attachment.memoId,
+                        fileName: attachment.fileName,
+                        fileSize: attachment.fileSize,
+                        mimeType: attachment.mimeType,
+                        createdAt: attachment.createdAt,
+                        filePath: attachment.filePath,
+                        lastAccessedAt: new Date(),
+                        isDirty: false
+                        // No blob
+                    });
+
+                    const isImage = file.type.startsWith('image/');
+                    const markdown = isImage 
+                        ? `\n![${file.name}](${attachment.filePath})` 
+                        : `\n[${file.name}](${attachment.filePath})`;
+                    
+                    insertMarkdown(markdown);
+                    saveMemo(contentRef.current + markdown);
+                    
+                    updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
+                }
                 
             } catch (err: any) {
                 updateClientJob(jobId, { status: 'FAILED', error: err.message });
                 throw err;
             }
 
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            showToast('アップロードに失敗しました', 'error');
+            showToast(e.message || 'アップロードに失敗しました', 'error');
         } finally {
             setUploading(false);
         }

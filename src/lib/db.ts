@@ -25,10 +25,14 @@ export interface ClientAttachment {
     mimeType: string;
     fileSize: number;
     createdAt: Date;
+    filePath?: string; // Server Path (e.g. /api/uploads/...)
+    
     
     // File Content
     blob?: Blob; // ローカルでのファイル実体。LRU対象になりうる
+    localUrl?: string; // Blob URL for display
     isDirty?: boolean; // 未アップロードのファイルか
+    isDeleted?: boolean; // 削除済み（同期待ち）か
     
     lastAccessedAt: Date; // 添付ファイルのLRU用
 }
@@ -48,7 +52,7 @@ export class RinSecretaryDatabase extends Dexie {
         
         // バージョンアップ: スキーマ変更時はバージョンを上げてください
         // Version 1 initialized just now, so we can overwrite or update 
-        this.version(3).stores({
+        this.version(4).stores({
             memos: 'id, userId, updatedAt, isDirty, isDeleted, lastAccessedAt', // Added isDeleted
             attachments: 'id, memoId, isDirty, lastAccessedAt',
             syncState: 'key'

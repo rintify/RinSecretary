@@ -1,8 +1,9 @@
 import { db, ClientMemo } from './db';
 
 const SYNC_INTERVAL_MS = 60 * 1000; // 1分ごとに同期（現在未使用）
-const GC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1日ごとにGC
-const LRU_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7日間アクセスがないキャッシュは削除
+// const GC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1日ごとにGC (Removed)
+// const LRU_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7日間アクセスがないキャッシュは削除 (Removed/Unused for now)
+import { CLIENT_MAX_STORAGE_BYTES, OFFLINE_FILE_SIZE_LIMIT } from '@/lib/constants';
 
 // コンフリクト解決用のコールバック型
 export type ConflictResolver = (
@@ -26,8 +27,8 @@ export class SyncManager {
                 this.online = false;
             });
 
-            // Periodic GC
-            setInterval(() => this.garbageCollect(), GC_INTERVAL_MS);
+            // Periodic GC Removed
+            // setInterval(() => this.garbageCollect(), GC_INTERVAL_MS);
         }
     }
 
@@ -84,16 +85,24 @@ export class SyncManager {
         console.log('[SyncManager] Start syncing...');
 
         try {
-            await this._performSync();
+            // Decoupled Sync: Run both, log errors but don't stop the other
+            const results = await Promise.allSettled([
+                this.syncMemos(),
+                this.syncAttachments()
+            ]);
+            
+            results.forEach((result, index) => {
+                if (result.status === 'rejected') {
+                    console.error(`[SyncManager] Sync failed for ${index === 0 ? 'Memos' : 'Attachments'}`, result.reason);
+                     // Only trigger global handler for Memo sync failures as they are critical
+                    if (index === 0 && this.errorHandler) {
+                        this.errorHandler(result.reason instanceof Error ? result.reason : new Error(String(result.reason)));
+                    }
+                }
+            });
+
         } catch (e: any) {
-            console.error('[SyncManager] Sync failed inside main block', e);
-            if (this.errorHandler) {
-                console.log('[SyncManager] Calling Global Error Handler');
-                this.errorHandler(e instanceof Error ? e : new Error(String(e)));
-            } else {
-                console.warn('[SyncManager] No error handler registered!');
-            }
-            throw e;
+            console.error('[SyncManager] Critical Sync Error', e);
         } finally {
             this.isSyncing = false;
 
@@ -117,18 +126,15 @@ export class SyncManager {
         }
     }
 
-    private async _performSync() {
+    private async syncMemos() {
+        console.log('[SyncManager] Syncing Memos...');
         // 1. Dirty/Deletedメモを取得
-        // Dexie might store boolean as boolean, check query compatibility
         let dirtyMemos = await db.memos.where('isDirty').equals(1).toArray();
         if (dirtyMemos.length === 0) {
-                // Try querying by boolean true if number 1 failed (just in case)
                 dirtyMemos = await db.memos.filter(m => m.isDirty === true).toArray();
         }
         
         const deletedMemos = await db.memos.where('isDeleted').equals(1).toArray();
-
-        console.log(`[SyncManager] Found ${dirtyMemos.length} dirty memos, ${deletedMemos.length} deleted memos`);
 
         // 2. 最終同期時刻を取得
         const lastSyncedAt = await this.getLastSyncedAt();
@@ -192,7 +198,13 @@ export class SyncManager {
                     continue; 
                 } else {
                     // ローカル版を採用 → 再送信（次の同期で）
-                    // isDirtyはtrueのまま
+                    // IMPORTANT: Update local timestamp to now so it wins next time (or at least looks newer)
+                    // Server logic: if (existing.updatedAt > client.updatedAt) conflict;
+                    // So we must ensure client.updatedAt > existing.updatedAt(Server)
+                    await db.memos.update(localMemo.id, { 
+                        updatedAt: new Date(), // Update to NOW
+                        isDirty: true 
+                    });
                 }
             } else {
                 console.warn('[SyncManager] Conflict detected but no resolver set:', conflict.memoId);
@@ -231,6 +243,21 @@ export class SyncManager {
             const conflictIds = new Set(conflicts.map((c: any) => c.memoId));
             for (const m of dirtyMemos) {
                 if (!conflictIds.has(m.id)) {
+                    // Check if we updated this memo during conflict resolution (Local wins)
+                    // If so, it might have a NEW dirty state, so verify before clearing?
+                    // But here we are clearing the 'dirtyMemos' list snapshot.
+                    // If we updated it in step 4, it is dirty AGAIN, but 'm' is the old snapshot.
+                    // We should only clear dirty if the DB state hasn't changed since snapshot?
+                    // Simplify: Just clear dirty=false. If step 4 set it to true, it was a separate update.
+                    // BUT: 'db.memos.update' in Step 4 runs AFTER this loop? No, Step 4 runs BEFORE Step 5.
+                    // So if Step 4 set isDirty=true, we might overwrite it here with isDirty=false?
+                    // Wait, 'dirtyMemos' contains the memos AS OF START.
+                    // If we resolved conflict as 'local', we updated db.memos with NEW timestamp and isDirty=true.
+                    // If we run `await db.memos.update(m.id, { isDirty: false })` here, we overwrite that.
+                    // FIX: Check if it was a conflict.
+                    
+                    // Actually, if it was a conflict, 'conflictIds' HAS it. So we skip this block.
+                    // If it was NOT a conflict, then our push was successful.
                     await db.memos.update(m.id, { isDirty: false });
                 }
             }
@@ -242,51 +269,117 @@ export class SyncManager {
         });
 
         // 6. 最終同期時刻を更新
+        // If there were conflicts resolved as 'local', we technically haven't fully synced their state to server yet (next sync will).
+        // But we can update lastSyncedAt to serverTime because we pulled all updates.
         await this.setLastSyncedAt(new Date(serverTime));
-
-        // 7. 添付ファイルの同期（未実装）
-        await this.syncAttachments();
-
-        console.log('[SyncManager] Sync completed');
     }
 
     private async syncAttachments() {
-        // Placeholder
-        const dirtyAttachments = await db.attachments.where('isDirty').equals(1).toArray();
+        if (!this.online) return; // Can't upload/download if offline
+        console.log('[SyncManager] Syncing Attachments...');
+
+        // 1. Upload Dirty Attachments
+        const dirtyAttachments = await db.attachments
+            .filter(a => !!a.isDirty && !!a.blob)
+            .toArray();
+
         for (const att of dirtyAttachments) {
-            if (!att.blob) continue;
             try {
-                console.log('[SyncManager] Uploading attachment...', att.fileName);
-                // TODO: 実装
-                await db.attachments.update(att.id, { isDirty: false });
+                console.log(`[SyncManager] Uploading attachment: ${att.fileName} (${att.id})`);
+                
+                const formData = new FormData();
+                // Create File object from Blob
+                const file = new File([att.blob!], att.fileName, { type: att.mimeType });
+                formData.append('file', file);
+                formData.append('id', att.id);
+
+                
+                // We need to call the server action. 
+                // Since this runs on client, we can import server action.
+                // Dynamic import to avoid issues during SSR if this file is loaded there? 
+                // No, this is client side code.
+                const { uploadAttachment, deleteAttachment } = await import('@/app/memos/actions');
+                
+                const uploaded = await uploadAttachment(formData, att.memoId);
+                
+                // Update Local DB
+                await db.attachments.update(att.id, {
+                    filePath: uploaded.filePath,
+                    isDirty: false,
+                    // We KEEP the blob for offline viewing (until GC)
+                    // localUrl? We might want to clear it if we rely on filePath, 
+                    // but for consistent offline exp, keep using blob if available.
+                });
+                
             } catch (e) {
-                console.error('Attachment upload failed', e);
+                console.error(`[SyncManager] Failed to upload attachment ${att.id}`, e);
+                // Keep isDirty=true, try next time
+            }
+        }
+
+        // 2. Delete Deleted Attachments
+        const deletedAttachments = await db.attachments
+            .filter(a => !!a.isDeleted)
+            .toArray();
+
+        for (const att of deletedAttachments) {
+            try {
+                console.log(`[SyncManager] Deleting attachment: ${att.fileName} (${att.id})`);
+                
+                const { deleteAttachment } = await import('@/app/memos/actions');
+                await deleteAttachment(att.id);
+
+                // Remove from Local DB completely
+                await db.attachments.delete(att.id);
+                
+            } catch (e) {
+                console.error(`[SyncManager] Failed to delete attachment ${att.id}`, e);
+                // Keep exists (isDeleted=true) to retry
             }
         }
     }
 
-    public async garbageCollect() {
-        console.log('[SyncManager] Running Garbage Collection...');
-        const thresholdDate = new Date(Date.now() - LRU_RETENTION_MS);
+    public async checkAndGC(requiredSize: number) {
+        // Calculate current usage
+        let totalSize = 0;
+        const attachments = await db.attachments.filter(a => !!a.blob).toArray();
+        for (const a of attachments) {
+            totalSize += a.blob?.size || 0;
+        }
+
+        const limit = CLIENT_MAX_STORAGE_BYTES;
+        if (totalSize + requiredSize > limit) {
+             const needed = (totalSize + requiredSize) - limit;
+             console.log(`[SyncManager] Storage limit exceeded. Need to free ${needed} bytes.`);
+             await this.garbageCollect(needed);
+        }
+    }
+
+
+
+    private async garbageCollect(neededBytes: number = 0) {
+        console.log(`[SyncManager] Running Size-Based GC (Needed: ${neededBytes} bytes)...`);
         
-        await db.transaction('rw', db.memos, db.attachments, async () => {
-            const oldMemos = await db.memos
-                .where('lastAccessedAt').below(thresholdDate)
-                .filter(m => !m.isDirty)
-                .toArray();
+        let freed = 0;
+        
+        await db.transaction('rw', db.attachments, async () => {
+             // Find candidates: Synced files (isDirty: false) with blobs, sorted by LRU (oldest first)
+             const candidates = await db.attachments
+                .where('isDirty').equals(0) // false
+                .filter(a => !!a.blob)
+                .sortBy('lastAccessedAt'); // Ascending: oldest first
             
-            const idsToDelete = oldMemos.map(m => m.id);
-            if (idsToDelete.length > 0) {
-                console.log(`[SyncManager] GC deleting ${idsToDelete.length} memos`);
-                await db.memos.bulkDelete(idsToDelete);
-                
-                const attachmentsToDelete = await db.attachments
-                    .where('memoId').anyOf(idsToDelete)
-                    .toArray();
-                
-                await db.attachments.bulkDelete(attachmentsToDelete.map(a => a.id));
-            }
+             for (const att of candidates) {
+                 if (freed >= neededBytes && neededBytes > 0) break;
+                 
+                 const size = att.blob?.size || 0;
+                 await db.attachments.update(att.id, { blob: undefined });
+                 freed += size;
+                 console.log(`[SyncManager] GC Evicted blob: ${att.fileName} (${size} bytes)`);
+             }
         });
+        
+        console.log(`[SyncManager] GC Finished. Freed ${freed} bytes.`);
     }
 }
 
