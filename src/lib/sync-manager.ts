@@ -11,26 +11,45 @@ export type ConflictResolver = (
     serverMemo: { id: string; title: string; content: string; updatedAt: string; createdAt: string; thumbnailPath?: string | null }
 ) => Promise<'local' | 'server' | 'cancel'>;
 
+// 同期状態の型
+export type SyncStatus = 'idle' | 'syncing' | 'error';
+
+export interface SyncState {
+    status: SyncStatus;
+    online: boolean;
+    lastSyncedAt: Date | null;
+}
+
+export type SyncStatusListener = (state: SyncState) => void;
+
+
 export class SyncManager {
     private static instance: SyncManager;
     private isSyncing = false;
     private online = typeof navigator !== 'undefined' ? navigator.onLine : true;
     private conflictResolver: ConflictResolver | null = null;
+    private lastError: Error | null = null;
+    private statusListeners: Set<SyncStatusListener> = new Set();
+    private lastSyncedAtCache: Date | null = null;
+
 
     private constructor() {
         if (typeof window !== 'undefined') {
             window.addEventListener('online', () => {
                 this.online = true;
+                this.notifyStatusChange();
                 this.sync();
             });
             window.addEventListener('offline', () => {
                 this.online = false;
+                this.notifyStatusChange();
             });
 
             // Periodic GC Removed
             // setInterval(() => this.garbageCollect(), GC_INTERVAL_MS);
         }
     }
+
 
     public static getInstance(): SyncManager {
         if (!SyncManager.instance) {
@@ -49,6 +68,37 @@ export class SyncManager {
     public setErrorHandler(handler: (error: Error) => void) {
         this.errorHandler = handler;
     }
+
+    // 同期状態リスナー登録
+    public addStatusListener(listener: SyncStatusListener): void {
+        this.statusListeners.add(listener);
+        // 登録時に現在の状態を通知
+        listener(this.getState());
+    }
+
+    public removeStatusListener(listener: SyncStatusListener): void {
+        this.statusListeners.delete(listener);
+    }
+
+    private notifyStatusChange(): void {
+        const state = this.getState();
+        this.statusListeners.forEach(listener => listener(state));
+    }
+
+    public getState(): SyncState {
+        let status: SyncStatus = 'idle';
+        if (this.isSyncing) {
+            status = 'syncing';
+        } else if (this.lastError) {
+            status = 'error';
+        }
+        return {
+            status,
+            online: this.online,
+            lastSyncedAt: this.lastSyncedAtCache
+        };
+    }
+
 
     // lastSyncedAtを取得
     private async getLastSyncedAt(): Promise<Date | null> {
@@ -82,29 +132,44 @@ export class SyncManager {
         }
 
         this.isSyncing = true;
+        this.lastError = null;
+        this.notifyStatusChange();
         console.log('[SyncManager] Start syncing...');
 
         try {
-            // Decoupled Sync: Run both, log errors but don't stop the other
-            const results = await Promise.allSettled([
-                this.syncMemos(),
-                this.syncAttachments()
-            ]);
-            
-            results.forEach((result, index) => {
-                if (result.status === 'rejected') {
-                    console.error(`[SyncManager] Sync failed for ${index === 0 ? 'Memos' : 'Attachments'}`, result.reason);
-                     // Only trigger global handler for Memo sync failures as they are critical
-                    if (index === 0 && this.errorHandler) {
-                        this.errorHandler(result.reason instanceof Error ? result.reason : new Error(String(result.reason)));
-                    }
+            // Sequential Sync: メモ同期完了後に添付ファイル同期（レースコンディション回避）
+            try {
+                await this.syncMemos();
+            } catch (memoError: any) {
+                console.error('[SyncManager] Memo sync failed', memoError);
+                this.lastError = memoError instanceof Error ? memoError : new Error(String(memoError));
+                if (this.errorHandler) {
+                    this.errorHandler(this.lastError);
                 }
-            });
+            }
+            
+            try {
+                await this.syncAttachments();
+            } catch (attachmentError: any) {
+                console.error('[SyncManager] Attachment sync failed', attachmentError);
+                this.lastError = attachmentError instanceof Error ? attachmentError : new Error(String(attachmentError));
+                // 添付ファイル同期失敗時もユーザーに通知
+                if (this.errorHandler) {
+                    this.errorHandler(this.lastError);
+                }
+            }
+
+            // 同期成功時にキャッシュを更新
+            if (!this.lastError) {
+                this.lastSyncedAtCache = new Date();
+            }
 
         } catch (e: any) {
             console.error('[SyncManager] Critical Sync Error', e);
+            this.lastError = e instanceof Error ? e : new Error(String(e));
         } finally {
             this.isSyncing = false;
+            this.notifyStatusChange();
 
             // 次の同期予約があるか確認
             if (this.nextSyncPromise) {
@@ -124,6 +189,7 @@ export class SyncManager {
                     .catch(reject);
             }
         }
+
     }
 
     private async syncMemos() {
@@ -234,8 +300,11 @@ export class SyncManager {
                 });
             }
 
-            // サーバーで消えたメモをローカルから削除
+            // サーバーで消えたメモをローカルから削除（関連添付ファイルも）
             if (serverDeletedIds.length > 0) {
+                for (const memoId of serverDeletedIds) {
+                    await db.attachments.where('memoId').equals(memoId).delete();
+                }
                 await db.memos.bulkDelete(serverDeletedIds);
             }
 
@@ -262,8 +331,9 @@ export class SyncManager {
                 }
             }
             
-            // Deletedメモを完全に消す
+            // Deletedメモと関連添付ファイルを完全に消す
             for (const m of deletedMemos) {
+                await db.attachments.where('memoId').equals(m.id).delete();
                 await db.memos.delete(m.id);
             }
         });
@@ -300,6 +370,7 @@ export class SyncManager {
                 // No, this is client side code.
                 const { uploadAttachment, deleteAttachment } = await import('@/app/memos/actions');
                 
+                // Restore att.memoId argument
                 const uploaded = await uploadAttachment(formData, att.memoId);
                 
                 // Update Local DB
@@ -336,6 +407,68 @@ export class SyncManager {
                 console.error(`[SyncManager] Failed to delete attachment ${att.id}`, e);
                 // Keep exists (isDeleted=true) to retry
             }
+        }
+
+        // 3. Pull new attachments from server
+        await this.pullAttachmentsFromServer();
+    }
+
+    private async pullAttachmentsFromServer() {
+        try {
+            // Get last attachment sync time
+            const lastSyncState = await db.syncState.get('lastAttachmentSyncedAt');
+            const lastSyncedAt = lastSyncState?.value || null;
+
+            const res = await fetch('/api/attachments/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lastSyncedAt })
+            });
+
+            if (!res.ok) {
+                console.error('[SyncManager] Attachment sync API failed:', res.status);
+                return;
+            }
+
+            const data = await res.json();
+            const { attachments, deletedAttachmentIds, serverTime } = data;
+
+            console.log(`[SyncManager] Received ${attachments.length} attachments from server`);
+
+            // Add new attachments to local DB (without blob - will be fetched on demand)
+            for (const serverAtt of attachments) {
+                const existing = await db.attachments.get(serverAtt.id);
+                
+                if (!existing) {
+                    // New attachment from server
+                    await db.attachments.put({
+                        id: serverAtt.id,
+                        memoId: serverAtt.memoId,
+                        fileName: serverAtt.fileName,
+                        mimeType: serverAtt.mimeType,
+                        fileSize: serverAtt.fileSize,
+                        filePath: serverAtt.filePath,
+                        createdAt: new Date(serverAtt.createdAt),
+                        lastAccessedAt: new Date(),
+                        isDirty: false,
+                        isDeleted: false,
+                        // blob is undefined - will be fetched by SW on first access
+                    });
+                    console.log(`[SyncManager] Added attachment from server: ${serverAtt.fileName}`);
+                }
+            }
+
+            // サーバーで削除された添付ファイルをローカルから削除
+            if (deletedAttachmentIds && deletedAttachmentIds.length > 0) {
+                await db.attachments.bulkDelete(deletedAttachmentIds);
+                console.log(`[SyncManager] Deleted ${deletedAttachmentIds.length} attachments from local DB`);
+            }
+
+            // Update last sync time
+            await db.syncState.put({ key: 'lastAttachmentSyncedAt', value: serverTime });
+
+        } catch (e) {
+            console.error('[SyncManager] Failed to pull attachments from server', e);
         }
     }
 

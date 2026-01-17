@@ -56,17 +56,23 @@ export async function updateStorageUsage(deltaBytes: number | bigint) {
     try {
         const delta = typeof deltaBytes === 'bigint' ? Number(deltaBytes) : deltaBytes;
         
-        await prisma.$transaction(async (tx) => {
-            const setting = await tx.systemSetting.findUnique({ where: { key: STORAGE_KEY } });
-            const current = setting ? parseInt(setting.value, 10) : 0;
-            const newValue = Math.max(0, current + delta);
-            
-            await tx.systemSetting.upsert({
-                where: { key: STORAGE_KEY },
-                update: { value: newValue.toString() },
-                create: { key: STORAGE_KEY, value: newValue.toString() }
-            });
+        // アトミック更新: ロストアップデートを防ぐため、単一SQLでインクリメント/デクリメント
+        // まずレコードが存在することを確認（存在しなければ作成）
+        await prisma.systemSetting.upsert({
+            where: { key: STORAGE_KEY },
+            update: {}, // 何もしない（存在確認のみ）
+            create: { key: STORAGE_KEY, value: '0' }
         });
+        
+        // SQLiteのアトミック更新
+        // MAX(0, ...) で負の値を防止
+        await prisma.$executeRawUnsafe(`
+            UPDATE SystemSetting 
+            SET value = CAST(MAX(0, CAST(value AS INTEGER) + ?) AS TEXT),
+                updatedAt = datetime('now')
+            WHERE key = ?
+        `, delta, STORAGE_KEY);
+        
     } catch (e) {
         console.error('Failed to update storage usage', e);
     }

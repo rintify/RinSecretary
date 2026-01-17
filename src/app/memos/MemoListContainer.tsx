@@ -23,7 +23,9 @@ import { MemoListFabs, MemoListEditButton, MemoListItemButton } from './MemoList
 import { db, ClientMemo } from '@/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { syncManager } from '@/lib/sync-manager';
-import { createEmptyMemo, createMemo, createMemoWithFile } from './actions';
+import { createEmptyMemo } from './actions';
+import { extractTitle, extractThumbnail } from '@/lib/memo-utils';
+import { OFFLINE_FILE_SIZE_LIMIT } from '@/lib/constants';
 import { MEMO_COLOR } from '../utils/colors'; 
 import { useGlobalJobs } from '../context/GlobalJobContext';
 import { useToast } from '../context/ToastContext';
@@ -403,20 +405,51 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                         const jobId = `paste-${Date.now()}-${i}`;
                         
                         try {
-                            addClientJob({
-                                id: jobId,
-                                type: 'UPLOAD',
-                                title: `アップロード: ${file.name}`,
-                                payload: null
-                            });
+                            const memoId = crypto.randomUUID();
+                            const attachmentId = crypto.randomUUID();
+                            const isImage = file.type.startsWith('image/');
+                            const url = `/api/uploads/${attachmentId}.${file.name.split('.').pop()}`;
+                            const markdown = isImage 
+                                ? `![${file.name}](${url})` 
+                                : `[${file.name}](${url})`;
+                            
+                            const title = extractTitle(markdown);
+                            const thumbnailPath = extractThumbnail(markdown);
 
-                            const formData = new FormData();
-                            formData.append('file', file);
-                            await createMemoWithFile(formData);
+                            // Ensure space
+                            await syncManager.checkAndGC(file.size);
+
+                            await db.transaction('rw', [db.memos, db.attachments], async () => {
+                                await db.memos.add({
+                                    id: memoId,
+                                    title,
+                                    content: markdown,
+                                    userId: 'current-user',
+                                    thumbnailPath,
+                                    createdAt: new Date(),
+                                    updatedAt: new Date(),
+                                    isFullContent: true,
+                                    lastAccessedAt: new Date(),
+                                    isDirty: true
+                                });
+
+                                await db.attachments.add({
+                                    id: attachmentId,
+                                    memoId,
+                                    fileName: file.name,
+                                    fileSize: file.size,
+                                    mimeType: file.type || 'application/octet-stream',
+                                    createdAt: new Date(),
+                                    blob: file,
+                                    isDirty: true,
+                                    lastAccessedAt: new Date(),
+                                    filePath: url
+                                });
+                            });
                             
                             updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
                         } catch (err: any) {
-                             updateClientJob(jobId, { status: 'FAILED', error: err.message || 'アップロード失敗' });
+                             updateClientJob(jobId, { status: 'FAILED', error: err.message || '保存失敗' });
                              throw err;
                         }
                     }
@@ -426,7 +459,22 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 if (!handled) {
                     const text = e.clipboardData.getData('text/plain');
                     if (text) {
-                        await createMemo(text);
+                        const memoId = crypto.randomUUID();
+                        const title = extractTitle(text);
+                        const thumbnailPath = extractThumbnail(text);
+
+                        await db.memos.add({
+                            id: memoId,
+                            title,
+                            content: text,
+                            userId: 'current-user',
+                            thumbnailPath,
+                            createdAt: new Date(),
+                            updatedAt: new Date(),
+                            isFullContent: true,
+                            lastAccessedAt: new Date(),
+                            isDirty: true
+                        });
                         handled = true;
                     }
                 }
@@ -521,21 +569,64 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                         addClientJob({
                             id: jobId,
                             type: 'UPLOAD',
-                            title: `アップロード: ${file.name}`,
+                            title: `保存中: ${file.name}`,
                             payload: null
                         });
 
-                        const formData = new FormData();
-                        formData.append('file', file);
-                        await createMemoWithFile(formData);
+                        const memoId = crypto.randomUUID();
+                        const attachmentId = crypto.randomUUID();
+                        const isImage = file.type.startsWith('image/');
+                        const url = `/api/uploads/${attachmentId}.${file.name.split('.').pop()}`;
+                        const markdown = isImage 
+                            ? `![${file.name}](${url})` 
+                            : `[${file.name}](${url})`;
+                        
+                        const title = extractTitle(markdown);
+                        const thumbnailPath = extractThumbnail(markdown);
+
+                        // Size check for offline
+                        if (!navigator.onLine && file.size > OFFLINE_FILE_SIZE_LIMIT) {
+                            throw new Error(`オフライン時は${OFFLINE_FILE_SIZE_LIMIT / 1024 / 1024}MB以下のファイルのみ追加可能です。`);
+                        }
+
+                        // Ensure space
+                        await syncManager.checkAndGC(file.size);
+
+                        await db.transaction('rw', [db.memos, db.attachments], async () => {
+                            await db.memos.add({
+                                id: memoId,
+                                title,
+                                content: markdown,
+                                userId: 'current-user',
+                                thumbnailPath,
+                                createdAt: new Date(),
+                                updatedAt: new Date(),
+                                isFullContent: true,
+                                lastAccessedAt: new Date(),
+                                isDirty: true
+                            });
+
+                            await db.attachments.add({
+                                id: attachmentId,
+                                memoId,
+                                fileName: file.name,
+                                fileSize: file.size,
+                                mimeType: file.type || 'application/octet-stream',
+                                createdAt: new Date(),
+                                blob: file,
+                                isDirty: true,
+                                lastAccessedAt: new Date(),
+                                filePath: url
+                            });
+                        });
                         
                         updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
                     } catch (err: any) {
-                         updateClientJob(jobId, { status: 'FAILED', error: err.message || 'アップロード失敗' });
+                         updateClientJob(jobId, { status: 'FAILED', error: err.message || '保存失敗' });
                          throw err;
                     }
                 }
-                syncManager.sync();
+                syncManager.sync().catch(console.error);
             } catch (error) {
                 console.error('File upload failed', error);
                 showToast('ファイルのアップロードに失敗しました', 'error');

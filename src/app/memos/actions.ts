@@ -181,8 +181,18 @@ export async function deleteMemo(id: string) {
 
   if (!memo) return; // 既にない、あるいは権限がない
 
-  // 関連ファイルの物理削除
+  const now = new Date();
+  
+  // 関連添付ファイルの処理
   for (const att of memo.attachments) {
+      // 論理削除をマーク（同期イベントを他端末に伝えるため）
+      if (!att.isDeleted) {
+          await prisma.attachment.update({
+              where: { id: att.id },
+              data: { isDeleted: true, deletedAt: now, filePath: '' }
+          });
+      }
+      // 物理ファイル削除
       await unlinkAttachmentFile(att);
       await updateStorageUsage(-att.fileSize);
   }
@@ -212,9 +222,19 @@ export async function deleteMemos(ids: string[]) {
     include: { attachments: true }
   });
 
-  // 関連ファイルの物理削除
+  const now = new Date();
+
+  // 関連添付ファイルの処理
   for (const memo of memos) {
       for (const att of memo.attachments) {
+          // 論理削除をマーク（同期イベントを他端末に伝えるため）
+          if (!att.isDeleted) {
+              await prisma.attachment.update({
+                  where: { id: att.id },
+                  data: { isDeleted: true, deletedAt: now, filePath: '' }
+              });
+          }
+          // 物理ファイル削除
           await unlinkAttachmentFile(att);
           await updateStorageUsage(-att.fileSize);
       }
@@ -349,8 +369,7 @@ export async function uploadAttachment(formData: FormData, memoId: string) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const nameParts = file.name.split('.');
-    const ext = nameParts.length > 1 ? `.${nameParts.pop()}` : '';
+    
     // Use provided ID or generate new. Note: ID collision logic below handles idempotency.
     const attachmentId = fileId || randomUUID(); 
     const filename = generateServerFilename(attachmentId, file.name);
@@ -375,15 +394,17 @@ export async function uploadAttachment(formData: FormData, memoId: string) {
         }
     }
     
+    // 競合防止: 先にDBレコードを作成し、その後ファイルを書き込む
+    // これによりユニーク制約でIDの衝突を先に検知でき、不正なファイル削除を防ぐ
     ensureDir(UPLOAD_DIR);
     const filepath = join(UPLOAD_DIR, filename);
-    await writeFile(filepath, buffer);
     const url = `/api/uploads/${filename}`;
 
+    let attachment;
     try {
-        const attachment = await prisma.attachment.create({
+        attachment = await prisma.attachment.create({
             data: {
-                id: attachmentId, // Force use of local ID
+                id: attachmentId,
                 fileName: file.name,
                 filePath: url,
                 fileSize: file.size,
@@ -391,20 +412,43 @@ export async function uploadAttachment(formData: FormData, memoId: string) {
                 memoId: memoId,
             }
         });
-
-        revalidatePath(`/memos/${memoId}`);
-        await updateStorageUsage(file.size);
-
-        return {
-            ...attachment,
-            fileSize: Number(attachment.fileSize)
-        };
-    } catch (e) {
-        // DB insert failed, cleanup file
-        console.error('Attachment DB insert failed, cleaning up file:', filepath);
-        await unlinkFile(filename);
-        throw e;
+    } catch (dbError: any) {
+        // ユニーク制約違反の場合、他のリクエストが勝った可能性があるので再取得
+        if (dbError.code === 'P2002') {
+            const existing = await prisma.attachment.findUnique({ where: { id: attachmentId } });
+            if (existing && existing.memoId === memoId) {
+                return { ...existing, fileSize: Number(existing.fileSize) };
+            }
+        }
+        throw dbError;
     }
+
+    // DBレコード作成成功、ファイルを書き込む
+    try {
+        await writeFile(filepath, buffer);
+    } catch (fileError) {
+        // ファイル書き込み失敗、DBレコードをロールバック（物理削除）
+        console.error('File write failed, rolling back DB record:', fileError);
+        await prisma.attachment.delete({ where: { id: attachmentId } });
+        throw fileError;
+    }
+
+    // ストレージ使用量更新（失敗時はレコードとファイルをロールバック）
+    try {
+        await updateStorageUsage(file.size);
+    } catch (storageError) {
+        console.error('Storage usage update failed, rolling back:', storageError);
+        await unlinkFile(filename);
+        await prisma.attachment.delete({ where: { id: attachmentId } });
+        throw storageError;
+    }
+
+    revalidatePath(`/memos/${memoId}`);
+
+    return {
+        ...attachment,
+        fileSize: Number(attachment.fileSize)
+    };
 }
 
 export async function getAttachments(memoId: string) {
@@ -428,13 +472,39 @@ export async function deleteAttachment(attachmentId: string) {
 
     const attachment = await prisma.attachment.findUnique({ where: { id: attachmentId }, include: { memo: true }});
     if (!attachment) return;
+    
+    // 既に論理削除済みの場合は何もしない（二重減算防止）
+    if (attachment.isDeleted) return;
 
     const user = await prisma.user.findUnique({ where: { email: session.user.email }});
     if (attachment.memo.userId !== user?.id) throw new Error('Forbidden');
 
-    await unlinkAttachmentFile(attachment);
-    await updateStorageUsage(-attachment.fileSize);
+    // 物理ファイルを削除し、容量を更新（filePathが空でない場合のみ）
+    if (attachment.filePath) {
+        await unlinkAttachmentFile(attachment);
+        await updateStorageUsage(-attachment.fileSize);
+    }
 
-    await prisma.attachment.delete({ where: { id: attachmentId }});
+    // 論理削除に変更（レコードは残して他端末への同期に使用）
+    await prisma.attachment.update({ 
+        where: { id: attachmentId },
+        data: { 
+            isDeleted: true, 
+            deletedAt: new Date(),
+            filePath: '' // ファイルパスをクリア
+        }
+    });
+    
+    // サムネイルリンク切れ対策: 削除した添付がサムネイルだった場合、再計算
+    if (attachment.memo.thumbnailPath === attachment.filePath) {
+        const newThumbnail = extractThumbnail(attachment.memo.content);
+        // 削除したファイルと同じパスの場合はnullにする
+        const finalThumbnail = newThumbnail === attachment.filePath ? null : newThumbnail;
+        await prisma.memo.update({
+            where: { id: attachment.memoId },
+            data: { thumbnailPath: finalThumbnail }
+        });
+    }
+    
     revalidatePath(`/memos/${attachment.memoId}`);
 }

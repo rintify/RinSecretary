@@ -62,6 +62,18 @@ function getTodayDateString(): string {
 // Load state on startup
 loadState();
 
+// --- NEW: Sync Storage Usage on startup ---
+(async () => {
+    try {
+        console.log('Performing startup storage sync...');
+        const { syncStorageUsage } = await import('../src/lib/storage');
+        await syncStorageUsage();
+    } catch (e) {
+        console.error('Failed to sync storage usage on startup:', e);
+    }
+})();
+
+
 // --- Notification Helper ---
 async function sendDiscordNotification(userId: string, title: string, message: string) {
     try {

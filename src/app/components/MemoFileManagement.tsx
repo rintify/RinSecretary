@@ -18,7 +18,8 @@ import {
     Download as DownloadIcon,
     CloudOff as CloudOffIcon,
     CloudDone as CloudDoneIcon,
-    Sync as SyncIcon
+    Sync as SyncIcon,
+    CloudDownload as CloudDownloadIcon
 } from '@mui/icons-material';
 import Image from 'next/image';
 import { getAttachments, deleteAttachment, uploadAttachment } from '@/app/memos/actions';
@@ -319,8 +320,10 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
              // Let's implement "Open in new tab" with caching if possible
              
             let url = file.filePath;
+            let needsRevoke = false;
             if (file.blob) {
                  url = URL.createObjectURL(file.blob);
+                 needsRevoke = true;
             }
             
             // If file is not cached but is small, fetch it to view it also caches it via SW
@@ -332,6 +335,10 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
             
             if (url) {
                 window.open(url, '_blank');
+                // Blob URL の解放（少し遅延させて新しいタブで読み込ませる）
+                if (needsRevoke) {
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                }
             }
         }
     };
@@ -340,6 +347,47 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
         if (bytes < 1024) return bytes + ' B';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    };
+
+    // ローカルキャッシュボタンのハンドラ
+    const handleCacheAllFiles = async () => {
+        const filesToCache = (localAttachments || []).filter(
+            f => !f.isDeleted && !f.blob && f.fileSize <= OFFLINE_FILE_SIZE_LIMIT && f.filePath
+        );
+
+        if (filesToCache.length === 0) {
+            showToast('キャッシュ対象のファイルはありません', 'info');
+            return;
+        }
+
+        setLoading(true);
+        let cached = 0;
+        let failed = 0;
+
+        for (const file of filesToCache) {
+            try {
+                const response = await fetch(file.filePath!);
+                if (!response.ok) throw new Error('Fetch failed');
+                const blob = await response.blob();
+
+                await db.attachments.update(file.id, {
+                    blob,
+                    mimeType: file.mimeType || blob.type,
+                    lastAccessedAt: new Date(),
+                });
+                cached++;
+            } catch (e) {
+                console.error('Cache failed for', file.id, e);
+                failed++;
+            }
+        }
+
+        setLoading(false);
+        if (failed > 0) {
+            showToast(`${cached}件キャッシュ、${failed}件失敗`, 'warning');
+        } else {
+            showToast(`${cached}件のファイルをキャッシュしました`, 'success');
+        }
     };
 
     // Render logic
@@ -401,9 +449,17 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
                 />
             </DialogContent>
             <DialogActions>
-                <Button component="label" startIcon={<UploadIcon />} sx={{ color: MEMO_COLOR, mr: 'auto' }}>
+                <Button component="label" startIcon={<UploadIcon />} sx={{ color: MEMO_COLOR }}>
                     ファイルを追加
                     <input type="file" hidden onChange={handleUpload} />
+                </Button>
+                <Button 
+                    startIcon={<CloudDownloadIcon />} 
+                    onClick={handleCacheAllFiles}
+                    disabled={loading}
+                    sx={{ color: MEMO_COLOR, mr: 'auto' }}
+                >
+                    キャッシュ
                 </Button>
                 <Button onClick={onClose} sx={{ color: 'text.secondary' }}>閉じる</Button>
             </DialogActions>

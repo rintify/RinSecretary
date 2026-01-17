@@ -57,7 +57,15 @@ export class RinSecretaryDatabase extends Dexie {
             attachments: 'id, memoId, isDirty, lastAccessedAt',
             syncState: 'key'
         });
+
+        // 別のタブやSWでDBのバージョンが上がった場合、コネクションを閉じる
+        this.on('versionchange', () => {
+            this.close();
+            console.log('[Dexie] DB version changed elsewhere, closing connection.');
+            // 必要に応じてページリロードを促す
+        });
     }
 }
+
 
 export const db = new RinSecretaryDatabase();

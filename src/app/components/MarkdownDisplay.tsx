@@ -95,15 +95,31 @@ const MarkdownDisplay = memo(function MarkdownDisplay({ children, attachments = 
                     </Box>
                     <IconButton 
                         size="small" 
-                        onClick={(e) => {
+                        onClick={async (e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            const link = document.createElement('a');
-                            link.href = file.filePath;
-                            link.download = file.fileName;
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
+                            try {
+                                // fetch経由でダウンロードすることでService Workerがキャッシュできる
+                                const response = await fetch(file.filePath);
+                                const blob = await response.blob();
+                                const blobUrl = URL.createObjectURL(blob);
+                                const link = document.createElement('a');
+                                link.href = blobUrl;
+                                link.download = file.fileName;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+                            } catch (error) {
+                                console.error('Download failed:', error);
+                                // フォールバック: 直接リンクでダウンロード試行
+                                const link = document.createElement('a');
+                                link.href = file.filePath;
+                                link.download = file.fileName;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                            }
                         }}
                         sx={{ ml: 1, color: 'text.secondary' }}
                     >

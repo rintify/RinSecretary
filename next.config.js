@@ -7,9 +7,10 @@ const withPWA = require("@ducanh2912/next-pwa").default({
   disable: false, // Enable in Dev for testing (or controlled by env if needed, but User requested feature now)
   workboxOptions: {
     disableDevLogs: false,
-    importScripts: ['/sw-custom.js'],
+    // importScripts: ['/sw-custom.js'], // Removed in favor of src/worker/index.ts
   },
 });
+
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

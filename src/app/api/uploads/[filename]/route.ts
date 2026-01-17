@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import fs from 'fs';
+import { getMimeTypeFromExt } from '@/lib/file-utils';
 
 export async function GET(
   request: Request,
@@ -31,19 +32,8 @@ export async function GET(
   const fileSize = stat.size;
   const range = request.headers.get('range');
 
-  const ext = filename.split('.').pop()?.toLowerCase();
-  let contentType = 'application/octet-stream';
-  if (ext === 'png') contentType = 'image/png';
-  if (ext === 'jpg' || ext === 'jpeg') contentType = 'image/jpeg';
-  if (ext === 'gif') contentType = 'image/gif';
-  if (ext === 'webp') contentType = 'image/webp';
-  if (ext === 'svg') contentType = 'image/svg+xml';
-  if (ext === 'mp3') contentType = 'audio/mpeg';
-  if (ext === 'wav') contentType = 'audio/wav';
-  if (ext === 'mp4') contentType = 'video/mp4';
-  if (ext === 'webm') contentType = 'video/webm';
-  if (ext === 'pdf') contentType = 'application/pdf';
-  if (ext === 'txt') contentType = 'text/plain';
+  // Use shared MIME type utility
+  const contentType = getMimeTypeFromExt(filename);
 
   if (range) {
     const parts = range.replace(/bytes=/, "").split("-");

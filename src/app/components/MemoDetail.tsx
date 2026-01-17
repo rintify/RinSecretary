@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Fab, IconButton, Popover } from '@mui/material';
+import { Box, Fab, IconButton, Popover, Badge, Tooltip } from '@mui/material';
 import { Edit as EditIcon, Info as InfoIcon, Folder as FolderIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import MemoHeader from './MemoHeader';
 import MarkdownDisplay from './MarkdownDisplay';
@@ -12,13 +12,18 @@ import MemoFileManagement, { Attachment } from './MemoFileManagement';
 import FullImageModal from './FullImageModal';
 import { getAttachments } from '../memos/actions';
 import { useEffect, useRef, useCallback } from 'react';
+import { db } from '@/lib/db';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { OFFLINE_FILE_SIZE_LIMIT } from '@/lib/constants';
 import Image from 'next/image';
 import { 
     InsertDriveFile as FileIcon, 
     PictureAsPdf as PdfIcon,
     AudioFile as AudioIcon,
     VideoFile as VideoIcon,
-    TextSnippet as TextIcon
+    TextSnippet as TextIcon,
+    Cloud as CloudIcon,
+    CheckCircle as CheckCircleIcon
 } from '@mui/icons-material';
 
 interface MemoDetailProps {
@@ -39,6 +44,60 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
     const [isFileManagementOpen, setIsFileManagementOpen] = useState(false);
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [attachmentsChanged, setAttachmentsChanged] = useState(false);
+
+    const localAttachments = useLiveQuery(
+        () => db.attachments.where('memoId').equals(memo.id).toArray(),
+        [memo.id]
+    );
+
+    // キャッシュ状態を計算 (サーバー側の attachments をマスターとして比較)
+    const cacheStats = (() => { // useMemo推奨だが、現状の構成に合わせて即時関数またはuseMemoに書き換えたいところだが、他への影響最小限にするためロジックのみ変更
+        if (!attachments || attachments.length === 0) return { status: 'none', message: '' };
+        
+        let cachedCount = 0;
+        let uncacheableCount = 0;
+
+        // 全ファイルをチェック
+        const allCached = attachments.every(sf => {
+            const local = (localAttachments || []).find((lf: any) => lf.id === sf.id);
+            const hasBlob = !!(local && local.blob);
+            
+            if (hasBlob) cachedCount++;
+            if (sf.fileSize > OFFLINE_FILE_SIZE_LIMIT) uncacheableCount++;
+
+            return hasBlob;
+        });
+
+        // 全てblobがあれば緑。一つでも欠けていれば（サイズオーバー含む）partial
+        if (allCached) {
+            return { status: 'all', message: '全ファイルキャッシュ済み' };
+        } else {
+            const message = uncacheableCount > 0 
+                ? `未キャッシュ、またはサイズ制限(${OFFLINE_FILE_SIZE_LIMIT/1024/1024}MB超)のファイルがあります`
+                : '未キャッシュのファイルがあります';
+            return { status: 'partial', message };
+        }
+    })();
+    
+    // ...
+
+                            <Tooltip title={cacheStats.message}>
+                                <IconButton onClick={() => setIsFileManagementOpen(true)} edge="end" sx={{ color: MEMO_COLOR, mr: 1 }}>
+                                    <Badge
+                                        overlap="circular"
+                                        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                                        badgeContent={
+                                            cacheStats.status === 'all' ? (
+                                                <CheckCircleIcon sx={{ fontSize: 14, color: 'success.main', bgcolor: 'white', borderRadius: '50%' }} />
+                                            ) : cacheStats.status === 'partial' ? (
+                                                <CloudIcon sx={{ fontSize: 14, color: 'text.secondary', bgcolor: 'white', borderRadius: '50%' }} />
+                                            ) : null
+                                        }
+                                    >
+                                        <FolderIcon />
+                                    </Badge>
+                                </IconButton>
+                            </Tooltip>
 
     const [imageModalOpen, setImageModalOpen] = useState(false);
     const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
@@ -144,9 +203,23 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
                 title="メモ詳細" 
                 actions={
                     <Box>
-                        <IconButton onClick={() => setIsFileManagementOpen(true)} edge="end" sx={{ color: MEMO_COLOR, mr: 1 }}>
-                            <FolderIcon />
-                        </IconButton>
+                        <Tooltip title={cacheStats.message}>
+                            <IconButton onClick={() => setIsFileManagementOpen(true)} edge="end" sx={{ color: MEMO_COLOR, mr: 1 }}>
+                                <Badge
+                                    overlap="circular"
+                                    anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                                    badgeContent={
+                                        cacheStats.status === 'all' ? (
+                                            <CheckCircleIcon sx={{ fontSize: 14, color: 'success.main', bgcolor: 'white', borderRadius: '50%' }} />
+                                        ) : cacheStats.status === 'partial' ? (
+                                            <CloudIcon sx={{ fontSize: 14, color: 'text.secondary', bgcolor: 'white', borderRadius: '50%' }} />
+                                        ) : null
+                                    }
+                                >
+                                    <FolderIcon />
+                                </Badge>
+                            </IconButton>
+                        </Tooltip>
                         <IconButton onClick={handleInfoClick} edge="end" sx={{ color: MEMO_COLOR }}>
                             <InfoIcon />
                         </IconButton>

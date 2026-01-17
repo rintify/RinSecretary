@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { devAuth } from '@/lib/dev-auth';
 import { prisma } from '@/lib/prisma';
+import { unlinkFile, updateStorageUsage } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +42,22 @@ export async function POST(req: Request) {
 
     // --- 1. Process Logic: Push Deletions ---
     if (pushedDeletedIds.length > 0) {
+        // 物理ファイル削除と容量更新を先に行う
+        const memosToDelete = await prisma.memo.findMany({
+            where: { id: { in: pushedDeletedIds }, userId },
+            include: { attachments: { where: { isDeleted: false } } }
+        });
+        
+        for (const memo of memosToDelete) {
+            for (const att of memo.attachments) {
+                const filename = att.filePath.split('/').pop();
+                if (filename) {
+                    await unlinkFile(filename);
+                }
+                await updateStorageUsage(-att.fileSize);
+            }
+        }
+        
         await prisma.memo.deleteMany({
             where: {
                 id: { in: pushedDeletedIds },
