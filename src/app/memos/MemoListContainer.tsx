@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { 
     Box, List, ListItem, ListItemButton, ListItemText, 
-    Checkbox, IconButton, Menu, MenuItem, Typography 
+    Checkbox, IconButton, Menu, MenuItem, Typography, CircularProgress
 } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -11,53 +11,264 @@ import {
     Delete as DeleteIcon, 
     Close as CloseIcon, 
     Note as NoteIcon,
-    Refresh as RefreshIcon
+    Refresh as RefreshIcon,
+    Folder as FolderIcon,
+    CloudQueue as CloudIcon
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import MemoHeader from '../components/MemoHeader';
 import { MemoListFabs, MemoListEditButton, MemoListItemButton } from './MemoListClient';
-import { deleteMemos, createMemoWithFile, createMemo, getMemos } from './actions';
-import { MEMO_COLOR } from '../utils/colors';
-import { Folder as FolderIcon } from '@mui/icons-material';
-import CircularProgress from '@mui/material/CircularProgress';
+import { db, ClientMemo } from '@/lib/db';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { syncManager } from '@/lib/sync-manager';
+import { createEmptyMemo, createMemo, createMemoWithFile } from './actions';
+import { MEMO_COLOR } from '../utils/colors'; 
 import { useGlobalJobs } from '../context/GlobalJobContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
-
-type Attachment = {
-    id: string;
-    filePath: string;
-    mimeType: string;
-};
+import { CloudOff as UnsyncedIcon } from '@mui/icons-material';
 
 type Memo = {
     id: string;
     title: string;
-    // content: string; // Removed for payload optimization
     createdAt: Date;
     updatedAt: Date;
     userId: string;
     thumbnailPath?: string | null;
 };
 
+interface DisplayMemo {
+    id: string;
+    title: string;
+    updatedAt: Date;
+    thumbnailPath?: string | null;
+    isFullContent: boolean;
+    isLocalOnly: boolean;  // ローカルのみ（サーバー未同期）
+    isServerOnly: boolean; // サーバーのみ（ローカル未キャッシュ）
+    isDirty?: boolean;
+}
+
 export default function MemoListContainer({ memos: initialMemos, initialQuery = '' }: { memos: Memo[], initialQuery?: string }) {
-    const [memos, setMemos] = useState<Memo[]>(initialMemos);
+    const [searchQuery, setSearchQuery] = useState(initialQuery);
+    
+    // Dexie: Live Query for Local Memos
+    const localMemos = useLiveQuery(
+        () => db.memos.orderBy('updatedAt').reverse().toArray(),
+        []
+    ) || [];
+
+    // Server Memos State (for infinite scroll)
+    const [serverMemos, setServerMemos] = useState<DisplayMemo[]>([]);
+    const [nextCursor, setNextCursor] = useState<string | null>(null);
+    const [hasMore, setHasMore] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+    // Search State (Server)
+    const [serverSearchResults, setServerSearchResults] = useState<DisplayMemo[]>([]);
+    const [searchNextCursor, setSearchNextCursor] = useState<string | null>(null);
+    const [searchHasMore, setSearchHasMore] = useState(false);
+    const [isSearching, setIsSearching] = useState(false);
+
+    // Merge Local + Server Memos
+    const mergedMemos = useCallback((): DisplayMemo[] => {
+        const localIds = new Set(localMemos.map(m => m.id));
+        const result: DisplayMemo[] = [];
+
+        // 1. Add local memos (excluding deleted)
+        for (const m of localMemos) {
+            if (m.isDeleted) continue;
+            result.push({
+                id: m.id,
+                title: m.title,
+                updatedAt: m.updatedAt,
+                thumbnailPath: m.thumbnailPath,
+                isFullContent: m.isFullContent,
+                isLocalOnly: m.isDirty || false,
+                isServerOnly: false,
+                isDirty: m.isDirty
+            });
+        }
+
+        // 2. Add server memos not in local
+        for (const s of serverMemos) {
+            if (!localIds.has(s.id)) {
+                result.push({
+                    ...s,
+                    isServerOnly: true,
+                    isLocalOnly: false
+                });
+            }
+        }
+
+        // Sort by updatedAt desc
+        result.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        return result;
+    }, [localMemos, serverMemos]);
+
+    // Search results: merge local search + server search
+    const mergedSearchResults = useCallback((): DisplayMemo[] => {
+        if (!searchQuery.trim()) return [];
+
+        const localIds = new Set<string>();
+        const result: DisplayMemo[] = [];
+
+        // Local search
+        const lowerQuery = searchQuery.toLowerCase();
+        for (const m of localMemos) {
+            if (m.isDeleted) continue;
+            if (m.title.toLowerCase().includes(lowerQuery) || m.content.toLowerCase().includes(lowerQuery)) {
+                localIds.add(m.id);
+                result.push({
+                    id: m.id,
+                    title: m.title,
+                    updatedAt: m.updatedAt,
+                    thumbnailPath: m.thumbnailPath,
+                    isFullContent: m.isFullContent,
+                    isLocalOnly: m.isDirty || false,
+                    isServerOnly: false,
+                    isDirty: m.isDirty
+                });
+            }
+        }
+
+        // Add server search results not in local
+        for (const s of serverSearchResults) {
+            if (!localIds.has(s.id)) {
+                result.push({
+                    ...s,
+                    isServerOnly: true,
+                    isLocalOnly: false
+                });
+            }
+        }
+
+        result.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        return result;
+    }, [localMemos, serverSearchResults, searchQuery]);
+
+    // Decide which memos to display
+    const displayMemos = searchQuery.trim() ? mergedSearchResults() : mergedMemos();
+
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [uploading, setUploading] = useState(false);
     
-    // Search & Pagination
-    const [searchQuery, setSearchQuery] = useState(initialQuery);
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [isSearching, setIsSearching] = useState(false);
     const [isSearchFocused, setIsSearchFocused] = useState(false);
-    const [hasMore, setHasMore] = useState(true);
-    const observerTarget = useRef(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+    // Fetch server memos (initial + pagination)
+    const fetchServerMemos = async (cursor?: string) => {
+        try {
+            const url = cursor 
+                ? `/api/memos/list?cursor=${encodeURIComponent(cursor)}&limit=20`
+                : '/api/memos/list?limit=20';
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('Failed to fetch');
+            const data = await res.json();
+            
+            const newMemos: DisplayMemo[] = data.memos.map((m: any) => ({
+                id: m.id,
+                title: m.title,
+                updatedAt: new Date(m.updatedAt),
+                thumbnailPath: m.thumbnailPath,
+                isFullContent: true,
+                isLocalOnly: false,
+                isServerOnly: true
+            }));
+            
+            if (cursor) {
+                setServerMemos(prev => [...prev, ...newMemos]);
+            } else {
+                setServerMemos(newMemos);
+            }
+            setNextCursor(data.nextCursor);
+            setHasMore(data.hasMore);
+        } catch (e) {
+            console.error('Failed to fetch server memos', e);
+        }
+    };
+
+    // Fetch search results from server
+    const fetchServerSearch = async (query: string, cursor?: string) => {
+        if (!query.trim()) {
+            setServerSearchResults([]);
+            setSearchHasMore(false);
+            return;
+        }
+        
+        setIsSearching(true);
+        try {
+            const url = cursor
+                ? `/api/memos/search?q=${encodeURIComponent(query)}&cursor=${encodeURIComponent(cursor)}&limit=20`
+                : `/api/memos/search?q=${encodeURIComponent(query)}&limit=20`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('Failed to fetch');
+            const data = await res.json();
+            
+            const newMemos: DisplayMemo[] = data.memos.map((m: any) => ({
+                id: m.id,
+                title: m.title,
+                updatedAt: new Date(m.updatedAt),
+                thumbnailPath: m.thumbnailPath,
+                isFullContent: true,
+                isLocalOnly: false,
+                isServerOnly: true
+            }));
+            
+            if (cursor) {
+                setServerSearchResults(prev => [...prev, ...newMemos]);
+            } else {
+                setServerSearchResults(newMemos);
+            }
+            setSearchNextCursor(data.nextCursor);
+            setSearchHasMore(data.hasMore);
+        } catch (e) {
+            console.error('Failed to search server memos', e);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    // Initial Load & Sync on Mount
+    useEffect(() => {
+        const init = async () => {
+             try {
+                // Sync on mount (when opening the list)
+                await syncManager.sync();
+             } catch (e) {
+                 console.error('List sync failed', e);
+                 // Global dialog handles this
+             }
+             fetchServerMemos();
+        };
+        init();
+    }, []);
+
+    // Infinite Scroll Handler
+    const handleScroll = () => {
+        if (scrollContainerRef.current) {
+            sessionStorage.setItem('memoListScrollPosition', scrollContainerRef.current.scrollTop.toString());
+            
+            const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+            if (scrollHeight - scrollTop - clientHeight < 200 && !isLoadingMore) {
+                if (searchQuery.trim()) {
+                    if (searchHasMore && searchNextCursor) {
+                        setIsLoadingMore(true);
+                        fetchServerSearch(searchQuery, searchNextCursor).finally(() => setIsLoadingMore(false));
+                    }
+                } else {
+                    if (hasMore && nextCursor) {
+                        setIsLoadingMore(true);
+                        fetchServerMemos(nextCursor).finally(() => setIsLoadingMore(false));
+                    }
+                }
+            }
+        }
+    };
 
     const dragCounter = useRef(0);
     const router = useRouter();
@@ -69,139 +280,62 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
     const [pullStartY, setPullStartY] = useState(0);
     const [pullDistance, setPullDistance] = useState(0);
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const PULL_THRESHOLD = 80; // 更新トリガーとなる距離
-    const MAX_PULL_DISTANCE = 120; // 最大引き下げ距離
-
-    // Reset memos when initialMemos changes (e.g. after server action redirect)
-    // Reset memos when initialMemos changes (e.g. after server action redirect)
-    useEffect(() => {
-        setMemos(initialMemos);
-        if (isRefreshing) {
-            setIsRefreshing(false);
-            setPullDistance(0);
-        }
-        // Simplified hasMore logic
-        // setHasMore(initialMemos.length >= 20); 
-    }, [initialMemos, isRefreshing]);
-
-    const [lastSearchedQuery, setLastSearchedQuery] = useState(initialQuery);
+    const PULL_THRESHOLD = 80;
+    const MAX_PULL_DISTANCE = 120;
 
     const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Update URL helper
-    const updateUrl = (query: string, count: number) => {
+    const updateUrl = (query: string) => {
         const url = new URL(window.location.href);
         if (query) {
             url.searchParams.set('q', query);
         } else {
             url.searchParams.delete('q');
         }
-        if (count > 20) {
-            url.searchParams.set('take', count.toString());
-        } else {
-            url.searchParams.delete('take');
-        }
         const newUrl = url.toString();
         window.history.replaceState({}, '', newUrl);
-        // Save to sessionStorage for back navigation
         sessionStorage.setItem('memoListUrl', url.pathname + url.search);
     };
 
-    // Search Execution Logic
-    const executeSearch = async (query: string) => {
-        setIsSearching(true);
-        try {
-            const newMemos = await getMemos({ query, skip: 0, take: 20 });
-            setMemos(newMemos);
-            setHasMore(newMemos.length >= 20);
-            setLastSearchedQuery(query);
-            // updateUrl handled by useEffect
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setIsSearching(false);
-        }
-    };
-
+    // Debounced Search Effect
     const isFirstRender = useRef(true);
-
-    // Debounced Search Effect (only when search bar is focused)
     useEffect(() => {
         if (isFirstRender.current) {
             isFirstRender.current = false;
+            if (initialQuery) {
+                fetchServerSearch(initialQuery);
+            }
             return;
         }
+        if (!isSearchFocused) return;
 
-        // Only execute debounced search when search bar is focused
-        if (!isSearchFocused) {
-            return;
-        }
-
-        if (searchTimeoutRef.current) {
-            clearTimeout(searchTimeoutRef.current);
-        }
-
+        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
         searchTimeoutRef.current = setTimeout(() => {
-            executeSearch(searchQuery);
-        }, 1000);
+            fetchServerSearch(searchQuery);
+        }, 500);
 
         return () => {
-            if (searchTimeoutRef.current) {
-                clearTimeout(searchTimeoutRef.current);
-            }
+            if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
         };
     }, [searchQuery, isSearchFocused]);
 
-    // Immediate Search Handler
     const handleImmediateSearch = () => {
-        if (searchTimeoutRef.current) {
-            clearTimeout(searchTimeoutRef.current);
-        }
-        executeSearch(searchQuery);
+        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+        fetchServerSearch(searchQuery);
     };
 
     const handleClearSearch = () => {
-        if (searchTimeoutRef.current) {
-            clearTimeout(searchTimeoutRef.current);
-        }
+        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
         setSearchQuery('');
-        setLastSearchedQuery('');
-        executeSearch('');
+        setServerSearchResults([]);
+        setSearchHasMore(false);
     };
-    
-    // Derived state for Header
-    const isSearchExecuted = searchQuery && searchQuery === lastSearchedQuery;
 
-    // Infinite Scroll
-    const loadMore = async () => {
-        if (loadingMore || !hasMore) return;
-        setLoadingMore(true);
-        try {
-            const currentCount = memos.length;
-            const newMemos = await getMemos({ 
-                query: searchQuery, 
-                skip: currentCount, 
-                take: 20 
-            });
-            
-            if (newMemos.length < 20) {
-                setHasMore(false);
-            }
-            
-            setMemos(prev => [...prev, ...newMemos]);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoadingMore(false);
-        }
-    };
-    
-    // Sync URL with state
     useEffect(() => {
-        updateUrl(searchQuery, memos.length);
-    }, [searchQuery, memos.length]);
+        updateUrl(searchQuery);
+    }, [searchQuery]);
 
-    // Scroll position restore on mount
     useEffect(() => {
         const savedScrollPosition = sessionStorage.getItem('memoListScrollPosition');
         if (savedScrollPosition && scrollContainerRef.current) {
@@ -209,34 +343,9 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
         }
     }, []);
 
-    // Save scroll position on scroll
-    const handleScroll = () => {
-        if (scrollContainerRef.current) {
-            sessionStorage.setItem('memoListScrollPosition', scrollContainerRef.current.scrollTop.toString());
-        }
-    };
-
-    useEffect(() => {
-        const observer = new IntersectionObserver(
-            entries => {
-                if (entries[0].isIntersecting && hasMore && !loadingMore && !isSearching) {
-                    loadMore();
-                }
-            },
-            { threshold: 0.1 } // Start loading when 10% visible
-        );
-
-        if (observerTarget.current) {
-            observer.observe(observerTarget.current);
-        }
-
-        return () => observer.disconnect();
-    }, [hasMore, loadingMore, isSearching, memos.length, searchQuery]);
-
-
+    // Global Paste Handler
     useEffect(() => {
         const handleGlobalPaste = async (e: ClipboardEvent) => {
-            // 入力フィールドなどにフォーカスがある場合は通常の挙動を優先
             const target = e.target as HTMLElement;
             if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
                 return;
@@ -249,7 +358,6 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
             try {
                 let handled = false;
                 
-                // 1. ファイル（Finderからのコピーなど）
                 const files = e.clipboardData.files;
                 if (files && files.length > 0) {
                     for (let i = 0; i < files.length; i++) {
@@ -277,7 +385,6 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                     handled = true;
                 }
 
-                // 2. テキスト（ファイルがない場合）
                 if (!handled) {
                     const text = e.clipboardData.getData('text/plain');
                     if (text) {
@@ -287,7 +394,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 }
 
                 if (handled) {
-                    router.refresh();
+                    syncManager.sync();
                 }
             } catch (err) {
                 console.error('Global paste failed', err);
@@ -301,13 +408,8 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
         return () => window.removeEventListener('paste', handleGlobalPaste);
     }, [router]);
 
-    const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-        setAnchorEl(event.currentTarget);
-    };
-
-    const handleMenuClose = () => {
-        setAnchorEl(null);
-    };
+    const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => setAnchorEl(event.currentTarget);
+    const handleMenuClose = () => setAnchorEl(null);
 
     const startSelectionMode = () => {
         handleMenuClose();
@@ -322,11 +424,8 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
 
     const toggleSelection = (id: string) => {
         const newSelected = new Set(selectedIds);
-        if (newSelected.has(id)) {
-            newSelected.delete(id);
-        } else {
-            newSelected.add(id);
-        }
+        if (newSelected.has(id)) newSelected.delete(id);
+        else newSelected.add(id);
         setSelectedIds(newSelected);
     };
 
@@ -334,7 +433,17 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
         if (selectedIds.size === 0) return;
         if (!await confirm(`${selectedIds.size}件のメモを削除しますか？`, { severity: 'error', confirmText: '削除', title: 'メモの削除' })) return;
 
-        await deleteMemos(Array.from(selectedIds));
+        await db.transaction('rw', db.memos, async () => {
+            const ids = Array.from(selectedIds);
+             const memosToDelete = await db.memos.bulkGet(ids);
+             const validMemos = memosToDelete.filter((m): m is ClientMemo => !!m);
+             
+             for (const memo of validMemos) {
+                 await db.memos.update(memo.id, { isDeleted: true, isDirty: true });
+             }
+        });
+        
+        syncManager.sync();
         cancelSelectionMode();
     };
 
@@ -342,18 +451,14 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
         e.preventDefault();
         e.stopPropagation();
         dragCounter.current += 1;
-        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-            setIsDragging(true);
-        }
+        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) setIsDragging(true);
     };
 
     const handleDragLeave = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
         dragCounter.current -= 1;
-        if (dragCounter.current === 0) {
-            setIsDragging(false);
-        }
+        if (dragCounter.current === 0) setIsDragging(false);
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -392,6 +497,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                          throw err;
                     }
                 }
+                syncManager.sync();
             } catch (error) {
                 console.error('File upload failed', error);
                 showToast('ファイルのアップロードに失敗しました', 'error');
@@ -401,7 +507,6 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
         }
     };
 
-    // Pull to Refresh Handlers
     const handleTouchStart = (e: React.TouchEvent) => {
         if (scrollContainerRef.current && scrollContainerRef.current.scrollTop === 0 && !isRefreshing && !isSelectionMode) {
             setPullStartY(e.touches[0].clientY);
@@ -412,30 +517,33 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
 
     const handleTouchMove = (e: React.TouchEvent) => {
         if (pullStartY === 0 || isRefreshing || isSelectionMode) return;
-
         const currentY = e.touches[0].clientY;
         const diff = currentY - pullStartY;
-
         if (diff > 0 && scrollContainerRef.current?.scrollTop === 0) {
-            // スクロールをキャンセルしてPull動作を有効にする
-            // 注意: これを過度に行うと通常のスクロールが阻害される可能性があるため、scrollTop === 0 の時のみ
-            const newDistance = Math.min(diff * 0.5, MAX_PULL_DISTANCE); // 抵抗係数 0.5
+            const newDistance = Math.min(diff * 0.5, MAX_PULL_DISTANCE);
             setPullDistance(newDistance);
         }
     };
 
     const handleTouchEnd = () => {
         if (pullStartY === 0 || isRefreshing) return;
-
         if (pullDistance > PULL_THRESHOLD) {
             setIsRefreshing(true);
-            setPullDistance(PULL_THRESHOLD); // 更新中は閾値の位置で固定
-            router.refresh();
+            setPullDistance(PULL_THRESHOLD);
+            Promise.all([
+                syncManager.sync(),
+                fetchServerMemos()
+            ]).finally(() => {
+                setIsRefreshing(false);
+                setPullDistance(0);
+            }); 
         } else {
             setPullDistance(0);
         }
         setPullStartY(0);
     };
+
+    const isSearchExecuted = searchQuery.trim().length > 0;
 
     return (
         <Box 
@@ -446,34 +554,23 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
             onDragOver={handleDragOver}
             onDrop={handleDrop}
         >
-            {/* Drag Overlay */}
             {isDragging && (
                 <Box
                     sx={{
                         position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
+                        top: 0, 
+                        left: 0, right: 0, bottom: 0,
                         bgcolor: 'rgba(0, 0, 0, 0.1)',
                         zIndex: 2000,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                         backdropFilter: 'blur(2px)',
                         pointerEvents: 'none'
                     }}
                 >
                     <Box
                         sx={{
-                            bgcolor: 'background.paper',
-                            p: 3,
-                            borderRadius: 2,
-                            boxShadow: 3,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: 1
+                            bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 3,
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1
                         }}
                     >
                         <FolderIcon sx={{ fontSize: 48, color: MEMO_COLOR }} />
@@ -519,7 +616,6 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 }
             />
             
-            
             <Box 
                 ref={scrollContainerRef} 
                 onScroll={handleScroll} 
@@ -528,29 +624,18 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 onTouchEnd={handleTouchEnd}
                 sx={{ flex: 1, overflowY: 'auto', p: 2, position: 'relative' }}
             >
-                {/* Pull to refresh indicator */}
                 <Box
                     sx={{
-                        position: 'absolute',
-                        top: 20, // 固定位置（上部）
-                        left: 0,
-                        right: 0,
-                        display: 'flex',
-                        justifyContent: 'center',
-                        pointerEvents: 'none',
-                        zIndex: 10, // リストの上に表示
+                        position: 'absolute', top: 20, left: 0, right: 0,
+                        display: 'flex', justifyContent: 'center',
+                        pointerEvents: 'none', zIndex: 10,
                     }}
                 >
                      <motion.div
                         style={{
-                            background: 'white',
-                            borderRadius: '50%',
-                            boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
-                            width: 40,
-                            height: 40,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
+                            background: 'white', borderRadius: '50%', boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+                            width: 40, height: 40,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}
                         initial={{ y: -60, opacity: 0 }}
                         animate={{ 
@@ -576,11 +661,8 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                     </motion.div>
                 </Box>
                 
-                <Box sx={{ 
-                    // コンテンツ自体の押し下げは削除
-                    transition: 'none'
-                }}>
-                {!isSearching && memos.length === 0 ? (
+                <Box sx={{ transition: 'none' }}>
+                {!isSearching && displayMemos.length === 0 ? (
                     <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="50vh" color="text.secondary">
                         <NoteIcon sx={{ fontSize: 60, mb: 2, opacity: 0.5 }} />
                         <Typography>メモはありません</Typography>
@@ -588,75 +670,68 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 ) : (
                     <List component={motion.ul} layout>
                         <AnimatePresence mode='popLayout'>
-                        {memos.map(memo => {
+                        {displayMemos.map(memo => {
                             const isSelected = selectedIds.has(memo.id);
-                            // TaskItem風のデザインを適用
-                            // Border color priority: Selection -> Default (MEMO_COLOR)
-                            const borderColor = (isSelectionMode && isSelected) ? 'primary.main' : MEMO_COLOR;
                             
                             return (
                                 <ListItem 
                                     component={motion.li}
                                     layout
                                     initial={{ opacity: 0, y: 15, scale: 0.98 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    animate={{ 
+                                        opacity: memo.isServerOnly ? 0.7 : 1,
+                                        y: 0, 
+                                        scale: 1,
+                                    }}
                                     exit={{ opacity: 0, scale: 0.95, height: 0, marginBottom: 0 }}
                                     transition={{ type: 'spring', duration: 0.4, bounce: 0, layout: { duration: 0.3 } }}
                                     key={memo.id} 
                                     disablePadding 
                                     sx={{ 
                                         mb: 1, 
-                                        bgcolor: alpha(MEMO_COLOR, 0.1), 
+                                        bgcolor: memo.isServerOnly ? alpha(MEMO_COLOR, 0.05) : alpha(MEMO_COLOR, 0.1), 
                                         borderRadius: 3, 
                                         overflow: 'hidden',
-                                        // transition: 'all 0.2s', // Conflict with framer-motion
+                                        // Border logic restored (fixed color)
                                         border: '1px solid',
-                                        borderColor: borderColor,
+                                        borderColor: isSelected ? 'primary.main' : MEMO_COLOR,
                                         boxShadow: 'none',
                                     }}
                                     secondaryAction={
                                         isSelectionMode ? (
                                             <Checkbox 
-                                                edge="end"
-                                                checked={isSelected}
+                                                edge="end" checked={isSelected}
                                                 onChange={() => toggleSelection(memo.id)}
                                                 sx={{ 
                                                     color: MEMO_COLOR,
-                                                    '&.Mui-checked': {
-                                                        color: MEMO_COLOR,
-                                                    },
+                                                    '&.Mui-checked': { color: MEMO_COLOR },
                                                 }}
                                             />
                                         ) : (
-                                            <MemoListEditButton id={memo.id} />
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                {memo.isDirty && (
+                                                    <Box sx={{ color: 'warning.main', display: 'flex', alignItems: 'center', mr: 0.5 }} title="未同期">
+                                                        <UnsyncedIcon sx={{ fontSize: 16 }} />
+                                                    </Box>
+                                                )}
+                                                {memo.isServerOnly && (
+                                                    <CloudIcon sx={{ fontSize: 16, color: 'text.secondary', opacity: 0.6 }} />
+                                                )}
+                                                <MemoListEditButton id={memo.id} />
+                                            </Box>
                                         )
                                     }
                                 >
                                     {isSelectionMode ? (
                                         <ListItemButton onClick={() => toggleSelection(memo.id)} sx={{ p: 1, pr: 8 }}>
                                            <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', overflow: 'hidden' }}>
-                                                {/* サムネイルエリア */}
                                                 <Box sx={{ 
-                                                    mr: 2, 
-                                                    flexShrink: 0, 
-                                                    width: 48, 
-                                                    height: 48, 
-                                                    position: 'relative', 
-                                                    borderRadius: 1, 
-                                                    overflow: 'hidden', 
-                                                    bgcolor: 'action.hover', // サムネイル背景は少し濃くするか、白にするか。
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center'
+                                                    mr: 2, flexShrink: 0, width: 48, height: 48, 
+                                                    position: 'relative', borderRadius: 1, overflow: 'hidden', 
+                                                    bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center'
                                                 }}>
                                                     {memo.thumbnailPath ? (
-                                                        <Image 
-                                                            src={memo.thumbnailPath} 
-                                                            alt="thumbnail" 
-                                                            fill 
-                                                            sizes="48px"
-                                                            style={{ objectFit: 'cover' }} 
-                                                        />
+                                                        <Image src={memo.thumbnailPath} alt="thumbnail" fill sizes="48px" style={{ objectFit: 'cover' }} />
                                                     ) : (
                                                         <NoteIcon sx={{ fontSize: 24, color: 'text.secondary', opacity: 0.7 }} />
                                                     )}
@@ -671,28 +746,13 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                                     ) : (
                                         <MemoListItemButton href={`/memos/${memo.id}`} sx={{ p: 1, pr: 8 }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', overflow: 'hidden' }}>
-                                                {/* サムネイルエリア */}
                                                 <Box sx={{ 
-                                                    mr: 2, 
-                                                    flexShrink: 0, 
-                                                    width: 56, 
-                                                    height: 56, 
-                                                    position: 'relative', 
-                                                    borderRadius: 1, 
-                                                    overflow: 'hidden', 
-                                                    bgcolor: 'action.hover',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center'
+                                                    mr: 2, flexShrink: 0, width: 56, height: 56, 
+                                                    position: 'relative', borderRadius: 1, overflow: 'hidden', 
+                                                    bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center'
                                                 }}>
                                                     {memo.thumbnailPath ? (
-                                                        <Image 
-                                                            src={memo.thumbnailPath} 
-                                                            alt="thumbnail" 
-                                                            fill 
-                                                            sizes="56px"
-                                                            style={{ objectFit: 'cover' }} 
-                                                        />
+                                                        <Image src={memo.thumbnailPath} alt="thumbnail" fill sizes="56px" style={{ objectFit: 'cover' }} />
                                                     ) : (
                                                         <NoteIcon sx={{ fontSize: 28, color: 'text.secondary', opacity: 0.7 }} />
                                                     )}
@@ -712,13 +772,15 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                             );
                         })}
                         </AnimatePresence>
+                        
+                        {/* Loading More Indicator */}
+                        {isLoadingMore && (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                                <CircularProgress size={24} />
+                            </Box>
+                        )}
                     </List>
                 )}
-                
-                {/* Sentinel for infinite scroll */}
-                <Box ref={observerTarget} sx={{ height: '20px', display: 'flex', justifyContent: 'center', mt: 2 }}>
-                    {loadingMore && <CircularProgress size={24} />}
-                </Box>
                 </Box>
             </Box>
 

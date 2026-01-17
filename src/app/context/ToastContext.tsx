@@ -35,6 +35,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 autoHideDuration={4000} 
                 onClose={handleClose}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                sx={{ zIndex: 9999 }}
             >
                 <Alert onClose={handleClose} severity={severity} sx={{ width: '100%' }}>
                     {message}

@@ -13,35 +13,99 @@ import { useDevice } from '@/app/context/DeviceContext';
 import MemoHeader from '@/app/components/MemoHeader';
 import MemoComposer, { MemoComposerRef, SaveStatus } from '@/app/components/MemoComposer';
 import MemoFileManagement, { Attachment } from '@/app/components/MemoFileManagement';
-import { Fab } from '@mui/material';
+import { db } from '@/lib/db';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { syncManager } from '@/lib/sync-manager';
+import { useConfirm } from '@/app/context/ConfirmContext';
+import { useToast } from '@/app/context/ToastContext';
+
 interface MemoEditClientProps {
     memo: {
         id: string;
         content: string;
-        updatedAt: Date;
+        updatedAt: Date | string; // Allow string date from server component
+        title?: string;
     };
     isNew?: boolean;
 }
 
-export default function MemoEditClient({ memo, isNew }: MemoEditClientProps) {
+export default function MemoEditClient({ memo: initialMemo, isNew }: MemoEditClientProps) {
     const router = useRouter();
     const { isComputer } = useDevice();
     const composerRef = useRef<MemoComposerRef>(null);
     const [isFileManagementOpen, setIsFileManagementOpen] = useState(false);
     const [showLineNumbers, setShowLineNumbers] = useState(false);
-    // Default to 'monaco' (rich editor) if on computer, otherwise 'plain' (better for mobile inputs)
     const [editorMode, setEditorMode] = useState<'monaco' | 'plain'>(isComputer ? 'monaco' : 'plain');
     const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
-    const [lastSavedAt, setLastSavedAt] = useState<Date | undefined>(memo.updatedAt);
-    const [timeDisplay, setTimeDisplay] = useState('');
     
-    // Status Dialog State
-    const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
-    const handleStatusClick = () => {
-        if (lastSavedAt) {
-            updateTimeDisplay();
-            setIsStatusDialogOpen(true);
+    const { confirm } = useConfirm();
+    const { showToast } = useToast();
+
+    // Dexie: Live Query
+    // initialMemo.id keeps stable, so this query is efficient.
+    const localMemo = useLiveQuery(
+        () => db.memos.get(initialMemo.id),
+        [initialMemo.id]
+    );
+
+    // Initial Fetch / Cache Strategy
+    useEffect(() => {
+        const init = async () => {
+            if (!initialMemo.id) return;
+            
+            // Try to cache the initial prop data if local db doesn't have it or is older?
+            const existing = await db.memos.get(initialMemo.id);
+            
+            if (existing && existing.isDirty) {
+                // Local changes exist, do not overwrite with server data
+                return;
+            }
+
+            // If we have server data (initialMemo) and it's seemingly valid (not empty dummy if offline)
+            const serverUpdatedAt = new Date(initialMemo.updatedAt);
+            
+            if (!existing || existing.updatedAt < serverUpdatedAt || !existing.isFullContent) {
+                // Update Cache
+                try {
+                await db.memos.put({
+                    id: initialMemo.id,
+                    title: initialMemo.title || '無題のメモ',
+                    content: initialMemo.content,
+                    createdAt: serverUpdatedAt, // Approximate
+                    updatedAt: serverUpdatedAt,
+                    userId: 'current-user', 
+                    isFullContent: true,
+                    lastAccessedAt: new Date(),
+                    isDirty: false,
+                });
+                } catch (e) {
+                    console.error('Failed to cache initial memo', e);
+                }
+            } else {
+                 // Just update access time
+                 await db.memos.update(initialMemo.id, { lastAccessedAt: new Date() });
+            }
+        };
+        init();
+    }, [initialMemo]);
+
+    const displayContent = localMemo?.content ?? initialMemo.content;
+    const lastUpdatedAt = (localMemo?.updatedAt) ? new Date(localMemo.updatedAt) : new Date(initialMemo.updatedAt);
+    const [lastSavedAt, setLastSavedAt] = useState<Date>(lastUpdatedAt);
+
+    // Update lastSavedAt when localMemo updates (e.g. background save)
+    useEffect(() => {
+        if (localMemo) {
+            setLastSavedAt(localMemo.updatedAt);
         }
+    }, [localMemo?.updatedAt]);
+    
+    const [timeDisplay, setTimeDisplay] = useState('');
+    const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
+
+    const handleStatusClick = () => {
+        updateTimeDisplay();
+        setIsStatusDialogOpen(true);
     };
     const handleStatusClose = () => setIsStatusDialogOpen(false);
 
@@ -53,14 +117,13 @@ export default function MemoEditClient({ memo, isNew }: MemoEditClientProps) {
 
     useEffect(() => {
         let interval: NodeJS.Timeout;
-        if (isStatusDialogOpen && lastSavedAt) {
+        if (isStatusDialogOpen) {
             updateTimeDisplay();
             interval = setInterval(updateTimeDisplay, 60000);
         }
         return () => clearInterval(interval);
     }, [isStatusDialogOpen, lastSavedAt]);
 
-    // Menu State
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => setAnchorEl(event.currentTarget);
     const handleMenuClose = () => setAnchorEl(null);
@@ -84,6 +147,26 @@ export default function MemoEditClient({ memo, isNew }: MemoEditClientProps) {
         composerRef.current?.insertContent(markdown);
     };
 
+    const handleDelete = async () => {
+        if (!await confirm("本当に削除しますか？", { severity: 'error', confirmText: '削除', title: 'メモの削除' })) return;
+        
+        try {
+            // Local Delete
+            await db.memos.update(initialMemo.id, { isDeleted: true, isDirty: true });
+            
+            syncManager.sync().catch(e => {
+                console.error('Delete sync failed', e);
+                // Global dialog will handle the error
+            });
+            
+            showToast('削除しました', 'success');
+            router.push('/memos');
+        } catch (error) {
+            showToast('削除に失敗しました', 'error');
+            console.error(error);
+        }
+    };
+
     return (
         <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: '#f9f2fb', pt: '60px' }} className="memo-page-transition">
             <MemoHeader 
@@ -91,21 +174,13 @@ export default function MemoEditClient({ memo, isNew }: MemoEditClientProps) {
                 sx={{ 
                     bgcolor: '#f4eafa', 
                     color: 'text.primary',
-                    borderBottom: 1,
-                    borderColor: 'divider',
-                    boxShadow: 'none'
+                    borderBottom: 1, borderColor: 'divider', boxShadow: 'none'
                 }}
                 actions={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Tooltip title={saveStatus === 'saved' ? "保存済み" : (saveStatus === 'saving' ? "保存中..." : "未保存")}>
                             <Box 
-                                sx={{ 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    color: 'text.secondary', 
-                                    mr: 1,
-                                    cursor: lastSavedAt ? 'pointer' : 'default'
-                                }}
+                                sx={{ display: 'flex', alignItems: 'center', color: 'text.secondary', mr: 1, cursor: 'pointer' }}
                                 onClick={handleStatusClick}
                             >
                                 {saveStatus === 'saving' ? (
@@ -117,32 +192,19 @@ export default function MemoEditClient({ memo, isNew }: MemoEditClientProps) {
                                 )}
                             </Box>
                         </Tooltip>
-                        <Dialog
-                            open={isStatusDialogOpen}
-                            onClose={handleStatusClose}
-                        >
+                        <Dialog open={isStatusDialogOpen} onClose={handleStatusClose}>
                             <DialogTitle>保存状況</DialogTitle>
                             <DialogContent>
-                                <DialogContentText>
-                                    最終保存: {timeDisplay}
-                                </DialogContentText>
+                                <DialogContentText>最終保存: {timeDisplay}</DialogContentText>
                             </DialogContent>
                             <DialogActions>
-                                <Button onClick={handleStatusClose} autoFocus>
-                                    OK
-                                </Button>
+                                <Button onClick={handleStatusClose} autoFocus>OK</Button>
                             </DialogActions>
                         </Dialog>
-                        <IconButton 
-                            onClick={() => composerRef.current?.handleDelete()} 
-                            sx={{ color: 'error.main' }}
-                        >
+                        <IconButton onClick={handleDelete} sx={{ color: 'error.main' }}>
                             <DeleteIcon />
                         </IconButton>
-                        <IconButton
-                            onClick={handleMenuOpen}
-                            sx={{ color: 'text.secondary' }}
-                        >
+                        <IconButton onClick={handleMenuOpen} sx={{ color: 'text.secondary' }}>
                             <MoreVertIcon />
                         </IconButton>
                         <Menu
@@ -169,24 +231,21 @@ export default function MemoEditClient({ memo, isNew }: MemoEditClientProps) {
             <Box sx={{ flex: 1, overflow: 'hidden' }}>
                 <MemoComposer 
                     ref={composerRef}
-                    memoId={memo.id}
-                    initialContent={memo.content}
-                    onSuccess={() => router.push(`/memos/${memo.id}`)}
-                    onBack={() => router.push(`/memos/${memo.id}`)}
+                    memoId={initialMemo.id}
+                    initialContent={displayContent} // Dexie or Server prop
+                    onSuccess={() => {/* handled by sync logic mostly */}}
+                    onBack={() => router.push('/memos')}
                     isNew={isNew}
                     showLineNumbers={showLineNumbers}
                     onFileManagementOpen={() => setIsFileManagementOpen(true)}
                     editorMode={editorMode}
-                    onSaveStatusChange={(status, date) => {
-                        setSaveStatus(status);
-                        if (date) setLastSavedAt(date);
-                    }}
-                    lastUpdatedAt={memo.updatedAt}
+                    onSaveStatusChange={setSaveStatus}
+                    lastUpdatedAt={lastUpdatedAt}
                 />
             </Box>
             
             <MemoFileManagement 
-                memoId={memo.id}
+                memoId={initialMemo.id}
                 open={isFileManagementOpen}
                 onClose={() => setIsFileManagementOpen(false)}
                 onSelect={handleFileSelect}

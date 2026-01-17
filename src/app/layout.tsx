@@ -5,6 +5,8 @@ import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
 import { DeviceProvider } from './context/DeviceContext';
 import JobMonitor from './components/JobMonitor';
+import SyncInitializer from './components/SyncInitializer';
+import { ConflictProvider } from './context/ConflictContext';
 import type { Metadata, Viewport } from 'next';
 
 export const viewport: Viewport = {
@@ -46,8 +48,11 @@ export default function RootLayout({
             <DeviceProvider>
               <ToastProvider>
                   <ConfirmProvider>
+                    <ConflictProvider>
+                      <SyncInitializer />
                       {children}
                       <JobMonitor />
+                    </ConflictProvider>
                   </ConfirmProvider>
               </ToastProvider>
             </DeviceProvider>
