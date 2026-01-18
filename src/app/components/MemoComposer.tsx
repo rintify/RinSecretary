@@ -88,6 +88,8 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     
     const [status, setStatus] = useState<SaveStatus>('saved');
     const [lastSavedAt, setLastSavedAt] = useState<Date | undefined>(initialLastUpdatedAt);
+    // Ref to keep the latest lastSavedAt for use in closures (e.g., saveMemo called from useEffect)
+    const lastSavedAtRef = useRef<Date | undefined>(initialLastUpdatedAt);
     
     // Notify parent of status changes
     useEffect(() => {
@@ -144,10 +146,12 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         
         // Optimistic Locking Check
         // If we have an ID and have saved before (or loaded initial), check DB
+        // Use ref to get the latest value (avoids stale closure issues)
+        const currentLastSavedAt = lastSavedAtRef.current;
         if (internalMemoId) {
             const existing = await db.memos.get(internalMemoId);
             // If existing memo has newer updatedAt than our last known save/load time
-            if (existing && lastSavedAt && existing.updatedAt > lastSavedAt) {
+            if (existing && currentLastSavedAt && existing.updatedAt > currentLastSavedAt) {
                  // Check if content is actually different
                  if (existing.content !== currentContent) {
                      // Conflict Detected!
@@ -176,6 +180,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                          // Reload from DB
                          setContent(existing.content);
                          setLastSavedAt(existing.updatedAt);
+                         lastSavedAtRef.current = existing.updatedAt;
                          setStatus('saved');
                          // Update refs to avoid triggering unsaved status immediately
                          contentRef.current = existing.content;
@@ -240,7 +245,12 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
             
             lastSavedContentRef.current = currentContent;
             setStatus('saved');
-            setLastSavedAt(now);
+            
+            // Re-read from DB to ensure lastSavedAt matches exactly what's stored
+            const savedMemo = await db.memos.get(id);
+            const savedUpdatedAt = savedMemo?.updatedAt ?? now;
+            setLastSavedAt(savedUpdatedAt);
+            lastSavedAtRef.current = savedUpdatedAt;
 
             // Trigger Background Sync - Always try, let it fail if offline
             syncManager.sync().catch(e => {

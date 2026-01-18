@@ -276,6 +276,10 @@ export class SyncManager {
         // 5. サーバーからの更新通知を処理（キャッシュ済みメモのみ対象）
         // サーバーはメタデータのみ返す（contentなし）ので、キャッシュ済みで更新があるものは
         // isFullContent を false にして、次回詳細画面で再取得させる
+        
+        // 自分がプッシュしたメモのIDセット（これらはサーバーからの更新でupdatedAtを上書きしない）
+        const pushedMemoIds = new Set(dirtyMemos.map(m => m.id));
+        
         await db.transaction('rw', db.memos, async () => {
             for (const remote of updatedMemos) {
                 const local = await db.memos.get(remote.id);
@@ -285,6 +289,10 @@ export class SyncManager {
                 
                 // ローカルがDirtyの場合はスキップ（ローカル変更を優先）
                 if (local.isDirty) continue;
+                
+                // 自分がプッシュしたメモはスキップ（サーバーのupdatedAtで上書きしない）
+                // これにより、保存直後のsyncで自分の保存時刻が上書きされるのを防ぐ
+                if (pushedMemoIds.has(remote.id)) continue;
                 
                 // サーバーの方が新しい場合、キャッシュを無効化
                 const serverUpdatedAt = new Date(remote.updatedAt);
