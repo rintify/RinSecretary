@@ -47,7 +47,7 @@ export default function JobMonitor() {
                     jobRemovalTimers.current[job.id] = setTimeout(() => {
                         dismissJobLocally(job.id);
                         delete jobRemovalTimers.current[job.id];
-                    }, 400);
+                    }, 600);
                 }
             }
             
@@ -87,7 +87,7 @@ export default function JobMonitor() {
                 visibilityTimer.current = setTimeout(() => {
                     setIsVisible(true);
                     visibilityTimer.current = null;
-                }, 500);
+                }, 700);
             }
         } else {
             // No running or recently completed jobs
@@ -182,40 +182,41 @@ export default function JobMonitor() {
         <>
             <Paper 
                 ref={nodeRef}
-                elevation={6}
+                elevation={3}
                 onMouseEnter={() => setIsHovering(true)}
                 onMouseLeave={() => setIsHovering(false)}
                 sx={{ 
                     position: 'fixed', 
                     top: 70, 
                     right: 20, 
-                    width: 320, 
+                    width: 280, 
                     zIndex: 9999,
                     bgcolor: 'background.paper',
                     borderRadius: 2,
                     overflow: 'hidden',
                     display: 'flex',
                     flexDirection: 'column',
+                    border: '1px solid',
+                    borderColor: 'divider',
                 }}
             >
                 <Box 
                     sx={{ 
                         p: 1, 
-                        bgcolor: hasRunningJobs ? 'primary.main' : 'success.main', 
-                        color: hasRunningJobs ? 'primary.contrastText' : 'success.contrastText', 
+                        borderBottom: '1px solid',
+                        borderColor: 'divider',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        transition: 'background-color 0.3s ease'
                     }}
                 >
-                     <Typography variant="subtitle2" sx={{ fontWeight: 'bold', pl: 1 }}>
+                     <Typography variant="caption" sx={{ fontWeight: 'bold', pl: 1, color: 'text.secondary' }}>
                          {hasRunningJobs 
                              ? `処理中... (${runningJobs.length}件)`
                              : `完了 (${jobs.length}件)`
                          }
                      </Typography>
-                     <IconButton size="small" onClick={() => { setIsVisible(false); setIsDismissed(true); }} sx={{ color: 'inherit' }}>
+                     <IconButton size="small" onClick={() => { setIsVisible(false); setIsDismissed(true); }} sx={{ color: 'text.secondary' }}>
                          <CloseIcon fontSize="small" />
                      </IconButton>
                 </Box>

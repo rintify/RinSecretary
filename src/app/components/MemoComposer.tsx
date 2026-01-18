@@ -140,20 +140,17 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     // Using context inside component body
     const { showConflict } = useConflict();
 
-    const saveMemo = async (currentContent: string): Promise<string | undefined> => {
+    const saveMemo = async (currentContent: string, skipSync: boolean = false): Promise<string | undefined> => {
         if (isSavingRef.current) return internalMemoId;
         const trimmed = currentContent.trim();
         if (!internalMemoId && !trimmed) return undefined;
         
         // Optimistic Locking Check
-        // If we have an ID and have saved before (or loaded initial), check DB
-        // Use ref to get the latest value (avoids stale closure issues)
+        // ... (lines 149-198 unchecked)
         const currentLastSavedAt = lastSavedAtRef.current;
         if (internalMemoId) {
             const existing = await db.memos.get(internalMemoId);
-            // If existing memo has newer updatedAt than our last known save/load time
             if (existing && currentLastSavedAt && existing.updatedAt > currentLastSavedAt) {
-                 // Check if content is actually different
                  if (existing.content !== currentContent) {
                      // Conflict Detected!
                      const choice = await showConflict(
@@ -178,21 +175,17 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                      );
 
                      if (choice === 'server') {
-                         // Reload from DB
                          setContent(existing.content);
                          setLastSavedAt(existing.updatedAt);
                          lastSavedAtRef.current = existing.updatedAt;
                          setStatus('saved');
-                         // Update refs to avoid triggering unsaved status immediately
                          contentRef.current = existing.content;
                          lastSavedContentRef.current = existing.content;
                          return internalMemoId;
                      } else if (choice === 'cancel') {
-                         // Cancel Save
                          setStatus('unsaved');
                          return internalMemoId;
                      }
-                     // If choice is 'local', proceed to overwrite (force save)
                  }
             }
         }
@@ -206,7 +199,6 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         setStatus('saving');
         
         try {
-            // Generate ID if missing
             let id = internalMemoId;
             if (!id) {
                 id = crypto.randomUUID();
@@ -214,7 +206,6 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
             }
 
             const now = new Date();
-            // Upsert Logic via Shared Action
             const saved = await saveMemoLocally({
                 id,
                 content: currentContent,
@@ -224,17 +215,17 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
             lastSavedContentRef.current = currentContent;
             setStatus('saved');
             
-            // Re-read from DB to ensure lastSavedAt matches exactly what's stored
             const savedMemo = await db.memos.get(id);
             const savedUpdatedAt = savedMemo?.updatedAt ?? now;
             setLastSavedAt(savedUpdatedAt);
             lastSavedAtRef.current = savedUpdatedAt;
 
-            // Trigger Background Sync - Always try, let it fail if offline
-            syncManager.sync().catch(e => {
-                console.error('Background sync failed', e);
-                // Global dialog will handle the error
-            });
+            // Trigger Background Sync (Unless skipped)
+            if (!skipSync) {
+                syncManager.sync().catch(e => {
+                    console.error('Background sync failed', e);
+                });
+            }
 
             return id;
         } catch (e) {
@@ -394,6 +385,13 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                 // If new memo, save content first to generate ID
                 id = await saveMemo(contentRef.current); 
                 if (!id) throw new Error('Could not create memo for upload');
+                
+                // CRITICAL: Ensure memo is synced to server before uploading attachment
+                // because uploadAttachment server action checks for memo existence.
+                // saveMemo calls sync but doesn't await it fully if we didn't await the promise returned by syncManager.sync() inside saveMemo?
+                // saveMemo calls sync().catch(). It doesn't await the sync result.
+                // So we MUST explictly await sync() here to guarantee order.
+                await syncManager.sync();
             }
             
             // Check Size & Offline status
@@ -433,16 +431,30 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                         filePath: predictedPath
                     });
 
-                    // Insert Markdown immediately
+                    // Insert Markdown & Smart Save
                     const markdown = '\n' + generateAttachmentMarkdown(file.name, predictedPath, file.type);
                     
+                    const baseContent = contentRef.current;
                     insertMarkdown(markdown);
-                    saveMemo(contentRef.current + markdown);
+
+                    let newContent = baseContent + markdown;
+                    if (editorInstanceRef.current) {
+                        newContent = editorInstanceRef.current.getValue();
+                    }
+
+                    // Check for Server Timestamp Update (Background Sync during Upload)
+                    const latestMemo = await db.memos.get(id);
+                    if (latestMemo && latestMemo.content === baseContent && latestMemo.updatedAt > (lastSavedAtRef.current || new Date(0))) {
+                         console.log('[MemoComposer] Accepting background timestamp update (upload side-effect)');
+                         lastSavedAtRef.current = latestMemo.updatedAt;
+                    }
+
+                    // Skip Sync to prevent immediate conflict or server noise
+                    saveMemo(newContent, true);
 
                     updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
 
-                    // Trigger Sync (Fire and Forget)
-                    syncManager.sync().catch(console.error);
+                    // REMOVED explicit sync here as per user request
 
                 } else {
                     // Large File: Online Direct Upload
@@ -467,10 +479,26 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                         isDirty: false
                     });
 
+                    // Insert Markdown & Smart Save
                     const markdown = '\n' + generateAttachmentMarkdown(file.name, attachment.filePath, file.type);
                     
+                    const baseContent = contentRef.current;
                     insertMarkdown(markdown);
-                    saveMemo(contentRef.current + markdown);
+                    
+                    let newContent = baseContent + markdown;
+                    if (editorInstanceRef.current) {
+                        newContent = editorInstanceRef.current.getValue();
+                    }
+
+                    // Check for Server Timestamp Update (Background Sync during Upload)
+                    const latestMemo = await db.memos.get(id);
+                    if (latestMemo && latestMemo.content === baseContent && latestMemo.updatedAt > (lastSavedAtRef.current || new Date(0))) {
+                         console.log('[MemoComposer] Accepting background timestamp update (upload side-effect)');
+                         lastSavedAtRef.current = latestMemo.updatedAt;
+                    }
+
+                    // Skip Sync to prevent immediate conflict or server noise
+                    saveMemo(newContent, true);
                     
                     updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
                 }

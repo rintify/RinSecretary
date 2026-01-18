@@ -40,6 +40,7 @@ export async function getMemos({
 
     const where: any = {
         userId: user.id,
+        isDeleted: false,
     };
 
     if (query) {
@@ -197,8 +198,13 @@ export async function deleteMemo(id: string) {
       await updateStorageUsage(-att.fileSize);
   }
 
-  await prisma.memo.delete({
+  // 論理削除に変更（同期APIと動作を統一）
+  await prisma.memo.update({
     where: { id },
+    data: {
+      isDeleted: true,
+      deletedAt: now,
+    },
   });
 
   revalidatePath('/memos');
@@ -240,10 +246,16 @@ export async function deleteMemos(ids: string[]) {
       }
   }
 
-  await prisma.memo.deleteMany({
+  // 論理削除に変更（同期APIと動作を統一）
+  const now2 = new Date();
+  await prisma.memo.updateMany({
     where: {
       id: { in: ids },
       userId: user.id,
+    },
+    data: {
+      isDeleted: true,
+      deletedAt: now2,
     },
   });
 

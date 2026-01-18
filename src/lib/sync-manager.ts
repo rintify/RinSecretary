@@ -18,6 +18,7 @@ export interface SyncState {
     status: SyncStatus;
     online: boolean;
     lastSyncedAt: Date | null;
+    isBackgroundCheck: boolean; // ローカル変更がなく、サーバー更新もまだ見つかっていない場合true
 }
 
 export type SyncStatusListener = (state: SyncState) => void;
@@ -26,12 +27,16 @@ export type SyncStatusListener = (state: SyncState) => void;
 export class SyncManager {
     private static instance: SyncManager;
     private isSyncing = false;
+    private isBackgroundCheck = false; // 内部状態
     private online = typeof navigator !== 'undefined' ? navigator.onLine : true;
     private conflictResolver: ConflictResolver | null = null;
     private lastError: Error | null = null;
     private statusListeners: Set<SyncStatusListener> = new Set();
     private lastSyncedAtCache: Date | null = null;
-
+    // 次回の同期予約
+    private nextSyncPromise: Promise<void> | null = null;
+    private nextSyncResolve: (() => void) | null = null;
+    private nextSyncReject: ((e: any) => void) | null = null;
 
     private constructor() {
         if (typeof window !== 'undefined') {
@@ -44,9 +49,6 @@ export class SyncManager {
                 this.online = false;
                 this.notifyStatusChange();
             });
-
-            // Periodic GC Removed
-            // setInterval(() => this.garbageCollect(), GC_INTERVAL_MS);
         }
     }
 
@@ -95,7 +97,8 @@ export class SyncManager {
         return {
             status,
             online: this.online,
-            lastSyncedAt: this.lastSyncedAtCache
+            lastSyncedAt: this.lastSyncedAtCache,
+            isBackgroundCheck: this.isSyncing && this.isBackgroundCheck
         };
     }
 
@@ -110,11 +113,6 @@ export class SyncManager {
     private async setLastSyncedAt(date: Date) {
         await db.syncState.put({ key: 'lastSyncedAt', value: date.toISOString() });
     }
-
-    // 次回の同期予約
-    private nextSyncPromise: Promise<void> | null = null;
-    private nextSyncResolve: (() => void) | null = null;
-    private nextSyncReject: ((e: any) => void) | null = null;
 
     public async sync(): Promise<void> {
         // 既に同期中の場合
@@ -133,13 +131,28 @@ export class SyncManager {
 
         this.isSyncing = true;
         this.lastError = null;
+        
+        // Check for local changes first
+        const dirtyMemosCount = await db.memos.where('isDirty').equals(1).count() + 
+                                (await db.memos.filter(m => m.isDirty === true).count()); // Dexie boolean quirks
+        const deletedMemosCount = await db.memos.where('isDeleted').equals(1).count();
+        const dirtyAttCount = await db.attachments.filter(a => !!a.isDirty).count();
+        const deletedAttCount = await db.attachments.filter(a => !!a.isDeleted).count();
+        
+        const hasLocalChanges = (dirtyMemosCount > 0 || deletedMemosCount > 0 || dirtyAttCount > 0 || deletedAttCount > 0);
+        
+        this.isBackgroundCheck = !hasLocalChanges;
+        
         this.notifyStatusChange();
-        console.log('[SyncManager] Start syncing...');
+        console.log(`[SyncManager] Start syncing... (BackgroundCheck: ${this.isBackgroundCheck})`);
 
         try {
+            let serverUpdatesFound = false;
+
             // Sequential Sync: メモ同期完了後に添付ファイル同期（レースコンディション回避）
             try {
-                await this.syncMemos();
+                const memosUpdated = await this.syncMemos();
+                if (memosUpdated) serverUpdatesFound = true;
             } catch (memoError: any) {
                 console.error('[SyncManager] Memo sync failed', memoError);
                 this.lastError = memoError instanceof Error ? memoError : new Error(String(memoError));
@@ -148,8 +161,15 @@ export class SyncManager {
                 }
             }
             
+            // If we found server updates, we are no longer just checking
+            if (serverUpdatesFound && this.isBackgroundCheck) {
+                this.isBackgroundCheck = false;
+                this.notifyStatusChange();
+            }
+
             try {
-                await this.syncAttachments();
+                const attUpdated = await this.syncAttachments();
+                if (attUpdated) serverUpdatesFound = true;
             } catch (attachmentError: any) {
                 console.error('[SyncManager] Attachment sync failed', attachmentError);
                 this.lastError = attachmentError instanceof Error ? attachmentError : new Error(String(attachmentError));
@@ -157,6 +177,12 @@ export class SyncManager {
                 if (this.errorHandler) {
                     this.errorHandler(this.lastError);
                 }
+            }
+
+            // Re-check for notification if attachment found updates
+            if (serverUpdatesFound && this.isBackgroundCheck) {
+                this.isBackgroundCheck = false;
+                this.notifyStatusChange();
             }
 
             // 同期成功時にキャッシュを更新
@@ -169,6 +195,7 @@ export class SyncManager {
             this.lastError = e instanceof Error ? e : new Error(String(e));
         } finally {
             this.isSyncing = false;
+            this.isBackgroundCheck = false;
             this.notifyStatusChange();
 
             // 次の同期予約があるか確認
@@ -189,10 +216,9 @@ export class SyncManager {
                     .catch(reject);
             }
         }
-
     }
 
-    private async syncMemos() {
+    private async syncMemos(): Promise<boolean> {
         console.log('[SyncManager] Syncing Memos...');
         // 1. Dirty/Deletedメモを取得
         let dirtyMemos = await db.memos.where('isDirty').equals(1).toArray();
@@ -230,6 +256,14 @@ export class SyncManager {
         const data = await res.json();
         const { updatedMemos, serverDeletedIds, conflicts, serverTime } = data;
         
+        // Check if any work was done
+        const hasWork = updatedMemos.length > 0 || serverDeletedIds.length > 0 || conflicts.length > 0;
+        
+        if (hasWork && this.isBackgroundCheck) {
+            this.isBackgroundCheck = false;
+            this.notifyStatusChange();
+        }
+
         console.log(`[SyncManager] Server response: ${updatedMemos.length} updates, ${conflicts.length} conflicts, ${serverDeletedIds.length} deletes`);
 
         // 4. コンフリクト処理
@@ -260,11 +294,8 @@ export class SyncManager {
                     continue; 
                 } else {
                     // ローカル版を採用 → 再送信（次の同期で）
-                    // IMPORTANT: Update local timestamp to now so it wins next time (or at least looks newer)
-                    // Server logic: if (existing.updatedAt > client.updatedAt) conflict;
-                    // So we must ensure client.updatedAt > existing.updatedAt(Server)
                     await db.memos.update(localMemo.id, { 
-                        updatedAt: new Date(), // Update to NOW
+                        updatedAt: new Date(),
                         isDirty: true 
                     });
                 }
@@ -273,41 +304,32 @@ export class SyncManager {
             }
         }
 
-        // 5. サーバーからの更新通知を処理（キャッシュ済みメモのみ対象）
-        // サーバーはメタデータのみ返す（contentなし）ので、キャッシュ済みで更新があるものは
-        // isFullContent を false にして、次回詳細画面で再取得させる
-        
-        // 自分がプッシュしたメモのIDセット（これらはサーバーからの更新でupdatedAtを上書きしない）
+        // 5. サーバーからの更新通知を処理
         const pushedMemoIds = new Set(dirtyMemos.map(m => m.id));
         
-        await db.transaction('rw', db.memos, async () => {
+        await db.transaction('rw', db.memos, db.attachments, async () => {
             for (const remote of updatedMemos) {
                 const local = await db.memos.get(remote.id);
-                
                 // ローカルに存在しない → 無視（キャッシュしない）
                 if (!local) continue;
-                
-                // ローカルがDirtyの場合はスキップ（ローカル変更を優先）
+                // ローカルがDirtyの場合はスキップ
                 if (local.isDirty) continue;
-                
-                // 自分がプッシュしたメモはスキップ（サーバーのupdatedAtで上書きしない）
-                // これにより、保存直後のsyncで自分の保存時刻が上書きされるのを防ぐ
+                // 自分がプッシュしたメモはスキップ
                 if (pushedMemoIds.has(remote.id)) continue;
                 
-                // サーバーの方が新しい場合、キャッシュを無効化
                 const serverUpdatedAt = new Date(remote.updatedAt);
                 if (serverUpdatedAt > local.updatedAt) {
                     await db.memos.update(remote.id, {
                         title: remote.title,
                         updatedAt: serverUpdatedAt,
                         thumbnailPath: remote.thumbnailPath,
-                        isFullContent: false,  // 再取得が必要
+                        isFullContent: false,
                         lastAccessedAt: new Date(),
                     });
                 }
             }
 
-            // サーバーで消えたメモをローカルから削除（関連添付ファイルも）
+            // サーバーで消えたメモをローカルから削除
             if (serverDeletedIds.length > 0) {
                 for (const memoId of serverDeletedIds) {
                     await db.attachments.where('memoId').equals(memoId).delete();
@@ -315,45 +337,44 @@ export class SyncManager {
                 await db.memos.bulkDelete(serverDeletedIds);
             }
 
-            // PushしたメモのDirtyフラグを下ろす（コンフリクトでなかったもの）
+            // PushしたメモのDirtyフラグを下ろす（同期中に変更されていない場合のみ）
             const conflictIds = new Set(conflicts.map((c: any) => c.memoId));
             for (const m of dirtyMemos) {
-                if (!conflictIds.has(m.id)) {
-                    // Check if we updated this memo during conflict resolution (Local wins)
-                    // If so, it might have a NEW dirty state, so verify before clearing?
-                    // But here we are clearing the 'dirtyMemos' list snapshot.
-                    // If we updated it in step 4, it is dirty AGAIN, but 'm' is the old snapshot.
-                    // We should only clear dirty if the DB state hasn't changed since snapshot?
-                    // Simplify: Just clear dirty=false. If step 4 set it to true, it was a separate update.
-                    // BUT: 'db.memos.update' in Step 4 runs AFTER this loop? No, Step 4 runs BEFORE Step 5.
-                    // So if Step 4 set isDirty=true, we might overwrite it here with isDirty=false?
-                    // Wait, 'dirtyMemos' contains the memos AS OF START.
-                    // If we resolved conflict as 'local', we updated db.memos with NEW timestamp and isDirty=true.
-                    // If we run `await db.memos.update(m.id, { isDirty: false })` here, we overwrite that.
-                    // FIX: Check if it was a conflict.
-                    
-                    // Actually, if it was a conflict, 'conflictIds' HAS it. So we skip this block.
-                    // If it was NOT a conflict, then our push was successful.
-                    await db.memos.update(m.id, { isDirty: false });
+                if (conflictIds.has(m.id)) continue;
+
+                // 現在の最新状態を取得して比較（CAS: Compare and Swap）
+                const current = await db.memos.get(m.id);
+                // メモが存在し、かつ更新時刻が変わっていない場合のみDirtyを下ろす
+                // つまり、同期処理中にユーザーが編集した場合はDirtyのまま維持する
+                if (current && current.updatedAt.getTime() === m.updatedAt.getTime()) {
+                     await db.memos.update(m.id, { isDirty: false });
+                } else {
+                    console.log(`[SyncManager] Memo ${m.id} was modified during sync. Keeping dirty.`);
                 }
             }
             
             // Deletedメモと関連添付ファイルを完全に消す
             for (const m of deletedMemos) {
+                // ここも同様に、同期中に変更(復元など)されていたら消さない方が安全だが、
+                // 論理削除は通常一方通行なので、一旦そのままにする（改善の余地あり）
                 await db.attachments.where('memoId').equals(m.id).delete();
                 await db.memos.delete(m.id);
             }
         });
 
         // 6. 最終同期時刻を更新
-        // If there were conflicts resolved as 'local', we technically haven't fully synced their state to server yet (next sync will).
-        // But we can update lastSyncedAt to serverTime because we pulled all updates.
         await this.setLastSyncedAt(new Date(serverTime));
+        
+        return hasWork;
     }
 
-    private async syncAttachments() {
-        if (!this.online) return; // Can't upload/download if offline
+    private async syncAttachments(): Promise<boolean> {
+        if (!this.online) return false;
         console.log('[SyncManager] Syncing Attachments...');
+
+        let errorCount = 0;
+        let firstError: Error | null = null;
+        let workDone = false;
 
         // 1. Upload Dirty Attachments
         const dirtyAttachments = await db.attachments
@@ -361,37 +382,27 @@ export class SyncManager {
             .toArray();
 
         for (const att of dirtyAttachments) {
+            workDone = true;
             try {
                 console.log(`[SyncManager] Uploading attachment: ${att.fileName} (${att.id})`);
                 
                 const formData = new FormData();
-                // Create File object from Blob
                 const file = new File([att.blob!], att.fileName, { type: att.mimeType });
                 formData.append('file', file);
                 formData.append('id', att.id);
 
-                
-                // We need to call the server action. 
-                // Since this runs on client, we can import server action.
-                // Dynamic import to avoid issues during SSR if this file is loaded there? 
-                // No, this is client side code.
-                const { uploadAttachment, deleteAttachment } = await import('@/app/memos/actions');
-                
-                // Restore att.memoId argument
+                const { uploadAttachment } = await import('@/app/memos/actions');
                 const uploaded = await uploadAttachment(formData, att.memoId);
                 
-                // Update Local DB
                 await db.attachments.update(att.id, {
                     filePath: uploaded.filePath,
                     isDirty: false,
-                    // We KEEP the blob for offline viewing (until GC)
-                    // localUrl? We might want to clear it if we rely on filePath, 
-                    // but for consistent offline exp, keep using blob if available.
                 });
                 
-            } catch (e) {
+            } catch (e: any) {
                 console.error(`[SyncManager] Failed to upload attachment ${att.id}`, e);
-                // Keep isDirty=true, try next time
+                errorCount++;
+                if (!firstError) firstError = e instanceof Error ? e : new Error(String(e));
             }
         }
 
@@ -401,28 +412,41 @@ export class SyncManager {
             .toArray();
 
         for (const att of deletedAttachments) {
+            workDone = true;
             try {
                 console.log(`[SyncManager] Deleting attachment: ${att.fileName} (${att.id})`);
                 
                 const { deleteAttachment } = await import('@/app/memos/actions');
                 await deleteAttachment(att.id);
 
-                // Remove from Local DB completely
                 await db.attachments.delete(att.id);
                 
-            } catch (e) {
+            } catch (e: any) {
                 console.error(`[SyncManager] Failed to delete attachment ${att.id}`, e);
-                // Keep exists (isDeleted=true) to retry
+                errorCount++;
+                if (!firstError) firstError = e instanceof Error ? e : new Error(String(e));
             }
         }
 
         // 3. Pull new attachments from server
-        await this.pullAttachmentsFromServer();
+        try {
+            const pulled = await this.pullAttachmentsFromServer();
+            if (pulled) workDone = true;
+        } catch (e: any) {
+             console.error('[SyncManager] Failed to pull attachments', e);
+             errorCount++;
+             if (!firstError) firstError = e instanceof Error ? e : new Error(String(e));
+        }
+
+        if (errorCount > 0 && firstError) {
+            throw new Error(`Attachment sync failed with ${errorCount} errors. First error: ${firstError.message}`);
+        }
+        
+        return workDone;
     }
 
-    private async pullAttachmentsFromServer() {
+    private async pullAttachmentsFromServer(): Promise<boolean> {
         try {
-            // Get last attachment sync time
             const lastSyncState = await db.syncState.get('lastAttachmentSyncedAt');
             const lastSyncedAt = lastSyncState?.value || null;
 
@@ -433,21 +457,20 @@ export class SyncManager {
             });
 
             if (!res.ok) {
-                console.error('[SyncManager] Attachment sync API failed:', res.status);
-                return;
+                throw new Error(`Attachment sync API failed: ${res.status} ${res.statusText}`);
             }
 
             const data = await res.json();
             const { attachments, deletedAttachmentIds, serverTime } = data;
 
+            const hasWork = attachments.length > 0 || (deletedAttachmentIds && deletedAttachmentIds.length > 0);
+
             console.log(`[SyncManager] Received ${attachments.length} attachments from server`);
 
-            // Add new attachments to local DB (without blob - will be fetched on demand)
             for (const serverAtt of attachments) {
                 const existing = await db.attachments.get(serverAtt.id);
                 
                 if (!existing) {
-                    // New attachment from server
                     await db.attachments.put({
                         id: serverAtt.id,
                         memoId: serverAtt.memoId,
@@ -459,25 +482,26 @@ export class SyncManager {
                         lastAccessedAt: new Date(),
                         isDirty: false,
                         isDeleted: false,
-                        // blob is undefined - will be fetched by SW on first access
                     });
                     console.log(`[SyncManager] Added attachment from server: ${serverAtt.fileName}`);
                 }
             }
 
-            // サーバーで削除された添付ファイルをローカルから削除
             if (deletedAttachmentIds && deletedAttachmentIds.length > 0) {
                 await db.attachments.bulkDelete(deletedAttachmentIds);
                 console.log(`[SyncManager] Deleted ${deletedAttachmentIds.length} attachments from local DB`);
             }
 
-            // Update last sync time
             await db.syncState.put({ key: 'lastAttachmentSyncedAt', value: serverTime });
+            
+            return hasWork;
 
         } catch (e) {
             console.error('[SyncManager] Failed to pull attachments from server', e);
+            throw e; 
         }
     }
+
 
     public async checkAndGC(requiredSize: number) {
         // Calculate current usage

@@ -1,30 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { syncManager, SyncState } from '@/lib/sync-manager';
 import { useConflict } from '../context/ConflictContext';
+import { useGlobalJobs } from '../context/GlobalJobContext';
 import { 
     Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button,
-    Box, Tooltip, keyframes
 } from '@mui/material';
-import { 
-    CloudDone as CloudDoneIcon, 
-    CloudOff as CloudOffIcon, 
-    Sync as SyncIcon, 
-    Error as ErrorIcon 
-} from '@mui/icons-material';
-
-// スピンアニメーション
-const spin = keyframes`
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-`;
 
 export default function SyncInitializer() {
     const { showConflict } = useConflict();
+    const { addClientJob, updateClientJob, removeJob } = useGlobalJobs();
     const [errorDialogOpen, setErrorDialogOpen] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
-    const [syncState, setSyncState] = useState<SyncState>({ status: 'idle', online: true, lastSyncedAt: null });
+    
+    // 現在のJobIDを追跡
+    const currentSyncJobId = useRef<string | null>(null);
 
     useEffect(() => {
         // Register Conflict Resolver
@@ -58,11 +49,44 @@ export default function SyncInitializer() {
             console.log('[SyncInitializer] Global Sync Error Caught in Component:', error);
             setErrorMessage(error.message || '不明なエラーが発生しました');
             setErrorDialogOpen(true);
+            
+            // Job状態をエラーに更新
+            if (currentSyncJobId.current) {
+                updateClientJob(currentSyncJobId.current, { 
+                    status: 'FAILED', 
+                    error: error.message,
+                    progress: 100 
+                });
+                currentSyncJobId.current = null;
+            }
         });
 
-        // Register Status Listener
+        // Register Status Listener (Job連携用)
         const statusListener = (state: SyncState) => {
-            setSyncState(state);
+            if (state.status === 'syncing') {
+                if (!state.isBackgroundCheck && !currentSyncJobId.current) {
+                    // バックグラウンドチェックではなく（＝ローカル変更あり or サーバー更新あり）、まだJobがない場合
+                    // 同期開始 → Job追加
+                    const jobId = `sync-${Date.now()}`;
+                    currentSyncJobId.current = jobId;
+                    addClientJob({
+                        id: jobId,
+                        type: 'SYNC',
+                        title: 'データ同期中...',
+                    });
+                }
+            } else if (state.status === 'idle' && currentSyncJobId.current) {
+                // 同期完了 → Job更新
+                updateClientJob(currentSyncJobId.current, { 
+                    status: 'COMPLETED', 
+                    progress: 100,
+                    title: 'データ同期完了'
+                });
+                currentSyncJobId.current = null;
+            } else if (state.status === 'error' && currentSyncJobId.current) {
+                // エラー状態（errorHandler側で処理済みなので、ここではスキップ）
+                // errorHandlerが呼ばれた後にstatus変更が通知される場合がある
+            }
         };
         syncManager.addStatusListener(statusListener);
 
@@ -70,65 +94,14 @@ export default function SyncInitializer() {
             syncManager.removeStatusListener(statusListener);
         };
         
-    }, [showConflict]);
+    }, [showConflict, addClientJob, updateClientJob]);
 
     const handleCloseError = () => {
         setErrorDialogOpen(false);
     };
 
-    // 同期インジケーターのツールチップ
-    const getTooltipText = () => {
-        if (!syncState.online) return 'オフライン';
-        if (syncState.status === 'syncing') return '同期中...';
-        if (syncState.status === 'error') return '同期エラー';
-        if (syncState.lastSyncedAt) {
-            return `最終同期: ${syncState.lastSyncedAt.toLocaleTimeString()}`;
-        }
-        return '同期済み';
-    };
-
-    // 同期インジケーターのアイコン
-    const renderSyncIcon = () => {
-        if (!syncState.online) {
-            return <CloudOffIcon sx={{ fontSize: 20, color: 'text.disabled' }} />;
-        }
-        if (syncState.status === 'syncing') {
-            return <SyncIcon sx={{ fontSize: 20, color: 'primary.main', animation: `${spin} 1s linear infinite` }} />;
-        }
-        if (syncState.status === 'error') {
-            return <ErrorIcon sx={{ fontSize: 20, color: 'error.main' }} />;
-        }
-        return <CloudDoneIcon sx={{ fontSize: 20, color: 'success.main' }} />;
-    };
-
     return (
         <>
-            {/* 同期インジケーター（右下固定） */}
-            <Box
-                sx={{
-                    position: 'fixed',
-                    bottom: 16,
-                    left: 16,
-                    zIndex: 999,
-                    bgcolor: 'background.paper',
-                    borderRadius: '50%',
-                    boxShadow: 1,
-                    p: 0.75,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    '&:hover': {
-                        boxShadow: 3
-                    }
-                }}
-                onClick={() => syncManager.sync()}
-            >
-                <Tooltip title={getTooltipText()} arrow placement="right">
-                    {renderSyncIcon()}
-                </Tooltip>
-            </Box>
-
             {/* エラーダイアログ */}
             <Dialog
                 open={errorDialogOpen}
