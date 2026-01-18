@@ -220,13 +220,16 @@ export class SyncManager {
 
     private async syncMemos(): Promise<boolean> {
         console.log('[SyncManager] Syncing Memos...');
-        // 1. Dirty/Deletedメモを取得
-        let dirtyMemos = await db.memos.where('isDirty').equals(1).toArray();
-        if (dirtyMemos.length === 0) {
-                dirtyMemos = await db.memos.filter(m => m.isDirty === true).toArray();
+        // 1. Dirtyメモを取得 (Deletedも含めてisDirty=trueになっているはず)
+        let allDirtyMemos = await db.memos.where('isDirty').equals(1).toArray();
+        if (allDirtyMemos.length === 0) {
+            allDirtyMemos = await db.memos.filter(m => m.isDirty === true).toArray();
         }
         
-        const deletedMemos = await db.memos.where('isDeleted').equals(1).toArray();
+
+        // 2. 更新と削除に分類
+        const pushedMemosList = allDirtyMemos.filter(m => !m.isDeleted);
+        const deletedMemos = allDirtyMemos.filter(m => !!m.isDeleted);
 
         // 2. 最終同期時刻を取得
         const lastSyncedAt = await this.getLastSyncedAt();
@@ -234,7 +237,7 @@ export class SyncManager {
         // localMemoIds は廃止（通信量削減のため）
         const payload = {
             lastSyncedAt: lastSyncedAt?.toISOString() || null,
-            pushedMemos: dirtyMemos.filter(m => !m.isDeleted).map(m => ({
+            pushedMemos: pushedMemosList.map(m => ({
                 id: m.id,
                 title: m.title,
                 content: m.content,
@@ -305,62 +308,85 @@ export class SyncManager {
         }
 
         // 5. サーバーからの更新通知を処理
-        const pushedMemoIds = new Set(dirtyMemos.map(m => m.id));
+        // allDirtyMemos を基準にする (Snapshot)
+        const pushedMemoIds = new Set(allDirtyMemos.map(m => m.id));
         
-        await db.transaction('rw', db.memos, db.attachments, async () => {
-            for (const remote of updatedMemos) {
-                const local = await db.memos.get(remote.id);
-                // ローカルに存在しない → 無視（キャッシュしない）
-                if (!local) continue;
-                // ローカルがDirtyの場合はスキップ
-                if (local.isDirty) continue;
-                // 自分がプッシュしたメモはスキップ
-                if (pushedMemoIds.has(remote.id)) continue;
+        try {
+            await db.transaction('rw', db.memos, db.attachments, async () => {
+                for (const remote of updatedMemos) {
+                    const local = await db.memos.get(remote.id);
+                    // ローカルに存在しない → 無視（キャッシュしない）
+                    if (!local) continue;
+                    // ローカルがDirtyの場合はスキップ
+                    if (local.isDirty) continue;
+                    // 自分がプッシュしたメモはスキップ
+                    if (pushedMemoIds.has(remote.id)) continue;
+                    
+                    const serverUpdatedAt = new Date(remote.updatedAt);
+                    if (serverUpdatedAt > local.updatedAt) {
+                        await db.memos.update(remote.id, {
+                            title: remote.title,
+                            updatedAt: serverUpdatedAt,
+                            thumbnailPath: remote.thumbnailPath,
+                            isFullContent: false,
+                            lastAccessedAt: new Date(),
+                        });
+                    }
+                }
+
+                // サーバーで消えたメモをローカルから削除
+                if (serverDeletedIds.length > 0) {
+                    for (const memoId of serverDeletedIds) {
+                        await db.attachments.where('memoId').equals(memoId).delete();
+                        await db.memos.delete(memoId);
+                    }
+                }
+
+                // PushしたメモのDirtyフラグを下ろす（同期中に変更されていない場合のみ）
+                const conflictIds = new Set(conflicts.map((c: any) => c.memoId));
+                const deletedIds = new Set(deletedMemos.map(m => m.id));
                 
-                const serverUpdatedAt = new Date(remote.updatedAt);
-                if (serverUpdatedAt > local.updatedAt) {
-                    await db.memos.update(remote.id, {
-                        title: remote.title,
-                        updatedAt: serverUpdatedAt,
-                        thumbnailPath: remote.thumbnailPath,
-                        isFullContent: false,
-                        lastAccessedAt: new Date(),
-                    });
-                }
-            }
+                for (const m of allDirtyMemos) {
+                    if (conflictIds.has(m.id)) continue;
+                    if (deletedIds.has(m.id)) continue; // 削除予定のメモはスキップ（下で削除する）
 
-            // サーバーで消えたメモをローカルから削除
-            if (serverDeletedIds.length > 0) {
-                for (const memoId of serverDeletedIds) {
-                    await db.attachments.where('memoId').equals(memoId).delete();
+                    // 現在の最新状態を取得して比較（CAS: Compare and Swap）
+                    const current = await db.memos.get(m.id);
+                    if (!current) continue; // 既に削除済み
+                    
+                    // Date型の安全な比較（IndexedDBから取得した値が文字列の場合に対応）
+                    const currentTime = current.updatedAt instanceof Date 
+                        ? current.updatedAt.getTime() 
+                        : new Date(current.updatedAt).getTime();
+                    const mTime = m.updatedAt instanceof Date 
+                        ? m.updatedAt.getTime() 
+                        : new Date(m.updatedAt).getTime();
+                    
+                    // メモが存在し、かつ更新時刻が変わっていない場合のみDirtyを下ろす
+                    // つまり、同期処理中にユーザーが編集した場合はDirtyのまま維持する
+                    if (currentTime === mTime) {
+                         await db.memos.update(m.id, { isDirty: false });
+                    } else {
+                        console.log(`[SyncManager] Memo ${m.id} was modified during sync. Keeping dirty.`);
+                    }
                 }
-                await db.memos.bulkDelete(serverDeletedIds);
-            }
-
-            // PushしたメモのDirtyフラグを下ろす（同期中に変更されていない場合のみ）
-            const conflictIds = new Set(conflicts.map((c: any) => c.memoId));
-            for (const m of dirtyMemos) {
-                if (conflictIds.has(m.id)) continue;
-
-                // 現在の最新状態を取得して比較（CAS: Compare and Swap）
-                const current = await db.memos.get(m.id);
-                // メモが存在し、かつ更新時刻が変わっていない場合のみDirtyを下ろす
-                // つまり、同期処理中にユーザーが編集した場合はDirtyのまま維持する
-                if (current && current.updatedAt.getTime() === m.updatedAt.getTime()) {
-                     await db.memos.update(m.id, { isDirty: false });
-                } else {
-                    console.log(`[SyncManager] Memo ${m.id} was modified during sync. Keeping dirty.`);
+                
+                // Deletedメモと関連添付ファイルを完全に消す
+                // serverDeletedIdsで既に削除されたものはスキップ（重複削除によるトランザクションロールバック防止）
+                const serverDeletedSet = new Set(serverDeletedIds);
+                for (const m of deletedMemos) {
+                    // serverDeletedIdsで既に削除済みならスキップ
+                    if (serverDeletedSet.has(m.id)) continue;
+                    
+                    await db.attachments.where('memoId').equals(m.id).delete();
+                    await db.memos.delete(m.id);
                 }
-            }
-            
-            // Deletedメモと関連添付ファイルを完全に消す
-            for (const m of deletedMemos) {
-                // ここも同様に、同期中に変更(復元など)されていたら消さない方が安全だが、
-                // 論理削除は通常一方通行なので、一旦そのままにする（改善の余地あり）
-                await db.attachments.where('memoId').equals(m.id).delete();
-                await db.memos.delete(m.id);
-            }
-        });
+                
+            });
+        } catch (txError) {
+            console.error('[SyncManager] Transaction failed:', txError);
+            throw txError;
+        }
 
         // 6. 最終同期時刻を更新
         await this.setLastSyncedAt(new Date(serverTime));

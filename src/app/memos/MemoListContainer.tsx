@@ -121,6 +121,18 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
     const [hasMore, setHasMore] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
 
+    // 削除済みIDを追跡（物理削除後も維持するためrefを使用）
+    const deletedIdsRef = useRef<Set<string>>(new Set());
+    
+    // localMemosの変化を監視し、isDeleted: trueのメモをdeletedIdsRefに追加
+    useEffect(() => {
+        for (const m of localMemos) {
+            if (m.isDeleted) {
+                deletedIdsRef.current.add(m.id);
+            }
+        }
+    }, [localMemos]);
+
     // Search State (Server)
     const [serverSearchResults, setServerSearchResults] = useState<DisplayMemo[]>([]);
     const [searchNextCursor, setSearchNextCursor] = useState<string | null>(null);
@@ -147,15 +159,16 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
             });
         }
 
-        // 2. Add server memos not in local
+        // 2. Add server memos not in local (and not locally deleted)
         for (const s of serverMemos) {
-            if (!localIds.has(s.id)) {
-                result.push({
-                    ...s,
-                    isServerOnly: true,
-                    isLocalOnly: false
-                });
-            }
+            // ローカルに存在するか、またはローカルで削除済みならスキップ
+            // deletedIdsRefは物理削除後も維持される
+            if (localIds.has(s.id) || deletedIdsRef.current.has(s.id)) continue;
+            result.push({
+                ...s,
+                isServerOnly: true,
+                isLocalOnly: false
+            });
         }
 
         // Sort by updatedAt desc
@@ -189,15 +202,16 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
             }
         }
 
-        // Add server search results not in local
+        // Add server search results not in local (and not locally deleted)
         for (const s of serverSearchResults) {
-            if (!localIds.has(s.id)) {
-                result.push({
-                    ...s,
-                    isServerOnly: true,
-                    isLocalOnly: false
-                });
-            }
+            // ローカルに存在するか、またはローカルで削除済みならスキップ
+            // deletedIdsRefは物理削除後も維持される
+            if (localIds.has(s.id) || deletedIdsRef.current.has(s.id)) continue;
+            result.push({
+                ...s,
+                isServerOnly: true,
+                isLocalOnly: false
+            });
         }
 
         result.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());

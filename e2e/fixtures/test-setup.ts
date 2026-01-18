@@ -45,6 +45,17 @@ export const test = base.extend<{
       テストの前提条件を確実に整えるため、例外的に15秒のタイムアウトを設定する。
     */
     await page.goto('/', { timeout: 15000 }); // オリジンを確保
+    
+    // テスト環境の完全リセット
+    try {
+      const resetRes = await page.request.post('/api/test/reset');
+      if (!resetRes.ok()) {
+        console.warn('DB Reset failed:', await resetRes.text());
+      }
+    } catch (e) {
+      console.warn('Failed to call reset API:', e);
+    }
+    
     await page.evaluate(async () => {
       // SW 解除
       if (navigator.serviceWorker) {

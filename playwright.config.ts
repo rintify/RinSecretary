@@ -24,8 +24,8 @@ export default defineConfig({
   
   // 共通設定
   use: {
-    // ベース URL (IPv4指定で安定化)
-    baseURL: 'http://127.0.0.1:3000',
+    // ベース URL (IPv4指定で安定化) - テスト専用ポート 3001
+    baseURL: 'http://127.0.0.1:3001',
     
     // テスト失敗時にトレースを記録
     trace: 'on-first-retry',
@@ -55,16 +55,22 @@ export default defineConfig({
   // 開発サーバーの自動起動 (Production Build)
   webServer: {
     // CI環境またはローカルでの安定実行のため、プロダクションビルドを使用
-    command: 'npm run build && npm run start -- -H 127.0.0.1 -p 3000',
-    url: 'http://127.0.0.1:3000',
-    reuseExistingServer: !process.env.CI,
+    // テスト専用DB (test.db) のスキーマ同期を行ってから起動
+    command: 'npx prisma db push --accept-data-loss && npm run build && npm run start -- -H 127.0.0.1 -p 3001',
+    url: 'http://127.0.0.1:3001',
+    // 既存のサーバー(port 3000)を誤って使わないよう、再利用を無効化
+    reuseExistingServer: false,
     timeout: 300 * 1000, // ビルド時間を考慮して5分に延長
     // Auth.js の UntrustedHost エラー回避 (Production on Localhost)
     env: {
       AUTH_TRUST_HOST: 'true',
-      NEXTAUTH_URL: 'http://127.0.0.1:3000',
+      NEXTAUTH_URL: 'http://127.0.0.1:3001',
       NEXTAUTH_SECRET: 'test-secret-for-e2e',
       E2E_TESTING: 'true',
+      // テストデータの分離
+      DATABASE_URL: 'file:./test.db',
+      UPLOADS_DIR: 'data/uploads-test',
+      PORT: '3001'
     },
   },
   

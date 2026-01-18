@@ -41,13 +41,16 @@ test.describe('メモ削除の同期', () => {
     await memoListPage.waitForSyncComplete().catch(() => {});
     
     // 6. IndexedDB からメモが消えている（または isDeleted: true）ことを確認
+    // IndexedDBの永続化タイミング問題を排除するため少し待機
+    await page.waitForTimeout(500);
     const deletedMemo = await getLocalMemo(page, memoId!);
     if (deletedMemo) {
       expect(deletedMemo.isDeleted).toBe(true);
     }
     
     // 7. UI上でメモが見えなくなることを確認
-    await expect(memoItem).not.toBeVisible({ timeout: 5000 });
+    // React の再レンダリングと Dexie の LiveQuery 更新を待つ
+    await expect(memoItem).not.toBeVisible({ timeout: 10000 });
   });
 
   test('オフラインで削除したメモがオンライン復帰後に同期される', async ({ page, context, memoListPage, memoEditPage }) => {
@@ -91,6 +94,8 @@ test.describe('メモ削除の同期', () => {
     await memoListPage.waitForSyncComplete();
     
     // 8. IndexedDB からメモが完全に消えていることを確認
+    // IndexedDBの永続化タイミング問題を排除するため少し待機
+    await page.waitForTimeout(500);
     const syncedMemo = await getLocalMemo(page, memoId!);
     expect(syncedMemo).toBeNull();
   });

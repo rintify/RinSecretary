@@ -41,6 +41,7 @@ export async function createMemoLocally(params: CreateMemoParams): Promise<strin
     const now = new Date();
     const title = params.title || extractTitle(params.content);
     const thumbnailPath = params.thumbnailPath ?? extractThumbnail(params.content);
+
     
     await db.memos.add({
         id,
@@ -70,6 +71,7 @@ export async function saveMemoLocally(params: SaveMemoParams): Promise<ClientMem
     const title = params.title || extractTitle(params.content);
     const thumbnailPath = params.thumbnailPath ?? extractThumbnail(params.content);
     
+
     const existing = await db.memos.get(params.id);
     
     if (existing) {
