@@ -1,4 +1,7 @@
-import { db, ClientMemo } from './db';
+import { db, ClientMemo, ClientAttachment } from './db';
+
+import { extractTitle, extractThumbnail, generateAttachmentMarkdown } from './memo-utils';
+import { getExtension } from './file-utils';
 
 // ---- Types ----
 
@@ -36,8 +39,8 @@ export interface AddAttachmentParams {
 export async function createMemoLocally(params: CreateMemoParams): Promise<string> {
     const id = params.id || crypto.randomUUID();
     const now = new Date();
-    const title = params.title || extractTitleFromContent(params.content);
-    const thumbnailPath = params.thumbnailPath ?? extractThumbnailFromContent(params.content);
+    const title = params.title || extractTitle(params.content);
+    const thumbnailPath = params.thumbnailPath ?? extractThumbnail(params.content);
     
     await db.memos.add({
         id,
@@ -64,8 +67,8 @@ export async function createMemoLocally(params: CreateMemoParams): Promise<strin
  */
 export async function saveMemoLocally(params: SaveMemoParams): Promise<ClientMemo> {
     const now = new Date();
-    const title = params.title || extractTitleFromContent(params.content);
-    const thumbnailPath = params.thumbnailPath ?? extractThumbnailFromContent(params.content);
+    const title = params.title || extractTitle(params.content);
+    const thumbnailPath = params.thumbnailPath ?? extractThumbnail(params.content);
     
     const existing = await db.memos.get(params.id);
     
@@ -149,7 +152,7 @@ export async function addAttachmentLocally(params: AddAttachmentParams): Promise
     const id = params.id || crypto.randomUUID();
     const now = new Date();
     const file = params.file;
-    const ext = params.fileName.split('.').pop() || '';
+    const ext = getExtension(params.fileName);
     const filePath = params.filePath || `/api/uploads/${id}.${ext}`;
     
     await db.attachments.add({
@@ -169,6 +172,15 @@ export async function addAttachmentLocally(params: AddAttachmentParams): Promise
 }
 
 /**
+ * 添付ファイルをローカルに保存する（Upsert）
+ * 
+ * @param attachment 保存する添付ファイルオブジェクト
+ */
+export async function upsertAttachmentLocally(attachment: ClientAttachment): Promise<void> {
+    await db.attachments.put(attachment);
+}
+
+/**
  * メモと添付ファイルをまとめてローカルに作成する（ファイルドロップ用）
  * 
  * @returns 作成したメモのIDと添付ファイルのID
@@ -183,15 +195,12 @@ export async function createMemoWithAttachmentLocally(params: {
     const attachmentId = params.attachmentId || crypto.randomUUID();
     const now = new Date();
     
-    const ext = params.file.name.split('.').pop() || '';
+    const ext = getExtension(params.file.name);
     const filePath = `/api/uploads/${attachmentId}.${ext}`;
-    const isImage = params.file.type.startsWith('image/');
-    const markdown = isImage 
-        ? `![${params.file.name}](${filePath})` 
-        : `[${params.file.name}](${filePath})`;
+const markdown = generateAttachmentMarkdown(params.file.name, filePath, params.file.type || 'application/octet-stream');
     
-    const title = extractTitleFromContent(markdown);
-    const thumbnailPath = extractThumbnailFromContent(markdown);
+    const title = extractTitle(markdown);
+    const thumbnailPath = extractThumbnail(markdown);
     
     await db.transaction('rw', [db.memos, db.attachments], async () => {
         await db.memos.add({
@@ -225,21 +234,7 @@ export async function createMemoWithAttachmentLocally(params: {
     return { memoId, attachmentId, filePath };
 }
 
-// ---- Helper Functions ----
-
-function extractTitleFromContent(content: string): string {
-    const firstLine = content.split('\n')[0] || '';
-    // Markdown画像/リンクの先頭を除外
-    const cleaned = firstLine.replace(/^!\[.*?\]\(.*?\)/, '').replace(/^\[.*?\]\(.*?\)/, '');
-    const title = cleaned.slice(0, 30).trim();
-    return title || '無題のメモ';
-}
-
-function extractThumbnailFromContent(content: string): string | null {
-    // Extract first image URL from markdown
-    const match = content.match(/!\[.*?\]\((.*?)\)/);
-    return match?.[1] || null;
-}
+// ---- Helper Functions (Removed: using memo-utils.ts instead)
 
 // ---- Cache Actions ----
 

@@ -16,7 +16,9 @@ import { useConfirm } from '../context/ConfirmContext';
 import { db } from '@/lib/db';
 import { syncManager } from '@/lib/sync-manager';
 import { OFFLINE_FILE_SIZE_LIMIT } from '@/lib/constants';
-import { deleteMemoLocally, addAttachmentLocally } from '@/lib/memo-actions';
+import { deleteMemoLocally, addAttachmentLocally, saveMemoLocally, upsertAttachmentLocally } from '@/lib/memo-actions';
+import { extractTitle, generateAttachmentMarkdown, checkOfflineFileSize } from '@/lib/memo-utils';
+import { getExtension } from '@/lib/file-utils';
 
 export type SaveStatus = 'unsaved' | 'saving' | 'saved';
 
@@ -32,6 +34,7 @@ interface MemoComposerProps {
     onBack?: () => void;
     onSaveStatusChange?: (status: SaveStatus, lastSavedAt?: Date) => void;
     lastUpdatedAt?: Date;
+    userId: string;
 }
 
 export interface MemoComposerRef {
@@ -40,11 +43,7 @@ export interface MemoComposerRef {
     insertContent: (text: string) => void;
 }
 
-function generateTitle(content: string): string {
-    const firstLine = content.split('\n')[0] || '';
-    const title = firstLine.slice(0, 30).trim();
-    return title || '無題のメモ';
-}
+
 
 const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     (props, ref) => {
@@ -59,7 +58,8 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         editorMode = 'monaco',
         onBack,
         onSaveStatusChange,
-        lastUpdatedAt: initialLastUpdatedAt
+        lastUpdatedAt: initialLastUpdatedAt,
+        userId
     } = props;
 
     // Use a ref to track if we have loaded initial content to avoid overwriting user input
@@ -159,7 +159,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                      const choice = await showConflict(
                          {
                              id: internalMemoId,
-                             title: generateTitle(currentContent),
+                             title: extractTitle(currentContent),
                              content: currentContent,
                              updatedAt: new Date().toISOString()
                          },
@@ -214,35 +214,12 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
             }
 
             const now = new Date();
-            const title = generateTitle(currentContent);
-            
-            // Upsert Logic
-            const existing = await db.memos.get(id);
-            if (existing) {
-                 await db.memos.put({
-                     ...existing,
-                     title,
-                     content: currentContent,
-                     updatedAt: now,
-                     isDirty: true,
-                     lastAccessedAt: now,
-                     isFullContent: true,
-                     isDeleted: false // Restore if deleted
-                 });
-            } else {
-                 await db.memos.add({
-                     id,
-                     title,
-                     content: currentContent,
-                     updatedAt: now,
-                     createdAt: now,
-                     userId: 'current-user',
-                     isDirty: true,
-                     lastAccessedAt: now,
-                     isFullContent: true,
-                     isDeleted: false
-                 });
-            }
+            // Upsert Logic via Shared Action
+            const saved = await saveMemoLocally({
+                id,
+                content: currentContent,
+                userId: userId
+            });
             
             lastSavedContentRef.current = currentContent;
             setStatus('saved');
@@ -423,15 +400,16 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
             const isOffline = !navigator.onLine;
             const isSmall = file.size <= OFFLINE_FILE_SIZE_LIMIT;
 
-            if (isOffline && !isSmall) {
-                 showToast('オフライン時は5MB以下のファイルのみ追加可能です。', 'error');
+            const sizeError = checkOfflineFileSize(file.size, navigator.onLine);
+            if (sizeError) {
+                 showToast(sizeError, 'error');
                  setUploading(false);
                  return;
             }
 
             const jobId = `upload-composer-${Date.now()}`;
             const fileId = crypto.randomUUID(); // Client-side ID for predictable path
-            const ext = file.name.split('.').pop();
+            const ext = getExtension(file.name);
             const predictedPath = `/api/uploads/${fileId}.${ext}`;
 
             addClientJob({
@@ -456,10 +434,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                     });
 
                     // Insert Markdown immediately
-                    const isImage = file.type.startsWith('image/');
-                    const markdown = isImage 
-                        ? `\n![${file.name}](${predictedPath})` 
-                        : `\n[${file.name}](${predictedPath})`;
+                    const markdown = '\n' + generateAttachmentMarkdown(file.name, predictedPath, file.type);
                     
                     insertMarkdown(markdown);
                     saveMemo(contentRef.current + markdown);
@@ -480,23 +455,19 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                     const attachment = await uploadAttachment(formData, id);
                     
                     // Update Local DB for consistency (so it shows in File Manager)
-                    await db.attachments.put({
+                    await upsertAttachmentLocally({
                         id: attachment.id,
                         memoId: attachment.memoId,
                         fileName: attachment.fileName,
                         fileSize: attachment.fileSize,
                         mimeType: attachment.mimeType,
-                        createdAt: attachment.createdAt,
+                        createdAt: attachment.createdAt, // Server provided Date object (ensure type compatibility if string)
                         filePath: attachment.filePath,
                         lastAccessedAt: new Date(),
                         isDirty: false
-                        // No blob
                     });
 
-                    const isImage = file.type.startsWith('image/');
-                    const markdown = isImage 
-                        ? `\n![${file.name}](${attachment.filePath})` 
-                        : `\n[${file.name}](${attachment.filePath})`;
+                    const markdown = '\n' + generateAttachmentMarkdown(file.name, attachment.filePath, file.type);
                     
                     insertMarkdown(markdown);
                     saveMemo(contentRef.current + markdown);

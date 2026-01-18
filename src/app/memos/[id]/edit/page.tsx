@@ -13,7 +13,8 @@ export default async function MemoEditPage(props: {
     const isNew = searchParams?.new === 'true';
     
     let memo = null;
-    
+    let userId = 'current-user';
+
     try {
         const session = await devAuth();
         if (!session?.user?.email) {
@@ -25,6 +26,7 @@ export default async function MemoEditPage(props: {
         });
 
         if (user) {
+            userId = user.id;
             const dbMemo = await prisma.memo.findUnique({
                 where: { id: memoId },
             });
@@ -39,5 +41,5 @@ export default async function MemoEditPage(props: {
         console.error('Failed to fetch memo from server', e);
     }
 
-    return <MemoEditWrapper serverMemo={memo} memoId={memoId} isNew={isNew} />;
+    return <MemoEditWrapper serverMemo={memo} memoId={memoId} isNew={isNew} userId={userId} />;
 }

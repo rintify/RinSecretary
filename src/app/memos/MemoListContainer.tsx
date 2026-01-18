@@ -31,6 +31,7 @@ import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { CloudOff as UnsyncedIcon } from '@mui/icons-material';
 import { deleteMemosLocally, createMemoLocally, createMemoWithAttachmentLocally } from '@/lib/memo-actions';
+import { checkOfflineFileSize } from '@/lib/memo-utils';
 
 type Memo = {
     id: string;
@@ -544,9 +545,9 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                             payload: null
                         });
 
-                        // Size check for offline
-                        if (!navigator.onLine && file.size > OFFLINE_FILE_SIZE_LIMIT) {
-                            throw new Error(`オフライン時は${OFFLINE_FILE_SIZE_LIMIT / 1024 / 1024}MB以下のファイルのみ追加可能です。`);
+                        const sizeError = checkOfflineFileSize(file.size, navigator.onLine);
+                        if (sizeError) {
+                            throw new Error(sizeError);
                         }
 
                         // Ensure space
@@ -856,7 +857,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 </Box>
             </Box>
 
-            {!isSelectionMode && <MemoListFabs />}
+            {!isSelectionMode && <MemoListFabs userId={userId} />}
         </Box>
     );
 }

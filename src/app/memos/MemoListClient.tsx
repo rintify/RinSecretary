@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Fab, ListItemButton, ListItemButtonProps, IconButton, CircularProgress } from '@mui/material';
-import { Add as AddIcon, ArrowBack as ArrowBackIcon, Edit as EditIcon, ContentPaste as PasteIcon, CheckCircle as SuccessIcon } from '@mui/icons-material';
+import { Add as AddIcon, ArrowBack as ArrowBackIcon, Edit as EditIcon, ContentPaste as PasteIcon } from '@mui/icons-material';
 import Link from 'next/link';
 import { MEMO_COLOR } from '../utils/colors';
-import { createEmptyMemo, createMemo, createMemoWithFile } from './actions';
+import { createMemoLocally, createMemoWithAttachmentLocally } from '@/lib/memo-actions';
+import { syncManager } from '@/lib/sync-manager';
 import { useGlobalJobs } from '../context/GlobalJobContext';
 import { useToast } from '../context/ToastContext';
 import { useDevice } from '../context/DeviceContext';
+import { getExtension, isImageMimeType } from '@/lib/file-utils';
 
-export function MemoListFabs() {
+export function MemoListFabs({ userId }: { userId: string }) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     
@@ -24,11 +26,15 @@ export function MemoListFabs() {
         if (loading) return;
         setLoading(true);
         try {
-            const memo = await createEmptyMemo();
-            router.push(`/memos/${memo.id}/edit?new=true`);
+            const id = await createMemoLocally({
+                content: '',
+                userId: userId
+            });
+            // Background sync
+            syncManager.sync().catch(console.error);
+            router.push(`/memos/${id}/edit?new=true`);
         } catch (e) {
             console.error(e);
-            setLoading(false);
             setLoading(false);
             showToast('メモ作成に失敗しました', 'error');
         }
@@ -46,7 +52,7 @@ export function MemoListFabs() {
 
                 for (const item of items) {
                     // Prioritize images
-                    const imageType = item.types.find(t => t.startsWith('image/'));
+                    const imageType = item.types.find(t => isImageMimeType(t));
                     if (imageType) {
                         const blob = await item.getType(imageType);
                         const file = new File([blob], "pasted_image.png", { type: imageType });
@@ -60,9 +66,15 @@ export function MemoListFabs() {
                                 payload: null
                             });
 
-                            const formData = new FormData();
-                            formData.append('file', file);
-                            await createMemoWithFile(formData);
+                            // Ensure space before saving
+                            await syncManager.checkAndGC(file.size);
+
+                            await createMemoWithAttachmentLocally({
+                                file: file,
+                                userId: userId
+                            });
+                            
+                            syncManager.sync().catch(console.error);
 
                             updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
                         } catch(err: any) {
@@ -89,7 +101,11 @@ export function MemoListFabs() {
             try {
                 const text = await navigator.clipboard.readText();
                 if (text) {
-                     await createMemo(text);
+                     await createMemoLocally({
+                         content: text,
+                         userId: userId
+                     });
+                     syncManager.sync().catch(console.error);
                      router.refresh();
                      return;
                 }

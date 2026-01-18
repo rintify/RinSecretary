@@ -51,3 +51,21 @@ export function getMimeTypeFromExt(filename: string): string {
         default: return 'application/octet-stream';
     }
 }
+
+
+/**
+ * ファイル名から拡張子（ドットなし）を取得する
+ * @param filename ファイル名
+ * @returns 拡張子（小文字）。見つからない場合は空文字。
+ */
+export function getExtension(filename: string): string {
+    const parts = filename.split('.');
+    return parts.length > 1 ? parts.pop()?.toLowerCase() || '' : '';
+}
+
+/**
+ * MIMEタイプが画像かどうかを判定する
+ */
+export function isImageMimeType(mimeType: string): boolean {
+    return mimeType.startsWith('image/');
+}

@@ -18,3 +18,27 @@ export function extractThumbnail(content: string): string | null {
   const match = content.match(/!\[.*?\]\((.*?)\)/);
   return match ? match[1] : null;
 }
+
+/**
+ * 添付ファイルのMarkdownリンクを生成する
+ */
+export function generateAttachmentMarkdown(fileName: string, filePath: string, mimeType: string): string {
+    const isImage = mimeType.startsWith('image/');
+    return isImage 
+        ? `![${fileName}](${filePath})` 
+        : `[${fileName}](${filePath})`;
+}
+
+import { OFFLINE_FILE_SIZE_LIMIT } from './constants';
+
+/**
+ * オフライン時のファイルサイズ制限をチェックする
+ * @returns エラーメッセージ（問題ない場合はnull）
+ */
+export function checkOfflineFileSize(fileSize: number, isOnline: boolean): string | null {
+    if (!isOnline && fileSize > OFFLINE_FILE_SIZE_LIMIT) {
+        const limitMB = OFFLINE_FILE_SIZE_LIMIT / 1024 / 1024;
+        return `オフライン時は${limitMB}MB以下のファイルのみ追加可能です。`;
+    }
+    return null;
+}

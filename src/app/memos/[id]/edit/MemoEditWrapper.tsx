@@ -17,9 +17,10 @@ interface MemoEditWrapperProps {
     serverMemo: ServerMemo | null;
     memoId: string;
     isNew: boolean;
+    userId: string;
 }
 
-export default function MemoEditWrapper({ serverMemo, memoId, isNew }: MemoEditWrapperProps) {
+export default function MemoEditWrapper({ serverMemo, memoId, isNew, userId }: MemoEditWrapperProps) {
     const router = useRouter();
     const [memo, setMemo] = useState<ServerMemo | null>(serverMemo);
     const [loading, setLoading] = useState(!serverMemo);
@@ -101,5 +102,5 @@ export default function MemoEditWrapper({ serverMemo, memoId, isNew }: MemoEditW
         );
     }
 
-    return <MemoEditClient memo={memo} isNew={isNew} />;
+    return <MemoEditClient memo={memo} isNew={isNew} userId={userId} />;
 }

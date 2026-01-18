@@ -28,9 +28,10 @@ interface MemoEditClientProps {
         title?: string;
     };
     isNew?: boolean;
+    userId: string;
 }
 
-export default function MemoEditClient({ memo: initialMemo, isNew }: MemoEditClientProps) {
+export default function MemoEditClient({ memo: initialMemo, isNew, userId }: MemoEditClientProps) {
     const router = useRouter();
     const { isComputer } = useDevice();
     const composerRef = useRef<MemoComposerRef>(null);
@@ -58,7 +59,7 @@ export default function MemoEditClient({ memo: initialMemo, isNew }: MemoEditCli
             content: initialMemo.content,
             createdAt: initialMemo.updatedAt, // Approximate
             updatedAt: initialMemo.updatedAt,
-            userId: 'current-user'
+            userId: userId
         });
         
         // Also sync/cache attachments for this memo
@@ -264,6 +265,7 @@ export default function MemoEditClient({ memo: initialMemo, isNew }: MemoEditCli
                     editorMode={editorMode}
                     onSaveStatusChange={setSaveStatus}
                     lastUpdatedAt={lastUpdatedAt}
+                    userId={userId}
                 />
             </Box>
             
