@@ -205,10 +205,7 @@ export class SyncManager {
         // 2. 最終同期時刻を取得
         const lastSyncedAt = await this.getLastSyncedAt();
 
-        // 3. ローカルに存在するメモIDリスト（削除検知用）
-        const allLocalMemos = await db.memos.toArray();
-        const localMemoIds = allLocalMemos.filter(m => !m.isDeleted).map(m => m.id);
-
+        // localMemoIds は廃止（通信量削減のため）
         const payload = {
             lastSyncedAt: lastSyncedAt?.toISOString() || null,
             pushedMemos: dirtyMemos.filter(m => !m.isDeleted).map(m => ({
@@ -220,7 +217,6 @@ export class SyncManager {
                 createdAt: m.createdAt.toISOString(),
             })),
             pushedDeletedIds: deletedMemos.map(m => m.id),
-            localMemoIds
         };
 
         const res = await fetch('/api/memos/sync', {
@@ -277,27 +273,30 @@ export class SyncManager {
             }
         }
 
-        // 5. サーバーからの更新を反映
+        // 5. サーバーからの更新通知を処理（キャッシュ済みメモのみ対象）
+        // サーバーはメタデータのみ返す（contentなし）ので、キャッシュ済みで更新があるものは
+        // isFullContent を false にして、次回詳細画面で再取得させる
         await db.transaction('rw', db.memos, async () => {
             for (const remote of updatedMemos) {
                 const local = await db.memos.get(remote.id);
                 
-                // ローカルがDirtyでコンフリクト未処理の場合はスキップ
-                if (local?.isDirty) continue;
+                // ローカルに存在しない → 無視（キャッシュしない）
+                if (!local) continue;
                 
-                await db.memos.put({
-                    id: remote.id,
-                    title: remote.title,
-                    content: remote.content,
-                    createdAt: new Date(remote.createdAt),
-                    updatedAt: new Date(remote.updatedAt),
-                    thumbnailPath: remote.thumbnailPath,
-                    userId: remote.userId,
-                    isFullContent: true,
-                    lastAccessedAt: new Date(),
-                    isDirty: false,
-                    isDeleted: false
-                });
+                // ローカルがDirtyの場合はスキップ（ローカル変更を優先）
+                if (local.isDirty) continue;
+                
+                // サーバーの方が新しい場合、キャッシュを無効化
+                const serverUpdatedAt = new Date(remote.updatedAt);
+                if (serverUpdatedAt > local.updatedAt) {
+                    await db.memos.update(remote.id, {
+                        title: remote.title,
+                        updatedAt: serverUpdatedAt,
+                        thumbnailPath: remote.thumbnailPath,
+                        isFullContent: false,  // 再取得が必要
+                        lastAccessedAt: new Date(),
+                    });
+                }
             }
 
             // サーバーで消えたメモをローカルから削除（関連添付ファイルも）

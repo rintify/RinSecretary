@@ -23,8 +23,7 @@ interface SyncRequest {
     // クライアント側で削除されたメモID
     pushedDeletedIds: string[];
     
-    // クライアントが保持しているメモIDリスト（削除検知用、任意）
-    localMemoIds?: string[];
+    // localMemoIds は廃止（通信量削減のため）
 }
 
 export async function POST(req: Request) {
@@ -35,16 +34,16 @@ export async function POST(req: Request) {
 
     const userId = session.user.id!;
     const body: SyncRequest = await req.json();
-    const { lastSyncedAt, pushedMemos, pushedDeletedIds, localMemoIds } = body;
+    const { lastSyncedAt, pushedMemos, pushedDeletedIds } = body;
 
     const conflicts: any[] = [];
     const now = new Date();
 
-    // --- 1. Process Logic: Push Deletions ---
+    // --- 1. Process Logic: Push Deletions (論理削除) ---
     if (pushedDeletedIds.length > 0) {
         // 物理ファイル削除と容量更新を先に行う
         const memosToDelete = await prisma.memo.findMany({
-            where: { id: { in: pushedDeletedIds }, userId },
+            where: { id: { in: pushedDeletedIds }, userId, isDeleted: false },
             include: { attachments: { where: { isDeleted: false } } }
         });
         
@@ -55,13 +54,23 @@ export async function POST(req: Request) {
                     await unlinkFile(filename);
                 }
                 await updateStorageUsage(-att.fileSize);
+                // 添付ファイルも論理削除
+                await prisma.attachment.update({
+                    where: { id: att.id },
+                    data: { isDeleted: true, deletedAt: now }
+                });
             }
         }
         
-        await prisma.memo.deleteMany({
+        // メモを論理削除（物理削除ではなく）
+        await prisma.memo.updateMany({
             where: {
                 id: { in: pushedDeletedIds },
                 userId,
+            },
+            data: {
+                isDeleted: true,
+                deletedAt: now,
             }
         });
     }
@@ -77,7 +86,7 @@ export async function POST(req: Request) {
         if (existingMemo) {
             // コンフリクト検知: サーバーの更新時刻がクライアントの更新時刻より新しい場合
             const clientUpdatedAt = new Date(clientMemo.updatedAt);
-            if (existingMemo.updatedAt > clientUpdatedAt) {
+            if (existingMemo.updatedAt > clientUpdatedAt && !existingMemo.isDeleted) {
                 // コンフリクト発生
                 conflicts.push({
                     memoId,
@@ -101,6 +110,8 @@ export async function POST(req: Request) {
                     content: clientMemo.content,
                     thumbnailPath: clientMemo.thumbnailPath,
                     updatedAt: now,
+                    isDeleted: false, // 削除状態を解除（復元）
+                    deletedAt: null,
                 }
             });
         } else {
@@ -119,29 +130,39 @@ export async function POST(req: Request) {
     }
 
     // --- 3. Process Logic: Pull Updates (lastSyncedAt以降の変更) ---
+    // メタデータのみ返す（contentは含めない）
+    // クライアント側でキャッシュ済みのものと照合して、必要なら個別に取得
     const sinceDate = lastSyncedAt ? new Date(lastSyncedAt) : new Date(0);
     
     const updatedMemos = await prisma.memo.findMany({
         where: {
             userId,
+            isDeleted: false,
             updatedAt: { gt: sinceDate }
         },
-        orderBy: { updatedAt: 'desc' }
+        select: {
+            id: true,
+            title: true,
+            updatedAt: true,
+            createdAt: true,
+            thumbnailPath: true,
+            // content は含めない（通信量削減）
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 1000  // 安全のため上限を設定
     });
 
-    // --- 4. 削除検知: クライアントが持っているがサーバーにないもの ---
-    let serverDeletedIds: string[] = [];
-    if (localMemoIds && localMemoIds.length > 0) {
-        const existingMemos = await prisma.memo.findMany({
-            where: {
-                id: { in: localMemoIds },
-                userId
-            },
-            select: { id: true }
-        });
-        const existingIds = new Set(existingMemos.map(m => m.id));
-        serverDeletedIds = localMemoIds.filter(id => !existingIds.has(id));
-    }
+    // --- 4. 削除検知: deletedAt 以降に削除されたメモのIDを返す ---
+    const deletedMemos = await prisma.memo.findMany({
+        where: {
+            userId,
+            isDeleted: true,
+            deletedAt: { gt: sinceDate }
+        },
+        select: { id: true },
+        take: 1000  // 安全のため上限を設定
+    });
+    const serverDeletedIds = deletedMemos.map(m => m.id);
 
     return NextResponse.json({
         updatedMemos,

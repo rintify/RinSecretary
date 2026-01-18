@@ -1,6 +1,6 @@
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import MemoEditClient from './MemoEditClient';
+import MemoEditWrapper from './MemoEditWrapper';
 import { devAuth } from '@/lib/dev-auth';
 
 export default async function MemoEditPage(props: {
@@ -9,32 +9,35 @@ export default async function MemoEditPage(props: {
 }) {
     const params = await props.params;
     const searchParams = await props.searchParams;
-    const session = await devAuth();
-    if (!session?.user?.email) {
-        redirect('/');
-    }
-
-    const user = await prisma.user.findUnique({
-        where: { email: session.user.email },
-    });
-
-    if (!user) {
-        return <div>User not found</div>;
-    }
-
-    const memo = await prisma.memo.findUnique({
-        where: { id: params.id },
-    });
-
-    if (!memo) {
-        notFound();
-    }
-
-    if (memo.userId !== user.id) {
-        return <div>Forbidden</div>;
-    }
-
+    const memoId = params.id;
     const isNew = searchParams?.new === 'true';
+    
+    let memo = null;
+    
+    try {
+        const session = await devAuth();
+        if (!session?.user?.email) {
+            redirect('/');
+        }
 
-    return <MemoEditClient memo={{ id: memo.id, content: memo.content, updatedAt: memo.updatedAt }} isNew={isNew} />;
+        const user = await prisma.user.findUnique({
+            where: { email: session.user.email },
+        });
+
+        if (user) {
+            const dbMemo = await prisma.memo.findUnique({
+                where: { id: memoId },
+            });
+
+            if (dbMemo && dbMemo.userId === user.id) {
+                memo = { id: dbMemo.id, content: dbMemo.content, updatedAt: dbMemo.updatedAt };
+            }
+        }
+    } catch (e) {
+        // サーバーエラー（オフラインなど）の場合は null のままにして
+        // クライアント側で IndexedDB からフォールバックさせる
+        console.error('Failed to fetch memo from server', e);
+    }
+
+    return <MemoEditWrapper serverMemo={memo} memoId={memoId} isNew={isNew} />;
 }

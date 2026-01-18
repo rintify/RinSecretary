@@ -19,6 +19,7 @@ export async function GET(req: Request) {
     const memos = await prisma.memo.findMany({
         where: {
             userId,
+            isDeleted: false,  // 論理削除されたメモを除外
             ...(cursor ? { updatedAt: { lt: new Date(cursor) } } : {})
         },
         orderBy: { updatedAt: 'desc' },

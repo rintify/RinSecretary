@@ -45,6 +45,44 @@ export default function MemoDetail({ memo }: MemoDetailProps) {
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [attachmentsChanged, setAttachmentsChanged] = useState(false);
 
+    // 詳細画面を開いた時にメモをキャッシュ（オフラインで閲覧可能にする）
+    useEffect(() => {
+        const cacheToLocal = async () => {
+            if (!memo.id) return;
+            
+            const existing = await db.memos.get(memo.id);
+            
+            // ローカルに未同期の変更がある場合は上書きしない
+            if (existing?.isDirty) return;
+            
+            const serverUpdatedAt = new Date(memo.updatedAt);
+            
+            // ローカルにない、または古い、またはフルコンテンツ未取得の場合はキャッシュ
+            if (!existing || existing.updatedAt < serverUpdatedAt || !existing.isFullContent) {
+                try {
+                    await db.memos.put({
+                        id: memo.id,
+                        title: memo.title || '無題のメモ',
+                        content: memo.content,
+                        createdAt: new Date(memo.createdAt),
+                        updatedAt: serverUpdatedAt,
+                        userId: memo.userId,
+                        isFullContent: true,
+                        lastAccessedAt: new Date(),
+                        isDirty: false,
+                    });
+                } catch (e) {
+                    console.error('Failed to cache memo in detail view', e);
+                }
+            } else {
+                // アクセス日時のみ更新
+                await db.memos.update(memo.id, { lastAccessedAt: new Date() });
+            }
+        };
+        
+        cacheToLocal();
+    }, [memo]);
+
     const localAttachments = useLiveQuery(
         () => db.attachments.where('memoId').equals(memo.id).toArray(),
         [memo.id]

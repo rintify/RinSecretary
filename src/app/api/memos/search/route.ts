@@ -25,6 +25,7 @@ export async function GET(req: Request) {
     const memos = await prisma.memo.findMany({
         where: {
             userId,
+            isDeleted: false,  // 論理削除されたメモを除外
             OR: [
                 { title: { contains: query } },
                 { content: { contains: query } }

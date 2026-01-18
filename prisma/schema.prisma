@@ -168,6 +168,9 @@ model Memo {
   content   String   // Max 20000 chars roughly
   thumbnailPath String? // URL to the first image in the content
   
+  isDeleted Boolean  @default(false)
+  deletedAt DateTime?
+  
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
