@@ -18,6 +18,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { syncManager } from '@/lib/sync-manager';
 import { useConfirm } from '@/app/context/ConfirmContext';
 import { useToast } from '@/app/context/ToastContext';
+import { deleteMemoLocally, cacheMemoFromServer } from '@/lib/memo-actions';
 
 interface MemoEditClientProps {
     memo: {
@@ -50,42 +51,15 @@ export default function MemoEditClient({ memo: initialMemo, isNew }: MemoEditCli
 
     // Initial Fetch / Cache Strategy
     useEffect(() => {
-        const init = async () => {
-            if (!initialMemo.id) return;
-            
-            // Try to cache the initial prop data if local db doesn't have it or is older?
-            const existing = await db.memos.get(initialMemo.id);
-            
-            if (existing && existing.isDirty) {
-                // Local changes exist, do not overwrite with server data
-                return;
-            }
-
-            // If we have server data (initialMemo) and it's seemingly valid (not empty dummy if offline)
-            const serverUpdatedAt = new Date(initialMemo.updatedAt);
-            
-            if (!existing || existing.updatedAt < serverUpdatedAt || !existing.isFullContent) {
-                // Update Cache
-                try {
-                await db.memos.put({
-                    id: initialMemo.id,
-                    title: initialMemo.title || '無題のメモ',
-                    content: initialMemo.content,
-                    createdAt: serverUpdatedAt, // Approximate
-                    updatedAt: serverUpdatedAt,
-                    userId: 'current-user', 
-                    isFullContent: true,
-                    lastAccessedAt: new Date(),
-                    isDirty: false,
-                });
-                } catch (e) {
-                    console.error('Failed to cache initial memo', e);
-                }
-            } else {
-                 // Just update access time
-                 await db.memos.update(initialMemo.id, { lastAccessedAt: new Date() });
-            }
-        };
+        // Cache memo from server
+        cacheMemoFromServer({
+            id: initialMemo.id,
+            title: initialMemo.title,
+            content: initialMemo.content,
+            createdAt: initialMemo.updatedAt, // Approximate
+            updatedAt: initialMemo.updatedAt,
+            userId: 'current-user'
+        });
         
         // Also sync/cache attachments for this memo
         const syncAttachments = async () => {
@@ -135,7 +109,6 @@ export default function MemoEditClient({ memo: initialMemo, isNew }: MemoEditCli
              }
         };
 
-        init();
         syncAttachments();
     }, [initialMemo]);
 
@@ -202,7 +175,7 @@ export default function MemoEditClient({ memo: initialMemo, isNew }: MemoEditCli
         
         try {
             // Local Delete
-            await db.memos.update(initialMemo.id, { isDeleted: true, isDirty: true });
+            await deleteMemoLocally(initialMemo.id);
             
             syncManager.sync().catch(e => {
                 console.error('Delete sync failed', e);

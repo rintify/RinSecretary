@@ -31,6 +31,7 @@ import { OFFLINE_FILE_SIZE_LIMIT } from '@/lib/constants';
 import { db } from '@/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { syncManager } from '@/lib/sync-manager';
+import { addAttachmentLocally, deleteAttachmentLocally } from '@/lib/memo-actions';
 
 export interface Attachment {
     id: string;
@@ -155,19 +156,11 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
                 // Ensure space
                 await syncManager.checkAndGC(file.size);
 
-                await db.attachments.add({
-
+                await addAttachmentLocally({
                     id,
                     memoId,
-                    fileName: file.name,
-                    fileSize: file.size,
-                    mimeType: file.type,
-                    createdAt: new Date(),
-                    blob: file,
-                    isDirty: true,
-                    lastAccessedAt: new Date(),
-                    // Placeholder filePath, will be updated on sync
-                    filePath: `/api/uploads/${id}.${file.name.split('.').pop()}` 
+                    file,
+                    fileName: file.name
                 });
 
                 // Trigger Background Sync
@@ -254,32 +247,8 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
     const handleDelete = async (id: string) => {
         if (!await confirm('ファイルを削除しますか？', { severity: 'error', confirmText: '削除', title: 'ファイルの削除' })) return;
         try {
-            // Check if Dirty (Local only)
-            const local = await db.attachments.get(id);
-            if (local && local.isDirty) {
-                 // Even if dirty (not synced), if we delete it now, we should just remove it.
-                 // Unless it was partially synced? Assuming isDirty means "newly created locally".
-                 // BUT: if it's "dirty update" of synced file? Attachment is immutable though.
-                 // So "isDirty" means "New Local File". We can safe delete.
-                 await db.attachments.delete(id);
-            } else {
-                // Server Delete - Go through SyncManager if offline
-                if (navigator.onLine) {
-                     try {
-                        await deleteAttachment(id);
-                        await db.attachments.delete(id);
-                     } catch(e) {
-                         // Failed to delete on server? Mark for deletion logic?
-                         // If server error, fallback to mark 'isDeleted'
-                         await db.attachments.update(id, { isDeleted: true });
-                         syncManager.sync().catch(console.error); // Trigger sync to retry delete
-                     }
-                } else {
-                    // Offline: Mark as deleted
-                    await db.attachments.update(id, { isDeleted: true });
-                    syncManager.sync().catch(console.error); // Attempt sync (will fail but good practice)
-                }
-            }
+            await deleteAttachmentLocally(id, deleteAttachment);
+            syncManager.sync().catch(console.error);
             
             onFilesChange?.();
             showToast('ファイルを削除しました', 'success');

@@ -50,5 +50,5 @@ export default async function MemoListPage({
     },
   });
 
-  return <MemoListContainer memos={memos} initialQuery={query || ''} />;
+  return <MemoListContainer memos={memos} initialQuery={query || ''} userId={user.id} />;
 }

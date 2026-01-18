@@ -16,6 +16,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { db } from '@/lib/db';
 import { syncManager } from '@/lib/sync-manager';
 import { OFFLINE_FILE_SIZE_LIMIT } from '@/lib/constants';
+import { deleteMemoLocally, addAttachmentLocally } from '@/lib/memo-actions';
 
 export type SaveStatus = 'unsaved' | 'saving' | 'saved';
 
@@ -298,7 +299,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         setLoading(true);
         try {
             if (internalMemoId) {
-                await db.memos.update(internalMemoId, { isDeleted: true, isDirty: true });
+                await deleteMemoLocally(internalMemoId);
                 syncManager.sync().catch(e => {
                      console.error('Delete sync failed', e);
                      // Global dialog will handle the error
@@ -445,21 +446,12 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                     // Start GC Check before insertion
                     await syncManager.checkAndGC(file.size);
 
-                    // Small File: Save to Dexie first (Offline First approach)
-                    // Even if online, saving to Dexie -> Background Sync is robust.
-                    // BUT for online, we want immediate Markdown insertion and "success".
-                    
-                    // Offline or Small: Add to local DB
-                    await db.attachments.add({
+                    // Add to local DB via shared action
+                    await addAttachmentLocally({
                         id: fileId,
                         memoId: id,
+                        file,
                         fileName: file.name,
-                        fileSize: file.size,
-                        mimeType: file.type,
-                        createdAt: new Date(),
-                        blob: file, // Store blob
-                        isDirty: true, // Needs sync
-                        lastAccessedAt: new Date(),
                         filePath: predictedPath
                     });
 

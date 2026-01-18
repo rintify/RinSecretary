@@ -20,17 +20,17 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import MemoHeader from '../components/MemoHeader';
 import { MemoListFabs, MemoListEditButton, MemoListItemButton } from './MemoListClient';
-import { db, ClientMemo } from '@/lib/db';
+import { db } from '@/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { syncManager } from '@/lib/sync-manager';
 import { createEmptyMemo } from './actions';
-import { extractTitle, extractThumbnail } from '@/lib/memo-utils';
 import { OFFLINE_FILE_SIZE_LIMIT } from '@/lib/constants';
 import { MEMO_COLOR } from '../utils/colors'; 
 import { useGlobalJobs } from '../context/GlobalJobContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { CloudOff as UnsyncedIcon } from '@mui/icons-material';
+import { deleteMemosLocally, createMemoLocally, createMemoWithAttachmentLocally } from '@/lib/memo-actions';
 
 type Memo = {
     id: string;
@@ -52,7 +52,7 @@ interface DisplayMemo {
     isDirty?: boolean;
 }
 
-export default function MemoListContainer({ memos: initialMemos, initialQuery = '' }: { memos: Memo[], initialQuery?: string }) {
+export default function MemoListContainer({ memos: initialMemos, initialQuery = '', userId }: { memos: Memo[], initialQuery?: string, userId: string }) {
     const [searchQuery, setSearchQuery] = useState(initialQuery);
     
     // Dexie: Live Query for Local Memos
@@ -68,28 +68,43 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
     ) || [];
 
     // Create a lookup map: filePath -> Blob URL
-    // We need to manage ObjectURLs to prevent leaks, but React Re-renders might complicate 'revoke'.
-    // For simplicity in this list view, we can rely on browser GC or simple map. 
-    // Optimization: Only create map when localBlobs changes.
+    // Optimization: Only update changed entries to prevent flickering
     const blobUrlMap = useRef<Record<string, string>>({});
     
-    // Update map when blobs change
+    // Update map when blobs change (differential update)
     useEffect(() => {
-        const newMap: Record<string, string> = {};
-        localBlobs.forEach(att => {
-            if (att.blob && att.filePath) {
-                 // Reuse existing URL if possible? hard to track. 
-                 // Just create new one.
-                 newMap[att.filePath] = URL.createObjectURL(att.blob);
-            }
-        });
-        blobUrlMap.current = newMap;
+        const currentMap = blobUrlMap.current;
+        const newMap: Record<string, string> = { ...currentMap };
+        const survivingPaths = new Set<string>();
         
-        // Cleanup function? 
-        return () => {
-            Object.values(newMap).forEach(url => URL.revokeObjectURL(url));
-        };
+        for (const att of localBlobs) {
+            if (att.blob && att.filePath) {
+                survivingPaths.add(att.filePath);
+                // 新しいエントリのみ追加（既存のURLは再利用）
+                if (!currentMap[att.filePath]) {
+                    newMap[att.filePath] = URL.createObjectURL(att.blob);
+                }
+            }
+        }
+        
+        // 削除されたエントリをクリーンアップ
+        for (const path of Object.keys(currentMap)) {
+            if (!survivingPaths.has(path)) {
+                URL.revokeObjectURL(currentMap[path]);
+                delete newMap[path];
+            }
+        }
+        
+        blobUrlMap.current = newMap;
     }, [localBlobs]);
+    
+    // Unmount時にすべて破棄
+    useEffect(() => {
+        return () => {
+            Object.values(blobUrlMap.current).forEach(url => URL.revokeObjectURL(url));
+            blobUrlMap.current = {};
+        };
+    }, []);
     
     const getThumbnailSrc = (path: string | undefined | null) => {
         if (!path) return null;
@@ -376,12 +391,22 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
         updateUrl(searchQuery);
     }, [searchQuery]);
 
+    // スクロール位置復元（データがある時に一度だけ実行）
+    const scrollRestoredRef = useRef(false);
     useEffect(() => {
+        if (scrollRestoredRef.current) return; // 一度復元したらスキップ
+        if (displayMemos.length === 0) return; // データがない時はスキップ
+        
         const savedScrollPosition = sessionStorage.getItem('memoListScrollPosition');
         if (savedScrollPosition && scrollContainerRef.current) {
-            scrollContainerRef.current.scrollTop = parseInt(savedScrollPosition, 10);
+            requestAnimationFrame(() => {
+                if (scrollContainerRef.current) {
+                    scrollContainerRef.current.scrollTop = parseInt(savedScrollPosition, 10);
+                }
+            });
+            scrollRestoredRef.current = true;
         }
-    }, []);
+    }, [displayMemos.length]);
 
     // Global Paste Handler
     useEffect(() => {
@@ -405,46 +430,12 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                         const jobId = `paste-${Date.now()}-${i}`;
                         
                         try {
-                            const memoId = crypto.randomUUID();
-                            const attachmentId = crypto.randomUUID();
-                            const isImage = file.type.startsWith('image/');
-                            const url = `/api/uploads/${attachmentId}.${file.name.split('.').pop()}`;
-                            const markdown = isImage 
-                                ? `![${file.name}](${url})` 
-                                : `[${file.name}](${url})`;
-                            
-                            const title = extractTitle(markdown);
-                            const thumbnailPath = extractThumbnail(markdown);
-
                             // Ensure space
                             await syncManager.checkAndGC(file.size);
 
-                            await db.transaction('rw', [db.memos, db.attachments], async () => {
-                                await db.memos.add({
-                                    id: memoId,
-                                    title,
-                                    content: markdown,
-                                    userId: 'current-user',
-                                    thumbnailPath,
-                                    createdAt: new Date(),
-                                    updatedAt: new Date(),
-                                    isFullContent: true,
-                                    lastAccessedAt: new Date(),
-                                    isDirty: true
-                                });
-
-                                await db.attachments.add({
-                                    id: attachmentId,
-                                    memoId,
-                                    fileName: file.name,
-                                    fileSize: file.size,
-                                    mimeType: file.type || 'application/octet-stream',
-                                    createdAt: new Date(),
-                                    blob: file,
-                                    isDirty: true,
-                                    lastAccessedAt: new Date(),
-                                    filePath: url
-                                });
+                            await createMemoWithAttachmentLocally({
+                                file,
+                                userId
                             });
                             
                             updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
@@ -459,21 +450,9 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 if (!handled) {
                     const text = e.clipboardData.getData('text/plain');
                     if (text) {
-                        const memoId = crypto.randomUUID();
-                        const title = extractTitle(text);
-                        const thumbnailPath = extractThumbnail(text);
-
-                        await db.memos.add({
-                            id: memoId,
-                            title,
+                        await createMemoLocally({
                             content: text,
-                            userId: 'current-user',
-                            thumbnailPath,
-                            createdAt: new Date(),
-                            updatedAt: new Date(),
-                            isFullContent: true,
-                            lastAccessedAt: new Date(),
-                            isDirty: true
+                            userId
                         });
                         handled = true;
                     }
@@ -519,15 +498,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
         if (selectedIds.size === 0) return;
         if (!await confirm(`${selectedIds.size}件のメモを削除しますか？`, { severity: 'error', confirmText: '削除', title: 'メモの削除' })) return;
 
-        await db.transaction('rw', db.memos, async () => {
-            const ids = Array.from(selectedIds);
-             const memosToDelete = await db.memos.bulkGet(ids);
-             const validMemos = memosToDelete.filter((m): m is ClientMemo => !!m);
-             
-             for (const memo of validMemos) {
-                 await db.memos.update(memo.id, { isDeleted: true, isDirty: true });
-             }
-        });
+        await deleteMemosLocally(Array.from(selectedIds));
         
         syncManager.sync();
         cancelSelectionMode();
@@ -573,17 +544,6 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                             payload: null
                         });
 
-                        const memoId = crypto.randomUUID();
-                        const attachmentId = crypto.randomUUID();
-                        const isImage = file.type.startsWith('image/');
-                        const url = `/api/uploads/${attachmentId}.${file.name.split('.').pop()}`;
-                        const markdown = isImage 
-                            ? `![${file.name}](${url})` 
-                            : `[${file.name}](${url})`;
-                        
-                        const title = extractTitle(markdown);
-                        const thumbnailPath = extractThumbnail(markdown);
-
                         // Size check for offline
                         if (!navigator.onLine && file.size > OFFLINE_FILE_SIZE_LIMIT) {
                             throw new Error(`オフライン時は${OFFLINE_FILE_SIZE_LIMIT / 1024 / 1024}MB以下のファイルのみ追加可能です。`);
@@ -592,32 +552,9 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                         // Ensure space
                         await syncManager.checkAndGC(file.size);
 
-                        await db.transaction('rw', [db.memos, db.attachments], async () => {
-                            await db.memos.add({
-                                id: memoId,
-                                title,
-                                content: markdown,
-                                userId: 'current-user',
-                                thumbnailPath,
-                                createdAt: new Date(),
-                                updatedAt: new Date(),
-                                isFullContent: true,
-                                lastAccessedAt: new Date(),
-                                isDirty: true
-                            });
-
-                            await db.attachments.add({
-                                id: attachmentId,
-                                memoId,
-                                fileName: file.name,
-                                fileSize: file.size,
-                                mimeType: file.type || 'application/octet-stream',
-                                createdAt: new Date(),
-                                blob: file,
-                                isDirty: true,
-                                lastAccessedAt: new Date(),
-                                filePath: url
-                            });
+                        await createMemoWithAttachmentLocally({
+                            file,
+                            userId
                         });
                         
                         updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
