@@ -557,7 +557,9 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     };
 
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'transparent', position: 'relative' }}
+        <Box 
+            data-testid="memo-composer"
+            sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'transparent', position: 'relative' }}
             onPaste={handlePaste} 
             onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}
         >
@@ -585,6 +587,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
             ) : (
                 <Box sx={{ width: '100%', height: '100%', p: 1, pb: 20, overflow: 'auto' }}>
                     <textarea 
+                        data-testid="memo-editor-plain"
                         ref={textareaRef}
                         value={content}
                         onChange={(e) => setContent(e.target.value)}
@@ -601,7 +604,10 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                         <FolderIcon />
                     </Fab>
                  )}
-                <Fab onClick={handleFabClick} disabled={loading || uploading || status === 'saving'} aria-label={showDelete ? "delete" : (showBack ? "back" : "save")}
+                <Fab 
+                    data-testid="memo-save-button"
+                    data-save-status={status}
+                    onClick={handleFabClick} disabled={loading || uploading || status === 'saving'} aria-label={showDelete ? "delete" : (showBack ? "back" : "save")}
                     sx={{ bgcolor: (showDelete || showBack) ? 'background.paper' : MEMO_COLOR, color: showDelete ? 'error.main' : (showBack ? MEMO_COLOR : '#fff'), border: (showDelete || showBack) ? `1px solid ${alpha(showDelete ? '#d32f2f' : MEMO_COLOR, 0.2)}` : 'none', '&:hover': { bgcolor: (showDelete || showBack) ? alpha(showDelete ? '#d32f2f' : MEMO_COLOR, 0.05) : MEMO_COLOR, opacity: (showDelete || showBack) ? 1 : 0.9 } }}
                 >
                     {(loading || status === 'saving') ? <CircularProgress size={24} color="inherit" /> : (

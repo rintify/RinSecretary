@@ -614,6 +614,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
 
     return (
         <Box 
+            data-testid="memo-list-container"
             sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', position: 'relative', pt: '60px' }} 
             className="memo-page-transition"
             onDragEnter={handleDragEnter}
@@ -659,7 +660,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 actions={
                     isSelectionMode ? (
                         <Box>
-                            <IconButton onClick={executeDelete} sx={{ color: 'error.main' }}>
+                            <IconButton data-testid="memo-delete-button" onClick={executeDelete} sx={{ color: 'error.main' }}>
                                 <DeleteIcon />
                             </IconButton>
                             <IconButton onClick={cancelSelectionMode}>
@@ -668,7 +669,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                         </Box>
                     ) : (
                         <Box>
-                            <IconButton onClick={handleMenuOpen}>
+                            <IconButton data-testid="memo-menu-button" onClick={handleMenuOpen}>
                                 <MoreVertIcon />
                             </IconButton>
                             <Menu
@@ -676,7 +677,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                                 open={Boolean(anchorEl)}
                                 onClose={handleMenuClose}
                             >
-                                <MenuItem onClick={startSelectionMode}>選択して削除</MenuItem>
+                                <MenuItem data-testid="context-menu-delete" onClick={startSelectionMode}>選択して削除</MenuItem>
                             </Menu>
                         </Box>
                     )
@@ -730,18 +731,21 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                 
                 <Box sx={{ transition: 'none' }}>
                 {!isSearching && displayMemos.length === 0 ? (
-                    <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="50vh" color="text.secondary">
+                    <Box data-testid="memo-list-empty" display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="50vh" color="text.secondary">
                         <NoteIcon sx={{ fontSize: 60, mb: 2, opacity: 0.5 }} />
                         <Typography>メモはありません</Typography>
                     </Box>
                 ) : (
-                    <List component={motion.ul} layout>
+                    <List data-testid="memo-list" component={motion.ul} layout>
                         <AnimatePresence mode='popLayout'>
                         {displayMemos.map(memo => {
                             const isSelected = selectedIds.has(memo.id);
                             
                             return (
                                 <ListItem 
+                                    data-testid={`memo-item-${memo.id}`}
+                                    data-memo-id={memo.id}
+                                    data-is-dirty={memo.isDirty ? 'true' : 'false'}
                                     component={motion.li}
                                     layout
                                     initial={{ opacity: 0, y: 15, scale: 0.98 }}
@@ -767,6 +771,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                                     secondaryAction={
                                         isSelectionMode ? (
                                             <Checkbox 
+                                                data-testid={`memo-checkbox-${memo.id}`}
                                                 edge="end" checked={isSelected}
                                                 onChange={() => toggleSelection(memo.id)}
                                                 sx={{ 

@@ -16,7 +16,7 @@ const DEV_USER_NAME = 'Development User';
  * Cookieベースで判定
  */
 export async function isAuthSkipEnabled() {
-  if (process.env.NODE_ENV !== 'development') {
+  if (process.env.NODE_ENV !== 'development' && process.env.E2E_TESTING !== 'true') {
     return false;
   }
   const cookieStore = await cookies();

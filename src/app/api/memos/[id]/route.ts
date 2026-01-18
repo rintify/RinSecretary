@@ -97,7 +97,11 @@ export async function DELETE(
   for (const att of existing.attachments) {
     const filename = att.filePath.split('/').pop();
     if (filename) {
-      await unlinkFile(filename);
+      try {
+        await unlinkFile(filename);
+      } catch (e) {
+        console.warn(`Failed to unlink file ${filename}:`, e);
+      }
       await updateStorageUsage(-att.fileSize);
     }
   }

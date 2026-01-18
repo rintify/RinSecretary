@@ -86,6 +86,7 @@ export function ConflictProvider({ children }: { children: ReactNode }) {
         <ConflictContext.Provider value={{ showConflict }}>
             {children}
             <Dialog 
+                data-testid="conflict-dialog"
                 open={!!conflict} 
                 onClose={() => handleChoice('cancel')} 
                 maxWidth="md" 
@@ -144,6 +145,7 @@ export function ConflictProvider({ children }: { children: ReactNode }) {
                     p: isMobile ? 2 : 1
                 }}>
                     <Button 
+                        data-testid="conflict-dialog-cancel"
                         onClick={() => handleChoice('cancel')} 
                         color="inherit"
                         fullWidth={isMobile}
@@ -152,6 +154,7 @@ export function ConflictProvider({ children }: { children: ReactNode }) {
                         キャンセル
                     </Button>
                     <Button 
+                        data-testid="conflict-dialog-server"
                         onClick={() => handleChoice('server')} 
                         color="warning"
                         fullWidth={isMobile}
@@ -160,6 +163,7 @@ export function ConflictProvider({ children }: { children: ReactNode }) {
                         {conflict?.labels?.server || 'サーバーの内容を採用（破棄）'}
                     </Button>
                     <Button 
+                        data-testid="conflict-dialog-local"
                         onClick={() => handleChoice('local')} 
                         variant="contained" 
                         color="error"

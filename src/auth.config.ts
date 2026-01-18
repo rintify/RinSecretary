@@ -8,7 +8,8 @@ export const authConfig = {
   callbacks: {
     authorized({ auth, request: { nextUrl, cookies } }) {
       // 開発モード認証スキップ (Cookieベース)
-      const isDevSkip = process.env.NODE_ENV === 'development' && 
+      // E2Eテスト実行時(E2E_TESTING=true)はプロダクションビルドでも許可する
+      const isDevSkip = (process.env.NODE_ENV === 'development' || process.env.E2E_TESTING === 'true') && 
                         cookies.get('dev-auth-skip')?.value === 'true';
       if (isDevSkip) {
         return true; // 開発モードスキップが有効なら常にアクセス許可

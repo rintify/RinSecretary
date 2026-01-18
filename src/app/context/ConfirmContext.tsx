@@ -71,10 +71,11 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={handleCancel} color="inherit">
+                    <Button data-testid="confirm-dialog-cancel" onClick={handleCancel} color="inherit">
                         {options.cancelText}
                     </Button>
                     <Button 
+                        data-testid="confirm-dialog-submit"
                         onClick={handleConfirm} 
                         color={options.severity === 'error' ? 'error' : 'primary'} 
                         autoFocus
