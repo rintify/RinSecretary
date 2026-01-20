@@ -19,7 +19,8 @@ import {
     LogoutOutlined as LogoutIcon,
     Close as CloseIcon,
     CheckCircleOutline as CheckIcon,
-    BuildOutlined as ToolIcon
+    BuildOutlined as ToolIcon,
+    PhonelinkOff as LocalSettingsIcon
 } from '@mui/icons-material';
 import { ModalType } from './AppHeader';
 import { useRouter } from 'next/navigation';
@@ -211,6 +212,13 @@ export default function NavigationDrawer({
                                     <BackupIcon fontSize="small" />
                                 </ListItemIcon>
                                 <ListItemText primary="バックアップ設定" />
+                            </ListItemButton>
+
+                            <ListItemButton sx={{ pl: 4 }} onClick={() => handleItemClick(() => onOpenModal('LOCAL_SETTINGS'))}>
+                                <ListItemIcon>
+                                    <LocalSettingsIcon fontSize="small" />
+                                </ListItemIcon>
+                                <ListItemText primary="ローカル設定" secondary="オフラインモード" secondaryTypographyProps={{ fontSize: '0.7rem' }} />
                             </ListItemButton>
                         </List>
                     </Collapse>

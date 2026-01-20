@@ -79,7 +79,7 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
 
     // Sync Server Files to Local DB
     useEffect(() => {
-        if (open && memoId && navigator.onLine) {
+        if (open && memoId && syncManager.isOnline()) {
             syncFiles();
         }
     }, [open, memoId]);
@@ -132,7 +132,7 @@ export default function MemoFileManagement({ memoId, open, onClose, onSelect, on
         
         try {
             // Check Size & Offline status
-            const isOffline = !navigator.onLine;
+            const isOffline = !syncManager.isOnline();
             const isSmall = file.size <= OFFLINE_FILE_SIZE_LIMIT;
 
             if (isOffline && !isSmall) {

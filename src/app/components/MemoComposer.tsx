@@ -395,10 +395,10 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
             }
             
             // Check Size & Offline status
-            const isOffline = !navigator.onLine;
+            const isOffline = !syncManager.isOnline();
             const isSmall = file.size <= OFFLINE_FILE_SIZE_LIMIT;
 
-            const sizeError = checkOfflineFileSize(file.size, navigator.onLine);
+            const sizeError = checkOfflineFileSize(file.size, syncManager.isOnline());
             if (sizeError) {
                  showToast(sizeError, 'error');
                  setUploading(false);

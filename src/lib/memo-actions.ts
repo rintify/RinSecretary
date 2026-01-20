@@ -2,6 +2,7 @@ import { db, ClientMemo, ClientAttachment } from './db';
 
 import { extractTitle, extractThumbnail, generateAttachmentMarkdown } from './memo-utils';
 import { getExtension } from './file-utils';
+import { syncManager } from './sync-manager';
 
 // ---- Types ----
 
@@ -316,7 +317,7 @@ export async function deleteAttachmentLocally(
         await db.attachments.delete(attachmentId);
     } else {
         // サーバーに同期済みの場合
-        if (navigator.onLine && deleteFromServer) {
+        if (syncManager.isOnline() && deleteFromServer) {
             try {
                 await deleteFromServer(attachmentId);
                 await db.attachments.delete(attachmentId);

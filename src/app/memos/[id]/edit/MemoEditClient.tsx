@@ -64,7 +64,7 @@ export default function MemoEditClient({ memo: initialMemo, isNew, userId }: Mem
         
         // Also sync/cache attachments for this memo
         const syncAttachments = async () => {
-             if (!initialMemo.id || !navigator.onLine) return;
+             if (!initialMemo.id || !syncManager.isOnline()) return;
              
              try {
                  const { getAttachments } = await import('@/app/memos/actions');
@@ -100,7 +100,7 @@ export default function MemoEditClient({ memo: initialMemo, isNew, userId }: Mem
                 // Just firing `fetch(url)` is enough for SW to cache it.
                 
                 const filesToPrefetch = serverFiles.filter(f => f.fileSize <= OFFLINE_FILE_SIZE_LIMIT);
-                if (filesToPrefetch.length > 0 && navigator.onLine) {
+                if (filesToPrefetch.length > 0 && syncManager.isOnline()) {
                      filesToPrefetch.forEach(f => {
                          if(f.filePath) fetch(f.filePath).catch(() => {});
                      });

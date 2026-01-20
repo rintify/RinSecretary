@@ -559,7 +559,7 @@ export default function MemoListContainer({ memos: initialMemos, initialQuery = 
                             payload: null
                         });
 
-                        const sizeError = checkOfflineFileSize(file.size, navigator.onLine);
+                        const sizeError = checkOfflineFileSize(file.size, syncManager.isOnline());
                         if (sizeError) {
                             throw new Error(sizeError);
                         }

@@ -28,7 +28,8 @@ export class SyncManager {
     private static instance: SyncManager;
     private isSyncing = false;
     private isBackgroundCheck = false; // 内部状態
-    private online = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    private browserOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    private forceOfflineMode = false; // 手動オフラインモード
     private conflictResolver: ConflictResolver | null = null;
     private lastError: Error | null = null;
     private statusListeners: Set<SyncStatusListener> = new Set();
@@ -38,18 +39,68 @@ export class SyncManager {
     private nextSyncResolve: (() => void) | null = null;
     private nextSyncReject: ((e: any) => void) | null = null;
 
+    // 実際のオンライン状態（ブラウザ状態と手動オフラインモードを考慮）
+    private get online(): boolean {
+        return this.browserOnline && !this.forceOfflineMode;
+    }
+
     private constructor() {
         if (typeof window !== 'undefined') {
+            // 初期化時にIndexedDBからforceOfflineMode設定を読み込む
+            this.loadForceOfflineMode();
+            
             window.addEventListener('online', () => {
-                this.online = true;
+                this.browserOnline = true;
                 this.notifyStatusChange();
-                this.sync();
+                if (!this.forceOfflineMode) {
+                    this.sync();
+                }
             });
             window.addEventListener('offline', () => {
-                this.online = false;
+                this.browserOnline = false;
                 this.notifyStatusChange();
             });
         }
+    }
+
+    // forceOfflineModeをIndexedDBから読み込む
+    private async loadForceOfflineMode(): Promise<void> {
+        try {
+            const state = await db.syncState.get('forceOfflineMode');
+            this.forceOfflineMode = state?.value === true;
+            console.log(`[SyncManager] forceOfflineMode loaded: ${this.forceOfflineMode}`);
+        } catch (e) {
+            console.error('[SyncManager] Failed to load forceOfflineMode:', e);
+        }
+    }
+
+    // 手動オフラインモードの設定
+    public async setForceOfflineMode(value: boolean): Promise<void> {
+        this.forceOfflineMode = value;
+        await db.syncState.put({ key: 'forceOfflineMode', value });
+        this.notifyStatusChange();
+        console.log(`[SyncManager] forceOfflineMode set to: ${value}`);
+        
+        // オンラインモードに戻した時、ブラウザがオンラインなら同期開始
+        if (!value && this.browserOnline) {
+            this.sync();
+        }
+    }
+
+    // 手動オフラインモードの取得
+    public getForceOfflineMode(): boolean {
+        return this.forceOfflineMode;
+    }
+    
+    // ブラウザのオンライン状態を取得（UIでの表示用）
+    public getBrowserOnline(): boolean {
+        return this.browserOnline;
+    }
+
+    // 実際のオンライン状態を取得（forceOfflineModeを考慮）
+    // 他のコンポーネントからオンライン状態を確認する場合はこのメソッドを使用する
+    public isOnline(): boolean {
+        return this.online;
     }
 
 
