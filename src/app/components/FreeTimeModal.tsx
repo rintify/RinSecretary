@@ -15,12 +15,10 @@ import { formatLocalIsoString } from '@/lib/utils';
 import { Close as CloseIcon, ContentCopy as CopyIcon, CalendarMonth as CalendarMonthIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
 import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { fetchGoogleEvents } from '@/lib/calendar-actions';
-import { getAlarms } from '@/lib/alarm-actions';
 import CustomDatePicker from './ui/CustomDatePicker';
 import CustomTimePicker from './ui/CustomTimePicker';
 import { useToast } from '@/app/context/ToastContext';
 import { CalendarEvent } from '@/types/calendar';
-import { AppTask } from '@/types/task';
 
 interface FreeTimeModalProps {
     onClose: () => void;
@@ -50,7 +48,7 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
         title: string;
         start: Date;
         end: Date;
-        source: 'Google' | 'Alarm' | 'Task';
+        source: 'Google';
     };
     const [debugInfo, setDebugInfo] = useState<DebugEvent[]>([]);
     const [showDebug, setShowDebug] = useState(false);
@@ -100,10 +98,8 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             const rangeStart = startOfDay(start);
             const rangeEnd = endOfDay(end);
 
-            const [googleRes, alarms, tasksRes] = await Promise.all([
+            const [googleRes] = await Promise.all([
                 fetchGoogleEvents(rangeStart, rangeEnd),
-                getAlarms(rangeStart, rangeEnd),
-                fetch(`/api/tasks?start=${rangeStart.toISOString()}&end=${rangeEnd.toISOString()}`).then(r => r.json())
             ]);
 
             const busySlots: { start: Date, end: Date }[] = [];
@@ -118,28 +114,6 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                         const ed = toDate(e.endTime);
                         busySlots.push({ start: s, end: ed });
                         debugEvents.push({ title: e.title, start: s, end: ed, source: 'Google' });
-                    }
-                });
-            }
-
-            if (Array.isArray(alarms)) {
-                (alarms as CalendarEvent[]).forEach((a) => {
-                    if (a.startTime) {
-                        const s = toDate(a.startTime);
-                        // Alarms are point-in-time, treat as 0 duration for slot but maybe relevant for debug
-                        busySlots.push({ start: s, end: s });
-                        debugEvents.push({ title: a.title, start: s, end: s, source: 'Alarm' });
-                    }
-                });
-            }
-
-            if (Array.isArray(tasksRes)) {
-                (tasksRes as AppTask[]).forEach((t) => {
-                    if (t.startDate && t.deadline) {
-                         const s = toDate(t.startDate);
-                         const ed = toDate(t.deadline);
-                         busySlots.push({ start: s, end: ed });
-                         debugEvents.push({ title: t.title, start: s, end: ed, source: 'Task' });
                     }
                 });
             }
