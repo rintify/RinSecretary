@@ -43,6 +43,17 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
     const { showToast } = useToast();
     const [loading, setLoading] = useState(false);
     const [resultText, setResultText] = useState("");
+    const [extracted, setExtracted] = useState(false);
+
+    // Debug State
+    type DebugEvent = {
+        title: string;
+        start: Date;
+        end: Date;
+        source: 'Google' | 'Alarm' | 'Task';
+    };
+    const [debugInfo, setDebugInfo] = useState<DebugEvent[]>([]);
+    const [showDebug, setShowDebug] = useState(false);
 
     // Helpers
     const getDisplayDate = (isoString: string) => {
@@ -79,6 +90,10 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
 
     const handleExtract = async () => {
         setLoading(true);
+        setExtracted(false);
+        setResultText("");
+        setDebugInfo([]); // Reset debug info
+        
         try {
             const start = new Date(startDate);
             const end = new Date(endDate);
@@ -92,13 +107,17 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             ]);
 
             const busySlots: { start: Date, end: Date }[] = [];
+            const debugEvents: DebugEvent[] = [];
             const toDate = (d: string | Date) => new Date(d);
 
             const googleEvents = googleRes?.events || [];
             if (Array.isArray(googleEvents)) {
                 (googleEvents as CalendarEvent[]).forEach((e) => {
                     if (e.startTime && e.endTime) {
-                        busySlots.push({ start: toDate(e.startTime), end: toDate(e.endTime) });
+                        const s = toDate(e.startTime);
+                        const ed = toDate(e.endTime);
+                        busySlots.push({ start: s, end: ed });
+                        debugEvents.push({ title: e.title, start: s, end: ed, source: 'Google' });
                     }
                 });
             }
@@ -106,7 +125,10 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             if (Array.isArray(alarms)) {
                 (alarms as CalendarEvent[]).forEach((a) => {
                     if (a.startTime) {
-                        busySlots.push({ start: toDate(a.startTime), end: toDate(a.startTime) });
+                        const s = toDate(a.startTime);
+                        // Alarms are point-in-time, treat as 0 duration for slot but maybe relevant for debug
+                        busySlots.push({ start: s, end: s });
+                        debugEvents.push({ title: a.title, start: s, end: s, source: 'Alarm' });
                     }
                 });
             }
@@ -114,10 +136,17 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             if (Array.isArray(tasksRes)) {
                 (tasksRes as AppTask[]).forEach((t) => {
                     if (t.startDate && t.deadline) {
-                         busySlots.push({ start: toDate(t.startDate), end: toDate(t.deadline) });
+                         const s = toDate(t.startDate);
+                         const ed = toDate(t.deadline);
+                         busySlots.push({ start: s, end: ed });
+                         debugEvents.push({ title: t.title, start: s, end: ed, source: 'Task' });
                     }
                 });
             }
+            
+            // Sort debug events
+            debugEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
+            setDebugInfo(debugEvents);
 
             let result = "";
             let currentDay = new Date(rangeStart);
@@ -188,6 +217,7 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             }
             
             setResultText(result);
+            setExtracted(true);
             showToast('抽出が完了しました', 'success');
 
         } catch (err) {
@@ -335,7 +365,7 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                         </Box>
                     </Stack>
 
-                    {resultText && (
+                    {extracted && (
                         <Box sx={{ mt: 2 }}>
                             <Typography variant="subtitle2" gutterBottom color="text.secondary">抽出結果プレビュー</Typography>
                             <Box sx={{ 
@@ -350,7 +380,43 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                                 fontFamily: 'monospace',
                                 fontSize: '0.85rem'
                             }}>
-                                {resultText}
+                                {resultText || "空き時間はありませんでした。"}
+                            </Box>
+                             <Box sx={{ mt: 2 }}>
+                                <Button 
+                                    size="small" 
+                                    onClick={() => setShowDebug(!showDebug)} 
+                                    sx={{ mb: 1, textTransform: 'none' }}
+                                    color="secondary"
+                                >
+                                    {showDebug ? "考慮された予定を隠す" : "考慮された予定を表示 (デバッグ)"}
+                                </Button>
+                                {showDebug && (
+                                    <Box sx={{ 
+                                        maxHeight: 200, 
+                                        overflowY: 'auto', 
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                        borderRadius: 1,
+                                        p: 1,
+                                        bgcolor: 'background.paper'
+                                    }}>
+                                        {debugInfo.length === 0 ? (
+                                            <Typography variant="caption" color="text.secondary">予定はありませんでした</Typography>
+                                        ) : (
+                                            debugInfo.map((e, i) => (
+                                                <Box key={i} sx={{ mb: 1, pb: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+                                                    <Typography variant="caption" display="block" sx={{ fontWeight: 'bold' }}>
+                                                        [{e.source}] {e.title}
+                                                    </Typography>
+                                                    <Typography variant="caption" display="block" color="text.secondary">
+                                                        {format(e.start, 'M/d HH:mm')} - {format(e.end, 'M/d HH:mm')}
+                                                    </Typography>
+                                                </Box>
+                                            ))
+                                        )}
+                                    </Box>
+                                )}
                             </Box>
                         </Box>
                     )}
@@ -379,10 +445,19 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             />
 
             <DialogActions>
-                {resultText ? (
-                    <Button onClick={handleCopyToClipboard} variant="contained" color="primary" startIcon={<CopyIcon />}>
-                        クリップボードにコピー
-                    </Button>
+                {extracted ? (
+                    <>
+                        <Button onClick={() => {
+                            setExtracted(false);
+                            setResultText("");
+                            setShowDebug(false);
+                        }} color="inherit">
+                            やり直す
+                        </Button>
+                        <Button onClick={handleCopyToClipboard} variant="contained" color="primary" startIcon={<CopyIcon />} disabled={!resultText}>
+                            クリップボードにコピー
+                        </Button>
+                    </>
                 ) : (
                     <Button onClick={handleExtract} variant="contained" disabled={loading} startIcon={<CalendarMonthIcon />}>
                         {loading ? "収集中..." : "空き時間を抽出"}
