@@ -7,18 +7,55 @@ import {
     Note as MemoIcon,
     Notifications as AlarmIcon,
     Chat as ChatIcon,
+    ContentPaste as PasteIcon,
 } from '@mui/icons-material';
 import Link from 'next/link';
 import { EVENT_COLOR, TASK_COLOR, ALARM_COLOR, MEMO_COLOR } from '@/app/utils/colors';
 import { ModalType } from './AppHeader';
+import { useDevice } from '@/app/context/DeviceContext';
+import { useToast } from '@/app/context/ToastContext';
 
 interface ActionFabsProps {
     onOpenModal: (modal: ModalType, data?: any) => void;
+    onPaste?: (text: string) => void;
 }
 
-export default function ActionFabs({ onOpenModal }: ActionFabsProps) {
+export default function ActionFabs({ onOpenModal, onPaste }: ActionFabsProps) {
+    const { isComputer, isInitialized } = useDevice();
+    const { showToast } = useToast();
+
+    const handlePasteClick = async () => {
+        if (!onPaste) return;
+        try {
+            const text = await navigator.clipboard.readText();
+            if (text) {
+                onPaste(text);
+            } else {
+                showToast('クリップボードが空です', 'warning');
+            }
+        } catch (error) {
+            console.error('Clipboard read failed', error);
+            showToast('貼り付けに失敗しました', 'error');
+        }
+    };
+
     return (
         <Box sx={{ position: 'absolute', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center', zIndex: 100 }}>
+            {isInitialized && !isComputer && onPaste && (
+                <Tooltip title="Paste from Clipboard" placement="left">
+                    <Box>
+                        <Fab 
+                            aria-label="paste" 
+                            onClick={handlePasteClick}
+                            size="medium"
+                            sx={{ bgcolor: 'secondary.main', color: '#fff', '&:hover': { bgcolor: 'secondary.dark', opacity: 0.9 } }}
+                        >
+                            <PasteIcon />
+                        </Fab>
+                    </Box>
+                </Tooltip>
+            )}
+            
             <Tooltip title="New Task" placement="left">
                 <Box>
                     <Fab 

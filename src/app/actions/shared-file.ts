@@ -98,15 +98,35 @@ export async function saveSharedFileToMemo(sharedFileId: string) {
     if (!originalFilename) throw new Error('Invalid file path');
     
     const sourcePath = join(UPLOAD_DIR, originalFilename);
+    if (!fs.existsSync(sourcePath)) throw new Error('Source file missing');
+
+    // Check if text file to import content directly
+    if (sharedFile.mimeType === 'text/plain') {
+        const content = await fs.promises.readFile(sourcePath, 'utf8');
+        const title = extractTitle(content);
+        
+        const memo = await prisma.memo.create({
+            data: {
+                title,
+                content: content, // Use file content directly
+                userId: user.id,
+                thumbnailPath: null
+                // No attachment created for text import
+            }
+        });
+        
+        revalidatePath('/memos');
+        return memo;
+    }
+
+    // For non-text files: Copy file to create a new independent attachment
     const newFilename = `${randomUUID()}_${originalFilename}`; // Ensure unique
     const destPath = join(UPLOAD_DIR, newFilename);
 
-    if (!fs.existsSync(sourcePath)) throw new Error('Source file missing');
-    
     await copyFile(sourcePath, destPath);
     const newUrl = `/api/uploads/${newFilename}`;
 
-    // Create Memo
+    // Create Memo with markdown link
     const isImage = sharedFile.mimeType.startsWith('image/');
     const markdown = isImage 
         ? `![${sharedFile.fileName}](${newUrl})` 

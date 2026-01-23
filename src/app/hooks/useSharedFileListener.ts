@@ -47,34 +47,7 @@ export function useSharedFileListener({ onOpenModal }: UseSharedFileListenerProp
         checkLatest();
     }, [onOpenModal]);
 
-    // Drag & Drop / Paste Handlers
-    const handlePaste = async (e: ClipboardEvent) => {
-        const items = e.clipboardData?.items;
-        if (!items) return;
-
-        for (const item of items) {
-            if (item.kind === 'file') {
-                const file = item.getAsFile();
-                if (file) {
-                    e.preventDefault(); // Prevent default paste (e.g. image into editable div)
-                    await handleFileUpload(file);
-                }
-            }
-        }
-    };
-
-    const handleDrop = async (e: DragEvent) => {
-        e.preventDefault();
-        const files = e.dataTransfer?.files;
-        if (files && files.length > 0) {
-            await handleFileUpload(files[0]); // Handle first file only for now
-        }
-    };
-
-    const handleDragOver = (e: DragEvent) => {
-        e.preventDefault(); // Necessary to allow dropping
-    };
-
+    // Unified Upload Logic
     const handleFileUpload = async (file: File) => {
         const jobId = Math.random().toString(36).substring(7);
         addClientJob({
@@ -102,9 +75,73 @@ export function useSharedFileListener({ onOpenModal }: UseSharedFileListenerProp
         }
     };
 
+    const handleTextUpload = async (text: string) => {
+        // Create a text file from the string
+        const blob = new Blob([text], { type: 'text/plain' });
+        const timestamp = new Date().toISOString().replace(/[-:.]/g, '');
+        const filename = `shared_text_${timestamp}.txt`;
+        const file = new File([blob], filename, { type: 'text/plain' });
+        
+        await handleFileUpload(file);
+    };
+
+    // Drag & Drop / Paste Handlers
+    const handlePaste = async (e: ClipboardEvent) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        let handled = false;
+        
+        // 1. Files
+        for (const item of items) {
+            if (item.kind === 'file') {
+                const file = item.getAsFile();
+                if (file) {
+                    e.preventDefault(); 
+                    await handleFileUpload(file);
+                    handled = true;
+                }
+            }
+        }
+        
+        // 2. Text (if no files handled)
+        // If files were handled, typically we don't paste text too, but it depends on OS.
+        // Let's allow text if no file was found OR if we want to support mixed. 
+        // Usually paste is either/or.
+        if (!handled) {
+            // Check for text
+            const text = e.clipboardData?.getData('text/plain');
+            if (text) {
+                // If active element is input/textarea, let default happen?
+                // The caller usually attaches this to window. 
+                // We should check active element.
+                const active = document.activeElement;
+                const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable);
+                
+                if (!isInput) {
+                    e.preventDefault();
+                    await handleTextUpload(text);
+                }
+            }
+        }
+    };
+
+    const handleDrop = async (e: DragEvent) => {
+        e.preventDefault();
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0) {
+            await handleFileUpload(files[0]); // Handle first file only for now
+        }
+    };
+
+    const handleDragOver = (e: DragEvent) => {
+        e.preventDefault(); // Necessary to allow dropping
+    };
+
     return {
         handlePaste,
         handleDrop,
-        handleDragOver
+        handleDragOver,
+        handleTextUpload
     };
 }

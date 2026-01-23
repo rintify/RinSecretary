@@ -80,7 +80,7 @@ export default function Home() {
     }, []);
 
     // Shared File Listener (Drag & Drop / Paste / Polling)
-    const { handlePaste, handleDrop, handleDragOver } = useSharedFileListener({ 
+    const { handlePaste, handleDrop, handleDragOver, handleTextUpload } = useSharedFileListener({ 
         onOpenModal: handleOpenModal, 
         currentDate 
     });
@@ -200,7 +200,7 @@ export default function Home() {
                     />
                     
                     {/* FABs */}
-                    <ActionFabs onOpenModal={handleOpenModal} />
+                    <ActionFabs onOpenModal={handleOpenModal} onPaste={handleTextUpload} />
                 </Box>
 
                 {/* All Modals */}

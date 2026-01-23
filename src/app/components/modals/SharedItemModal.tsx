@@ -9,7 +9,8 @@ import {
     InsertDriveFile as FileIcon, 
     Download as DownloadIcon,
     NoteAdd as MemoIcon, 
-    Close as CloseIcon 
+    Close as CloseIcon,
+    ContentCopy as CopyIcon
 } from '@mui/icons-material';
 import { saveSharedFileToMemo } from '@/app/actions/shared-file';
 
@@ -34,6 +35,7 @@ interface SharedItemModalProps {
 export default function SharedItemModal({ open, onClose, sharedFile }: SharedItemModalProps) {
     const [saving, setSaving] = useState(false);
     const [isOwner, setIsOwner] = useState(false);
+    const [loadingText, setLoadingText] = useState(false);
     const { showToast } = useToast();
 
     // Keep active if owner and open? 
@@ -48,6 +50,8 @@ export default function SharedItemModal({ open, onClose, sharedFile }: SharedIte
     }, [sharedFile]);
 
     if (!sharedFile) return null;
+
+    const isText = sharedFile.mimeType === 'text/plain';
 
     const handleClose = async () => {
         if (isOwner) {
@@ -69,6 +73,22 @@ export default function SharedItemModal({ open, onClose, sharedFile }: SharedIte
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    };
+
+    const handleCopy = async () => {
+        setLoadingText(true);
+        try {
+            const res = await fetch(sharedFile.filePath);
+            if (!res.ok) throw new Error('Failed to fetch text');
+            const text = await res.text();
+            await navigator.clipboard.writeText(text);
+            showToast('コピーしました', 'success');
+        } catch (e) {
+            console.error('Copy failed', e);
+            showToast('コピーに失敗しました', 'error');
+        } finally {
+            setLoadingText(false);
+        }
     };
 
     const handleSaveToMemo = async () => {
@@ -152,14 +172,27 @@ export default function SharedItemModal({ open, onClose, sharedFile }: SharedIte
                 )}
                 
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <Button 
-                        variant="outlined" 
-                        startIcon={<DownloadIcon />} 
-                        fullWidth 
-                        onClick={handleDownload}
-                    >
-                        ダウンロード
-                    </Button>
+                    {isText ? (
+                         <Button 
+                            variant="outlined" 
+                            startIcon={<CopyIcon />} 
+                            fullWidth 
+                            onClick={handleCopy}
+                            disabled={loadingText}
+                        >
+                            {loadingText ? '読み込み中...' : 'コピー'}
+                        </Button>
+                    ) : (
+                        <Button 
+                            variant="outlined" 
+                            startIcon={<DownloadIcon />} 
+                            fullWidth 
+                            onClick={handleDownload}
+                        >
+                            ダウンロード
+                        </Button>
+                    )}
+                    
                     <Button 
                         variant="contained" 
                         startIcon={<MemoIcon />} 

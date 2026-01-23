@@ -1,6 +1,6 @@
 ---
 trigger: glob
-globs: Docs/**/*.md
+globs: Docs/**/*.md, Docs/
 ---
 
 # アプリ仕様詳細ガイド（Docs）作成ルール

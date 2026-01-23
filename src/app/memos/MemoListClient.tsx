@@ -17,7 +17,7 @@ export function MemoListFabs({ userId }: { userId: string }) {
     
     // Check if on computer to decide whether to show Paste FAB
     // If we are on a computer, we assume drag & drop or global paste (Ctrl+V) is preferred/available
-    const { isComputer } = useDevice();
+    const { isComputer, isInitialized } = useDevice();
 
     const { addClientJob, updateClientJob } = useGlobalJobs();
     const { showToast } = useToast();
@@ -131,7 +131,7 @@ export function MemoListFabs({ userId }: { userId: string }) {
     return (
         <Box sx={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
             {/* Only show Paste FAB if NOT on computer (i.e. mobile/tablet touch devices where global paste is harder) */}
-            {!isComputer && (
+            {isInitialized && !isComputer && (
                 <Fab 
                     aria-label="paste" 
                     onClick={handlePasteCreate}
