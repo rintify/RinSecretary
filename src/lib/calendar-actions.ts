@@ -114,8 +114,9 @@ export async function fetchGoogleEvents(start: Date, end: Date, forceRefresh: bo
   // Check cache
   const now = Date.now();
   const cached = eventCache.get(userId);
-  const reqStart = start.getTime();
-  const reqEnd = end.getTime();
+  // Ensure Date objects (Next.js serialization/deserialization safety)
+  const reqStart = new Date(start).getTime();
+  const reqEnd = new Date(end).getTime();
 
   if (!forceRefresh && cached) {
       const age = now - cached.fetchedAt;

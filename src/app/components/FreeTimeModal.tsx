@@ -94,7 +94,7 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             // The prompt says "候補の時間枠からイベント+マージンを引いた中から". This implies Google Events + Alarms + Maybe DB Tasks if they have fixed time.
             // Let's grab Tasks from API as well to be safe, filtering for those with startTime/endTime.
             
-            const [googleEvents, alarms, tasksRes] = await Promise.all([
+            const [googleRes, alarms, tasksRes] = await Promise.all([
                 fetchGoogleEvents(rangeStart, rangeEnd),
                 getAlarms(rangeStart, rangeEnd),
                 fetch(`/api/tasks?start=${rangeStart.toISOString()}&end=${rangeEnd.toISOString()}`).then(r => r.json())
@@ -108,6 +108,8 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             const toDate = (d: any) => new Date(d);
 
             // Google Events
+            // fetchGoogleEvents returns { events: [], fetchedAt: number }
+            const googleEvents = googleRes?.events || [];
             if (Array.isArray(googleEvents)) {
                 googleEvents.forEach((e: any) => {
                     if (e.startTime && e.endTime) {
@@ -228,9 +230,9 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             showToast('抽出結果をクリップボードにコピーしました', 'success');
             onClose();
 
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            showToast('抽出に失敗しました', 'error');
+            showToast(`抽出に失敗しました: ${e.message || String(e)}`, 'error');
         } finally {
             setLoading(false);
         }
