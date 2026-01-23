@@ -1,27 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
     Dialog, DialogTitle, DialogContent, DialogActions, Button, 
-    TextField, Checkbox, FormControlLabel, Box, Typography, 
-    Stack, IconButton, InputAdornment, Grid
+    TextField, Box, Typography, 
+    Stack, IconButton, InputAdornment
 } from '@mui/material';
 import { 
     addDays, format, startOfDay, endOfDay, addMinutes, 
-    isWeekend, parse, isBefore, isAfter, setHours, setMinutes,
-    differenceInMinutes
+    setHours, setMinutes, differenceInMinutes
 } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { formatLocalIsoString } from '@/lib/utils';
 import { Close as CloseIcon, ContentCopy as CopyIcon, CalendarMonth as CalendarMonthIcon, AccessTime as AccessTimeIcon } from '@mui/icons-material';
-import { ToggleButton, ToggleButtonGroup } from '@mui/material'; // ensure imports
+import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { fetchGoogleEvents } from '@/lib/calendar-actions';
 import { getAlarms } from '@/lib/alarm-actions';
 import CustomDatePicker from './ui/CustomDatePicker';
-
 import CustomTimePicker from './ui/CustomTimePicker';
 import { useToast } from '@/app/context/ToastContext';
-import { CalendarEvent, AlarmEvent } from '@/types/calendar';
+import { CalendarEvent } from '@/types/calendar';
 import { AppTask } from '@/types/task';
 
 interface FreeTimeModalProps {
@@ -44,6 +42,7 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
     const [pickerConfig, setPickerConfig] = useState<{ type: 'date' | 'time', target: 'start' | 'end' | 'startTime' | 'endTime' } | null>(null);
     const { showToast } = useToast();
     const [loading, setLoading] = useState(false);
+    const [resultText, setResultText] = useState("");
 
     // Helpers
     const getDisplayDate = (isoString: string) => {
@@ -59,32 +58,26 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
     const handleDateSelect = (newDate: Date) => {
         if (!pickerConfig) return;
         const target = pickerConfig.target;
-        
         const newStr = formatLocalIsoString(newDate).split('T')[0];
-
         if (target === 'start') setStartDate(newStr);
         else if (target === 'end') setEndDate(newStr);
-
         setPickerConfig(null);
     };
 
     const handleTimeSelect = (newDate: Date) => {
         if (!pickerConfig) return;
         const target = pickerConfig.target;
-        
         const formatLocalTime = (date: Date) => {
              const pad = (n: number) => n < 10 ? '0'+n : n;
              return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
         };
         const newStr = formatLocalTime(newDate);
-        
         if (target === 'startTime') setStartTime(newStr);
         else if (target === 'endTime') setEndTime(newStr);
-
         setPickerConfig(null); 
     };
 
-    const handleCopy = async () => {
+    const handleExtract = async () => {
         setLoading(true);
         try {
             const start = new Date(startDate);
@@ -92,25 +85,15 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             const rangeStart = startOfDay(start);
             const rangeEnd = endOfDay(end);
 
-            // Fetch DB Tasks for potential future check (Currently UI only fetches Google Events/Alarms for this logic as per request context implication, but usually specific "Scheduled" items)
-            // The prompt says "候補の時間枠からイベント+マージンを引いた中から". This implies Google Events + Alarms + Maybe DB Tasks if they have fixed time.
-            // Let's grab Tasks from API as well to be safe, filtering for those with startTime/endTime.
-            
             const [googleRes, alarms, tasksRes] = await Promise.all([
                 fetchGoogleEvents(rangeStart, rangeEnd),
                 getAlarms(rangeStart, rangeEnd),
                 fetch(`/api/tasks?start=${rangeStart.toISOString()}&end=${rangeEnd.toISOString()}`).then(r => r.json())
             ]);
 
-            // Combine all busy slots
-            // We only care about items that have specific time ranges.
             const busySlots: { start: Date, end: Date }[] = [];
-
-            // Helper to parse dates
             const toDate = (d: string | Date) => new Date(d);
 
-            // Google Events
-            // fetchGoogleEvents returns { events: [], fetchedAt: number }
             const googleEvents = googleRes?.events || [];
             if (Array.isArray(googleEvents)) {
                 (googleEvents as CalendarEvent[]).forEach((e) => {
@@ -120,17 +103,14 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                 });
             }
 
-            // Alarms (Point in time, but maybe treat as a small block? Prompt says "Event + Margin". User didn't specify Alarm duration. Let's assume Alarms take 0 time but margin will apply around it.)
             if (Array.isArray(alarms)) {
                 (alarms as CalendarEvent[]).forEach((a) => {
                     if (a.startTime) {
-                        // Treat as 0-minute event
                         busySlots.push({ start: toDate(a.startTime), end: toDate(a.startTime) });
                     }
                 });
             }
 
-            // DB Tasks (if they have start/end time, they are events effectively)
             if (Array.isArray(tasksRes)) {
                 (tasksRes as AppTask[]).forEach((t) => {
                     if (t.startDate && t.deadline) {
@@ -139,51 +119,35 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                 });
             }
 
-            // Generate candidates
-            let resultText = "";
+            let result = "";
             let currentDay = new Date(rangeStart);
 
             while (currentDay <= rangeEnd) {
-                // Check day filter
-                // date-fns getDay: 0=Sun, 1=Mon...
                 const dayNum = currentDay.getDay();
                 if (!selectedDays.includes(dayNum)) {
                     currentDay = addDays(currentDay, 1);
                     continue;
                 }
 
-                // Define Search Window for the day
                 const [sH, sM] = startTime.split(':').map(Number);
                 const [eH, eM] = endTime.split(':').map(Number);
                 
                 let windowStart = setMinutes(setHours(currentDay, sH), sM);
                 let windowEnd = setMinutes(setHours(currentDay, eH), eM);
 
-                // If window crosses midnight, end is next day (Simple case: assume same day for typical 10-17)
-                // If ending time < starting time, assume next day? Not typical for "Free Time" which usually implies daily working hours.
-                // We'll assume strict daily window.
-
-                // Calculate available chunks within [windowStart, windowEnd]
-                // Subtract busy slots + margins.
-                
-                // Effective Busy Slots for this day
-                // Apply margin to busy slots: [start - margin, end + margin]
                 const effectiveBusy = busySlots.map(slot => ({
                     start: addMinutes(slot.start, -margin),
                     end: addMinutes(slot.end, margin)
                 })).filter(slot => {
-                    // Overlap check
                     return slot.end > windowStart && slot.start < windowEnd;
                 }).sort((a, b) => a.start.getTime() - b.start.getTime());
 
-                // Merge overlapping busy slots
                 const mergedBusy: { start: Date, end: Date }[] = [];
                 if (effectiveBusy.length > 0) {
                     let curr = effectiveBusy[0];
                     for (let i = 1; i < effectiveBusy.length; i++) {
                         const next = effectiveBusy[i];
                         if (next.start < curr.end) {
-                            // Overlap or adjacent
                             curr.end = new Date(Math.max(curr.end.getTime(), next.end.getTime()));
                         } else {
                             mergedBusy.push(curr);
@@ -193,13 +157,11 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                     mergedBusy.push(curr);
                 }
 
-                // Find gaps
                 let pointer = windowStart;
                 const freeSlots: { start: Date, end: Date }[] = [];
 
                 for (const busy of mergedBusy) {
                     if (pointer < busy.start) {
-                        // Found a gap
                         if (differenceInMinutes(busy.start, pointer) >= minDuration) {
                             freeSlots.push({ start: pointer, end: busy.start });
                         }
@@ -209,7 +171,6 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                     }
                 }
                 
-                // Check final gap after last busy slot
                 if (pointer < windowEnd) {
                     if (differenceInMinutes(windowEnd, pointer) >= minDuration) {
                         freeSlots.push({ start: pointer, end: windowEnd });
@@ -217,20 +178,17 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                 }
 
                 freeSlots.forEach(slot => {
-                    // Simplified Standard Format: M/d(E) HH:mm 〜 HH:mm
                     const dateStr = format(slot.start, 'M/d(E)', { locale: ja });
                     const startStr = format(slot.start, 'HH:mm');
                     const endStr = format(slot.end, 'HH:mm');
-                    
-                    resultText += `${dateStr} ${startStr} 〜 ${endStr}\n`;
+                    result += `${dateStr} ${startStr} 〜 ${endStr}\n`;
                 });
 
                 currentDay = addDays(currentDay, 1);
             }
             
-            await navigator.clipboard.writeText(resultText);
-            showToast('抽出結果をクリップボードにコピーしました', 'success');
-            onClose();
+            setResultText(result);
+            showToast('抽出が完了しました', 'success');
 
         } catch (err) {
             console.error(err);
@@ -238,6 +196,17 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             showToast(`抽出に失敗しました: ${message}`, 'error');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleCopyToClipboard = async () => {
+        try {
+            await navigator.clipboard.writeText(resultText);
+            showToast('クリップボードにコピーしました', 'success');
+            onClose();
+        } catch (err) {
+            console.error(err);
+            showToast('コピーに失敗しました', 'error');
         }
     };
 
@@ -252,7 +221,6 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                     <Box>
                         <Typography variant="subtitle2" gutterBottom color="text.secondary">期間</Typography>
                         <Stack spacing={1}>
-                            {/* Start Date */}
                             <Box>
                                 <Typography variant="caption" color="text.secondary">開始</Typography>
                                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -268,8 +236,6 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                                     </IconButton>
                                 </Box>
                             </Box>
-                            
-                            {/* End Date */}
                             <Box>
                                 <Typography variant="caption" color="text.secondary">終了</Typography>
                                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -291,7 +257,6 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                     <Box>
                         <Typography variant="subtitle2" gutterBottom color="text.secondary">時間帯</Typography>
                         <Stack spacing={1}>
-                            {/* Start Time */}
                             <Box>
                                 <Typography variant="caption" color="text.secondary">開始</Typography>
                                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -307,8 +272,6 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                                     </IconButton>
                                 </Box>
                             </Box>
-
-                            {/* End Time */}
                             <Box>
                                 <Typography variant="caption" color="text.secondary">終了</Typography>
                                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -331,18 +294,18 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                         <Typography variant="subtitle2" gutterBottom>曜日</Typography>
                         <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                            <ToggleButtonGroup
-                               value={selectedDays}
-                               onChange={(e, newDays) => setSelectedDays(newDays)}
-                               aria-label="days of week"
-                               size="small"
-                               fullWidth
-                               color="primary"
+                                value={selectedDays}
+                                onChange={(e, newDays) => setSelectedDays(newDays)}
+                                aria-label="days of week"
+                                size="small"
+                                fullWidth
+                                color="primary"
                            >
-                               {['日', '月', '火', '水', '木', '金', '土'].map((day, index) => (
-                                   <ToggleButton key={index} value={index} suppressHydrationWarning sx={{ px: 1 }}>
-                                       {day}
-                                   </ToggleButton>
-                               ))}
+                                {['日', '月', '火', '水', '木', '金', '土'].map((day, index) => (
+                                    <ToggleButton key={index} value={index} suppressHydrationWarning sx={{ px: 1 }}>
+                                        {day}
+                                    </ToggleButton>
+                                ))}
                            </ToggleButtonGroup>
                         </Box>
                     </Box>
@@ -372,6 +335,25 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
                         </Box>
                     </Stack>
 
+                    {resultText && (
+                        <Box sx={{ mt: 2 }}>
+                            <Typography variant="subtitle2" gutterBottom color="text.secondary">抽出結果プレビュー</Typography>
+                            <Box sx={{ 
+                                p: 1.5, 
+                                bgcolor: 'action.hover', 
+                                borderRadius: 1, 
+                                border: '1px solid',
+                                borderColor: 'divider',
+                                maxHeight: 200,
+                                overflowY: 'auto',
+                                whiteSpace: 'pre-wrap',
+                                fontFamily: 'monospace',
+                                fontSize: '0.85rem'
+                            }}>
+                                {resultText}
+                            </Box>
+                        </Box>
+                    )}
                 </Stack>
             </DialogContent>
             
@@ -397,9 +379,15 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             />
 
             <DialogActions>
-                <Button onClick={handleCopy} variant="contained" disabled={loading} startIcon={<CopyIcon />}>
-                    {loading ? "収集中..." : "抽出してコピー"}
-                </Button>
+                {resultText ? (
+                    <Button onClick={handleCopyToClipboard} variant="contained" color="primary" startIcon={<CopyIcon />}>
+                        クリップボードにコピー
+                    </Button>
+                ) : (
+                    <Button onClick={handleExtract} variant="contained" disabled={loading} startIcon={<CalendarMonthIcon />}>
+                        {loading ? "収集中..." : "空き時間を抽出"}
+                    </Button>
+                )}
             </DialogActions>
         </Dialog>
     );
