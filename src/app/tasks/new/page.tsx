@@ -7,7 +7,7 @@ import TaskForm from '../../components/TaskForm';
 function NewTaskFormWrapper({ onSuccess, isModal }: { onSuccess?: () => void, isModal?: boolean }) {
     const searchParams = useSearchParams();
     const startTime = searchParams.get('startTime') || undefined;
-    const initialValues = startTime ? { startDate: startTime } : undefined;
+    const initialValues = startTime ? { startDate: new Date(startTime) } : undefined;
     return <TaskForm initialValues={initialValues} onSuccess={onSuccess} isModal={isModal} />;
 }
 

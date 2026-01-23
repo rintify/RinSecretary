@@ -1,6 +1,7 @@
 import { devAuth as auth } from '@/lib/dev-auth';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
     }
 
     // Basic date filtering logic
-    const whereClause: any = {
+    const whereClause: Prisma.TaskWhereInput = {
       userId: user.id,
     };
     

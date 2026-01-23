@@ -64,7 +64,7 @@ export default function BackupSettingsModal({ open, onClose }: BackupSettingsMod
             } else {
                 showToast('バックアップに失敗しました: ' + res.error, 'error');
                 setLastStatus('FAILED');
-                setLastError(res.error);
+                setLastError(res.error || null);
             }
         } catch (e) {
             console.error(e);

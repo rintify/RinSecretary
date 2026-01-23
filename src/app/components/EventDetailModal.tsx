@@ -6,17 +6,10 @@ import MarkdownDisplay from './MarkdownDisplay';
 import { useState, useCallback } from 'react';
 import FullImageModal from './FullImageModal';
 
-interface EventLocal {
-    id: string;
-    title: string;
-    memo?: string;
-    startTime?: string | Date;
-    endTime?: string | Date;
-
-}
+import { CalendarEvent } from '@/types/calendar';
 
 interface EventDetailModalProps {
-    event: EventLocal;
+    event: CalendarEvent;
     onClose: () => void;
     onEdit: () => void;
 }

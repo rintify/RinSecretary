@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { addDays, subDays } from 'date-fns';
 
 
-import { TaskLocal } from '../components/TimeTable';
+import { AppTask } from '@/types/task';
+import { CalendarEvent } from '@/types/calendar';
 
 interface UseDayDataOptions {
     date: Date;
@@ -10,7 +11,7 @@ interface UseDayDataOptions {
 }
 
 interface UseDayDataReturn {
-    tasks: TaskLocal[];
+    tasks: (AppTask | CalendarEvent)[];
     isLoading: boolean;
     error: boolean;
     refresh: () => void;
@@ -22,9 +23,9 @@ interface UseDayDataReturn {
 }
 
 export function useDayData({ date, refreshTrigger }: UseDayDataOptions): UseDayDataReturn {
-    const [googleEvents, setGoogleEvents] = useState<TaskLocal[]>([]);
-    const [alarms, setAlarms] = useState<TaskLocal[]>([]);
-    const [dbTasks, setDbTasks] = useState<TaskLocal[]>([]);
+    const [googleEvents, setGoogleEvents] = useState<CalendarEvent[]>([]);
+    const [alarms, setAlarms] = useState<CalendarEvent[]>([]);
+    const [dbTasks, setDbTasks] = useState<AppTask[]>([]);
     
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(false);

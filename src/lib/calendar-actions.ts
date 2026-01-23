@@ -4,6 +4,7 @@ import { devAuth as auth } from '@/lib/dev-auth';
 import { getGoogleCalendarEvents } from './google';
 import { subDays, addDays } from 'date-fns';
 import { prisma } from './prisma';
+import { CalendarEvent, GoogleCalendarEvent } from '@/types/calendar';
 
 // メインアカウントの認証状態をチェック
 export async function checkPrimaryGoogleAccountStatus(): Promise<{ valid: boolean; email?: string }> {
@@ -93,7 +94,7 @@ export async function checkPrimaryGoogleAccountStatus(): Promise<{ valid: boolea
 
 // Simple in-memory cache
 interface CacheEntry {
-    events: any[];
+    events: any[]; // The raw events from Google
     fetchedAt: number;
     rangeStart: number;
     rangeEnd: number;
@@ -126,8 +127,10 @@ export async function fetchGoogleEvents(start: Date, end: Date, forceRefresh: bo
           // console.log(`fetchGoogleEvents: Serving from cache for user ${userId}`);
           // Filter cached events for the requested specific range
           const filtered = mapEvents(cached.events.filter((e: any) => {
-             const eStart = new Date(e.start.dateTime || e.start.date).getTime();
-             const eEnd = new Date(e.end.dateTime || e.end.date).getTime();
+             const startObj = e.start as { dateTime?: string, date?: string };
+             const endObj = e.end as { dateTime?: string, date?: string };
+             const eStart = new Date(startObj.dateTime || startObj.date || "").getTime();
+             const eEnd = new Date(endObj.dateTime || endObj.date || "").getTime();
              // Overlap logic
              return eEnd > reqStart && eStart < reqEnd;
           }));
@@ -155,27 +158,33 @@ export async function fetchGoogleEvents(start: Date, end: Date, forceRefresh: bo
 
   // Return filtered for current request
   const filtered = mapEvents(events.filter((e: any) => {
-     const eStart = new Date(e.start.dateTime || e.start.date).getTime();
-     const eEnd = new Date(e.end.dateTime || e.end.date).getTime();
+     const startObj = e.start as { dateTime?: string, date?: string };
+     const endObj = e.end as { dateTime?: string, date?: string };
+     const eStart = new Date(startObj.dateTime || startObj.date || "").getTime();
+     const eEnd = new Date(endObj.dateTime || endObj.date || "").getTime();
      return eEnd > reqStart && eStart < reqEnd;
   }));
 
   return { events: filtered, fetchedAt: now };
 }
 
-function mapEvents(events: any[]) {
-  return events.map((event: any) => ({
-    id: event.id,
-    title: event.summary || '(No Title)',
-    startTime: event.start.dateTime || event.start.date, // dateTime for timed, date for all-day
-    endTime: event.end.dateTime || event.end.date,
-    type: 'EVENT', // "SHIFT" is deprecated, now "EVENT"
-    color: '#4285F4', // Google Blue
-    memo: event.description,
-  }));
+function mapEvents(events: any[]): CalendarEvent[] {
+  return events.map((event: any) => {
+    const startObj = event.start as { dateTime?: string, date?: string };
+    const endObj = event.end as { dateTime?: string, date?: string };
+    return {
+      id: event.id as string,
+      title: (event.summary as string) || '(No Title)',
+      startTime: (startObj.dateTime || startObj.date) as string, 
+      endTime: (endObj.dateTime || endObj.date) as string,
+      type: 'EVENT' as const,
+      color: '#4285F4',
+      memo: event.description as string | undefined,
+    };
+  });
 }
 
-export async function createGoogleEvent(data: any) {
+export async function createGoogleEvent(data: { title: string; startTime: string | Date; endTime: string | Date; memo?: string }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
     
@@ -192,7 +201,7 @@ export async function createGoogleEvent(data: any) {
     return await getGoogleLibs().createGoogleCalendarEvent(session.user.id, eventBody);
 }
 
-export async function updateGoogleEvent(eventId: string, data: any) {
+export async function updateGoogleEvent(eventId: string, data: { title: string; startTime: string | Date; endTime: string | Date; memo?: string }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 

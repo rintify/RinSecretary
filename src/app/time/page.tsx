@@ -14,6 +14,8 @@ import ActionFabs from '../components/layout/ActionFabs';
 import ModalController from '../components/modals/ModalController';
 import TimeTableSwiper from '../components/TimeTableSwiper';
 import { useSharedFileListener } from '../hooks/useSharedFileListener';
+import { AppTask } from '@/types/task';
+import { CalendarEvent } from '@/types/calendar';
 
 const getBusinessDate = () => {
     const now = new Date();
@@ -27,7 +29,7 @@ export default function Home() {
     const [currentDate, setCurrentDate] = useState(getBusinessDate());
     const [showSyncModal, setShowSyncModal] = useState(false);
     const [activeModal, setActiveModal] = useState<ModalType>('NONE');
-    const [modalData, setModalData] = useState<any>(null);
+    const [modalData, setModalData] = useState<import('../components/modals/ModalController').ModalData>(null);
     
     // Refresh triggers
     const [taskRefreshTrigger, setTaskRefreshTrigger] = useState(0);
@@ -74,7 +76,7 @@ export default function Home() {
     } = useMailSummary();
 
     // Modal handlers
-    const handleOpenModal = React.useCallback((modal: ModalType, data?: any) => {
+    const handleOpenModal = React.useCallback((modal: ModalType, data?: import('../components/modals/ModalController').ModalData) => {
         setModalData(data ?? null);
         setActiveModal(modal);
     }, []);
@@ -98,14 +100,14 @@ export default function Home() {
     }, [updateSyncTimestamp]);
 
     React.useEffect(() => {
-        window.addEventListener('paste', handlePaste as any);
-        window.addEventListener('drop', handleDrop as any);
-        window.addEventListener('dragover', handleDragOver as any);
+        window.addEventListener('paste', handlePaste);
+        window.addEventListener('drop', handleDrop);
+        window.addEventListener('dragover', handleDragOver);
 
         return () => {
-            window.removeEventListener('paste', handlePaste as any);
-            window.removeEventListener('drop', handleDrop as any);
-            window.removeEventListener('dragover', handleDragOver as any);
+            window.removeEventListener('paste', handlePaste);
+            window.removeEventListener('drop', handleDrop);
+            window.removeEventListener('dragover', handleDragOver);
         };
     }, [handlePaste, handleDrop, handleDragOver]);
 
@@ -114,11 +116,11 @@ export default function Home() {
         setActiveModal('NEW_EVENT');
     };
 
-    const handleTaskClick = (task: any) => {
+    const handleTaskClick = (task: AppTask | CalendarEvent) => {
         setModalData(task);
-        if (task.deadline) {
+        if ('deadline' in task) {
             setActiveModal('DETAIL_TASK');
-        } else if (task.type === 'ALARM') {
+        } else if ('type' in task && task.type === 'ALARM') {
             setActiveModal('DETAIL_ALARM');
         } else {
             setActiveModal('DETAIL_EVENT');
@@ -126,9 +128,9 @@ export default function Home() {
     };
 
     const handleEditFromDetail = () => {
-        if (modalData?.deadline) {
+        if (modalData && 'deadline' in modalData) {
             setActiveModal('EDIT_TASK');
-        } else if (modalData?.type === 'ALARM') {
+        } else if (modalData && 'type' in modalData && modalData.type === 'ALARM') {
             setActiveModal('EDIT_ALARM');
         } else {
             setActiveModal('EDIT_EVENT');

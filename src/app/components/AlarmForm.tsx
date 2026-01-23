@@ -11,10 +11,11 @@ import CustomDatePicker from './ui/CustomDatePicker';
 import CustomTimePicker from './ui/CustomTimePicker';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
+import { CalendarEvent } from '@/types/calendar';
 
 interface AlarmFormProps {
     alarmId?: string;
-    initialValues?: any;
+    initialValues?: CalendarEvent;
     initialTime?: string;
     onSuccess?: (date?: Date) => void;
     isModal?: boolean;
@@ -39,9 +40,9 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
         if (initialValues) {
              const alarm = initialValues;
              setTitle(alarm.title);
-             setComment(alarm.memo || alarm.comment || '');
-             if (alarm.startTime || alarm.time) {
-                 const t = alarm.startTime || alarm.time;
+             setComment(alarm.memo || '');
+             if (alarm.startTime) {
+                 const t = alarm.startTime;
                  setTime(format(new Date(t), "yyyy-MM-dd'T'HH:mm"));
              }
         } else if (initialTime) {
@@ -128,8 +129,8 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
         setPickerConfig(null);
     };
 
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
+    const handleSubmit = async (e?: React.FormEvent<HTMLFormElement> | React.KeyboardEvent) => {
+        if (e) e.preventDefault();
         setLoading(true);
 
         try {
@@ -210,8 +211,7 @@ export default function AlarmForm({ alarmId, initialValues, initialTime, onSucce
                 onKeyDown={(e) => {
                     if (e.nativeEvent.isComposing) return;
                     if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSubmit(e as any);
+                        handleSubmit(e);
                     }
                 }}
                 size="small"

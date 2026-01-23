@@ -7,23 +7,12 @@ import TaskItem from './TaskItem';
 import { Box, Typography, IconButton, Paper, Container, Badge, CircularProgress } from '@mui/material';
 import { ArrowBackIosNew, ArrowForwardIos, History as HistoryIcon, ReportProblem as WarningIcon } from '@mui/icons-material';
 import { AnimatePresence, motion } from 'framer-motion';
+import { isAppTask, isCalendarEvent } from '@/types/guards';
 
-export interface TaskLocal {
-  id: string;
-  title: string;
-  // Event (Google)
-  startTime?: string | Date;
-  endTime?: string | Date;
-  // Task (DB)
-  startDate?: string | Date;
-  deadline?: string | Date;
-  progress?: number;
-  maxProgress?: number;
-  
-  color?: string;
-  memo?: string;
-  type?: string; 
-}
+import { AppTask } from '@/types/task';
+import { CalendarEvent } from '@/types/calendar';
+
+// We use AppTask or CalendarEvent instead
 
 // --- DayColumn Component ---
 const DayColumn = ({ 
@@ -42,8 +31,8 @@ const DayColumn = ({
     onOpenExpired
 }: { 
     date: Date, 
-    tasks: TaskLocal[], 
-    onEditTask?: (task: TaskLocal) => void;
+    tasks: (AppTask | CalendarEvent)[], 
+    onEditTask?: (task: AppTask | CalendarEvent) => void;
     isLoading?: boolean;
     hasDeadlineWarning?: boolean;
     showHistory?: boolean;
@@ -59,12 +48,10 @@ const DayColumn = ({
     const dayEnd = addHours(dayStart, 24);
 
     const dayTasks = tasks.filter(task => { // ... existing filter logic
-        // Event logic: must have startTime
-        const tStart = task.startTime ? new Date(task.startTime) : null;
+        if (!isCalendarEvent(task)) return false;
+        const tStart = new Date(task.startTime);
         const tEnd = task.endTime ? new Date(task.endTime) : null;
         
-        if (!tStart) return false;
-
         // Simple overlap logic: check if it overlaps with the day
         if (tEnd && (tEnd <= dayStart || tStart >= dayEnd)) return false;
         if (!tEnd && (tStart < dayStart || tStart >= dayEnd)) return false; // Point events
@@ -74,13 +61,13 @@ const DayColumn = ({
 
     // ... (existing sort code)
      dayTasks.sort((a, b) => {
-        const tA = a.startTime ? new Date(a.startTime).getTime() : 0;
-        const tB = b.startTime ? new Date(b.startTime).getTime() : 0;
+        const tA = isCalendarEvent(a) ? new Date(a.startTime).getTime() : 0;
+        const tB = isCalendarEvent(b) ? new Date(b.startTime).getTime() : 0;
         return tA - tB;
     });
 
     const deadlineTasks = tasks.filter(task => { // ... existing filter logic
-        if (!task.deadline) return false;
+        if (!isAppTask(task)) return false;
         const d = new Date(task.deadline);
         if (d < dayStart) return false;
         if (task.startDate) {
@@ -92,11 +79,11 @@ const DayColumn = ({
 
     // ... (existing sort code)
     deadlineTasks.sort((a, b) => {
-        const isDoneA = (a.progress || 0) >= (a.maxProgress || 100);
-        const isDoneB = (b.progress || 0) >= (b.maxProgress || 100);
+        const isDoneA = isAppTask(a) ? (a.progress || 0) >= (a.maxProgress || 100) : false;
+        const isDoneB = isAppTask(b) ? (b.progress || 0) >= (b.maxProgress || 100) : false;
         if (isDoneA !== isDoneB) return isDoneA ? 1 : -1; 
-        const dA = a.deadline ? new Date(a.deadline).getTime() : 0;
-        const dB = b.deadline ? new Date(b.deadline).getTime() : 0;
+        const dA = isAppTask(a) ? new Date(a.deadline).getTime() : 0;
+        const dB = isAppTask(b) ? new Date(b.deadline).getTime() : 0;
         return dA - dB;
     });
 
@@ -238,7 +225,7 @@ export default function TimeTable({
 }: { 
     date: Date;
     onNewTask?: (startTime?: string) => void;
-    onEditTask?: (task: TaskLocal) => void;
+    onEditTask?: (task: AppTask | CalendarEvent) => void;
     refreshTrigger?: number | { timestamp: number; force: boolean };
     expiredCount?: number;
     onOpenExpired?: () => void;
@@ -328,7 +315,8 @@ export default function TimeTable({
   const isToday = now >= dayStart && now < dayEnd;
   
   const eventsForToday = allTasks.filter(task => {
-      const tStart = task.startTime ? new Date(task.startTime) : null;
+      if (!isCalendarEvent(task)) return false;
+      const tStart = new Date(task.startTime);
       if (!tStart) return false;
       
       const tEnd = task.endTime ? new Date(task.endTime) : null;
@@ -339,8 +327,8 @@ export default function TimeTable({
 
   const historyItems = eventsForToday.filter(task => {
       // Is it past?
-      const tEnd = task.endTime ? new Date(task.endTime) : (task.startTime ? new Date(task.startTime) : null);
-      if (!tEnd) return false;
+      if (!isCalendarEvent(task)) return false;
+      const tEnd = task.endTime ? new Date(task.endTime) : new Date(task.startTime);
       return tEnd < now;
   });
 
@@ -362,10 +350,10 @@ export default function TimeTable({
 
 
   const hasDeadlineWarning = isToday && items.some(task => {
-      if (!task.deadline) return false;
+      if (!isAppTask(task)) return false;
       
-      const p = typeof task.progress === 'number' ? task.progress : Number(task.progress || 0);
-      const max = typeof task.maxProgress === 'number' ? task.maxProgress : Number(task.maxProgress || 100);
+      const p = task.progress;
+      const max = task.maxProgress;
       
       // Float safe comparison (epsilon 0.01)
       const isDone = p >= (max - 0.01);
@@ -376,9 +364,6 @@ export default function TimeTable({
       const limit = addHours(now, 24);
       
       const inRange = d >= now && d <= limit;
-      if (inRange) {
-          // Warning logic can be expanded here if needed
-      }
       return inRange; 
   });
 

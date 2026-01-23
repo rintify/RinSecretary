@@ -4,6 +4,12 @@ import { prisma } from './prisma';
 import { generateSummaryFromData, MailSummaryResult } from './mail-actions';
 import { getGmailMessages, AuthError } from './google';
 import { devAuth as auth } from '@/lib/dev-auth'; 
+import { GmailMessage } from '@/types/mail';
+import { Prisma } from '@prisma/client';
+
+type UserWithRelations = Prisma.UserGetPayload<{
+    include: { aiConfigs: true, mailBlockedSenders: true }
+}>;
 
 // Utility to calculate range: Yesterday 18:30 -> Today 18:30 (relative to "targetDate" being Today)
 function getTargetRange(targetDate: Date) {
@@ -27,30 +33,30 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
     try {
         const user = await prisma.user.findUnique({
              where: { id: userId },
-             include: { aiConfigs: true, mailBlockedSenders: true } as any
-        });
+             include: { aiConfigs: true, mailBlockedSenders: true }
+        }) as UserWithRelations | null;
         
         if (!user) throw new Error("User not found");
-        const userAny = user as any;
-        if (!userAny.mailSummaryModelId) {
+        if (!user.mailSummaryModelId) {
             console.log("No mail summary model configured. Skipping.");
             return { success: false, cardsCreated: 0, error: "Not Configured" };
         }
 
-        const config = userAny.aiConfigs.find((c: any) => c.id === userAny.mailSummaryModelId);
+        const config = user.aiConfigs.find(c => c.id === user.mailSummaryModelId);
         if (!config) {
             console.log("Config missing. Skipping.");
             return { success: false, cardsCreated: 0, error: "Config Missing" };
         }
         
         // Fetch messages
-        let messages: any[] = [];
+        let messages: GmailMessage[] = [];
         try {
             messages = await getGmailMessages(userId, timeMin, timeMax);
-        } catch (e: any) {
+        } catch (e: unknown) {
+            const err = e as Error;
             console.error(`Failed to fetch messages for ${userId}`, e);
             
-            if (e instanceof AuthError || e.name === 'AuthError') {
+            if (e instanceof AuthError || err.name === 'AuthError') {
                  await prisma.mailSummary.create({
                     data: {
                         userId,
@@ -71,19 +77,19 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
                 data: {
                     userId,
                     title: "メール取得エラー",
-                    summary: `メールの取得中にエラーが発生しました: ${e.message}`,
+                    summary: `メールの取得中にエラーが発生しました: ${err.message}`,
                     status: 'FAILED',
-                    error: String(e),
+                    error: err.stack || String(err),
                     latestMailReceivedAt: timeMax, // Use range end as proxy
                     targetRangeStart: timeMin,
                     targetRangeEnd: timeMax
                 }
             });
-            return { success: false, cardsCreated: 1, error: e.message };
+            return { success: false, cardsCreated: 1, error: err.message };
         }
 
         // Filter Blocked
-        const blockedEmails = (userAny.mailBlockedSenders || []).map((b: any) => b.email.toLowerCase());
+        const blockedEmails = (user.mailBlockedSenders || []).map(b => b.email.toLowerCase());
         const filteredMessages = messages.filter(m => {
             const match = m.from.match(/<(.+)>/);
             const email = match ? match[1] : m.from;
@@ -116,22 +122,23 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
         // Generate AI Summary
         let result: MailSummaryResult;
         try {
-            result = await generateSummaryFromData(filteredMessages, config, userAny.mailSummaryPrompt);
-        } catch (e: any) {
+            result = await generateSummaryFromData(filteredMessages, config, user.mailSummaryPrompt || undefined);
+        } catch (e: unknown) {
+             const err = e as Error;
              console.error(`AI Generation failed for ${userId}`, e);
              await prisma.mailSummary.create({
                 data: {
                     userId,
                     title: "要約生成エラー",
-                    summary: `AIによる要約生成中にエラーが発生しました: ${e.message}`,
+                    summary: `AIによる要約生成中にエラーが発生しました: ${err.message}`,
                     status: 'FAILED',
-                    error: String(e),
+                    error: err.stack || String(err),
                     latestMailReceivedAt: timeMax,
                     targetRangeStart: timeMin,
                     targetRangeEnd: timeMax
                 }
             });
-            return { success: false, cardsCreated: 1, error: e.message };
+            return { success: false, cardsCreated: 1, error: err.message };
         }
         
         // Save Cards (Topics)
@@ -199,7 +206,8 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
         console.log(`Generated ${cardsToCreate.length} cards for user ${userId}`);
         return { success: true, cardsCreated: cardsToCreate.length };
 
-    } catch (e: any) {
+    } catch (e: unknown) {
+        const err = e as Error;
         console.error("Critical logic error in generateDailyMailSummary", e);
         // Fallback catch-all error card
          await prisma.mailSummary.create({
@@ -208,13 +216,13 @@ export async function generateDailyMailSummary(userId: string, targetDateInput?:
                 title: "システムエラー",
                 summary: "予期せぬエラーが発生しました。",
                 status: 'FAILED',
-                error: String(e),
+                error: err.stack || String(err),
                 latestMailReceivedAt: timeMax,
                 targetRangeStart: timeMin,
                 targetRangeEnd: timeMax
             }
         });
-        return { success: false, cardsCreated: 1, error: e.message };
+        return { success: false, cardsCreated: 1, error: err.message };
     }
 }
 
@@ -229,34 +237,34 @@ export async function fetchMailDataInRange(targetStart: Date, targetEnd: Date) {
 
     const user = await prisma.user.findUnique({
             where: { id: userId },
-            include: { aiConfigs: true, mailBlockedSenders: true } as any
-    });
+            include: { aiConfigs: true, mailBlockedSenders: true }
+    }) as UserWithRelations | null;
     
     if (!user) throw new Error("User not found");
-    const userAny = user as any;
-    if (!userAny.mailSummaryModelId) {
+    if (!user.mailSummaryModelId) {
         return { success: false, error: "AIモデルが設定されていません" };
     }
 
-    const config = userAny.aiConfigs.find((c: any) => c.id === userAny.mailSummaryModelId);
+    const config = user.aiConfigs.find(c => c.id === user.mailSummaryModelId);
     if (!config) {
         return { success: false, error: "AI設定が見つかりません" };
     }
     
     // Fetch messages
-    let messages: any[] = [];
+    let messages: GmailMessage[] = [];
     try {
         messages = await getGmailMessages(userId, targetStart, targetEnd);
-    } catch (e: any) {
+    } catch (e: unknown) {
+        const err = e as Error;
         console.error(`Failed to fetch messages for ${userId}`, e);
-        if (e instanceof AuthError || e.name === 'AuthError') {
+        if (e instanceof AuthError || err.name === 'AuthError') {
              throw new Error("AUTH_ERROR: Googleアカウントの再連携が必要です。");
         }
-        throw new Error(`メール取得エラー: ${e.message}`);
+        throw new Error(`メール取得エラー: ${err.message}`);
     }
 
     // Filter Blocked
-    const blockedEmails = (userAny.mailBlockedSenders || []).map((b: any) => b.email.toLowerCase());
+    const blockedEmails = (user.mailBlockedSenders || []).map(b => b.email.toLowerCase());
     const filteredMessages = messages.filter(m => {
         const match = m.from.match(/<(.+)>/);
         const email = match ? match[1] : m.from;
@@ -282,28 +290,33 @@ export async function fetchMailDataForTwoWeeks() {
 }
 
 // Step 2: Process & Save (Modified to accept optional custom range for the saved cards)
-export async function generateAndSaveMailSummary(messages: any[], customRange?: { start: Date, end: Date }) {
+export async function generateAndSaveMailSummary(messages: GmailMessage[], customRange?: { start: Date, end: Date }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
     const userId = session.user.id;
 
     const user = await prisma.user.findUnique({
             where: { id: userId },
-            include: { aiConfigs: true } as any
-    });
-    const userAny = user as any;
-    const config = userAny.aiConfigs.find((c: any) => c.id === userAny.mailSummaryModelId);
+            include: { aiConfigs: true }
+    }) as (Prisma.UserGetPayload<{ include: { aiConfigs: true } }>) | null;
+
+    if (!user) throw new Error("User not found");
+    const config = user.aiConfigs.find(c => c.id === user.mailSummaryModelId);
+    if (!config) {
+        throw new Error("AI設定が見つかりません");
+    }
 
     if (messages.length === 0) {
         return { success: true, count: 0 };
     }
-    
+
     let result: MailSummaryResult;
     try {
-        result = await generateSummaryFromData(messages, config, userAny.mailSummaryPrompt);
-    } catch (e: any) {
+        result = await generateSummaryFromData(messages, config, user.mailSummaryPrompt || undefined);
+    } catch (e: unknown) {
+            const err = e as Error;
             console.error(`AI Generation failed for ${userId}`, e);
-            throw new Error(`AI生成エラー: ${e.message}`);
+            throw new Error(`AI生成エラー: ${err.message}`);
     }
     
     const timeMax = customRange?.end || new Date();
@@ -318,7 +331,7 @@ export async function generateAndSaveMailSummary(messages: any[], customRange?: 
         let latestDate = timeMin;
         if (topic.relatedLinks && topic.relatedLinks.length > 0) {
             const dates = topic.relatedLinks.map(link => {
-                const msg = messages.find((m: any) => m.id === link.id);
+                const msg = messages.find(m => m.id === link.id);
                 return msg ? new Date(msg.date).getTime() : 0;
             });
             const maxTs = Math.max(...dates);

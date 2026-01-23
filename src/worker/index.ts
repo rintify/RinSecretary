@@ -200,8 +200,8 @@ interface IDBRecord {
 async function saveToIndexedDB(id: string, blob: Blob, mimeType: string, filename: string): Promise<void> {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open('RinSecretaryDB');
-        request.onsuccess = (event: any) => {
-            const db: IDBDatabase = event.target.result;
+        request.onsuccess = (event: Event) => {
+            const db = (event.target as IDBOpenDBRequest).result;
             if (!db.objectStoreNames.contains('attachments')) {
                 db.close();
                 resolve(); // Silent fail if store missing
@@ -246,8 +246,8 @@ async function getFromIndexedDB(id: string): Promise<{ blob: Blob; mimeType: str
         request.onblocked = () => {
             console.warn('[SW] DB open blocked by another tab');
         };
-        request.onsuccess = (event: any) => {
-            const db: IDBDatabase = event.target.result;
+        request.onsuccess = (event: Event) => {
+            const db = (event.target as IDBOpenDBRequest).result;
             // 他のタブ/スレッドでDBバージョンが上がった場合に即座に閉じる
             db.onversionchange = () => {
                 db.close();

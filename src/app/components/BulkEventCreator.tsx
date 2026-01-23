@@ -19,7 +19,7 @@ import React, {  // Add React here
   forwardRef
 } from 'react';
 import { createGoogleEvent, fetchGoogleEvents } from '@/lib/calendar-actions';
-import { getPalette, updatePalette } from '@/app/actions/palette';
+import { getPalette, updatePalette, PaletteItem } from '@/app/actions/palette';
 import { useToast } from '../context/ToastContext';
 
 interface BulkEventCreatorProps {
@@ -268,17 +268,10 @@ export default function BulkEventCreator({ onBack, onSuccess, startWeekDate: ini
       setIsSaving(true);
       try {
           // Prepare Palette Data for DB (Array format)
-          // We save everything EXCEPT 'black' title if we want to follow 'don't save black', 
-          // BUT user said "blackは保存するな" meaning don't persist it for next reload.
-          // However, we might as well just save current state, and the Reload Logic (useEffect ^) handles the reset.
-          // That is cleaner.
-          // But wait, if we save 'black'='Work', next time it resets to ''.
-          // So saving it is fine.
-
-          const paletteToSave = Object.entries(colorTitles).map(([key, title]) => ({
-             key,
-             title,
-             hex: COLORS.find(c => c.key === key)?.hex || '#000000'
+          const paletteToSave: PaletteItem[] = Object.entries(colorTitles).map(([key, title]) => ({
+             id: key,
+             name: title,
+             color: COLORS.find(c => c.key === key)?.hex || '#000000'
           }));
 
           // 1. Save Palette Configuration first

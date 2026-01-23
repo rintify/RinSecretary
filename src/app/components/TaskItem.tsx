@@ -12,44 +12,35 @@ const blinkAnimation = keyframes`
   100% { box-shadow: 0 0 5px 0px rgba(244, 67, 54, 0.3); }
 `;
 
-interface Task {
-  id: string;
-  title: string;
-  memo?: string;
-  color?: string;
-  type?: string; 
-  // Event (Google)
-  startTime?: string | Date;
-  endTime?: string | Date;
-  // Task (DB)
-  startDate?: string | Date;
-  deadline?: string | Date;
-  progress?: number;
-  maxProgress?: number;
-}
+import { AppTask } from '@/types/task';
+import { CalendarEvent } from '@/types/calendar';
+import { isAppTask, isCalendarEvent, isAlarmType } from '@/types/guards';
+
+// We use AppTask or CalendarEvent instead
 
 interface TaskItemProps {
-  task: Task;
+  task: AppTask | CalendarEvent;
   style?: React.CSSProperties;
-  onClick: (task: Task) => void;
-  onTaskDrop?: (task: Task, minutesMoved: number) => void;
+  onClick: (task: AppTask | CalendarEvent) => void;
+  onTaskDrop?: (task: AppTask | CalendarEvent, minutesMoved: number) => void;
   viewDate?: Date;
   action?: React.ReactNode;
 }
 
 export default function TaskItem({ task, style, onClick, viewDate, action }: TaskItemProps) {
-  const isEvent = !!task.startTime;
-  const isAlarm = task.type === 'ALARM';
-  // If generic "Task" or DB Task - check deadline
-  const isTask = !!task.deadline;
+  const isEvent = isCalendarEvent(task);
+  const isAlarm = isAlarmType(task);
+  const isTask = isAppTask(task);
 
-  const isDone = isTask && (task.progress || 0) >= (task.maxProgress || 100);
+  const taskProgress = isTask ? task.progress : 0;
+  const taskMaxProgress = isTask ? task.maxProgress : 100;
+  const isDone = isTask && taskProgress >= taskMaxProgress;
 
   // Deadline logic
   let daysUntilDeadline: number | null = null;
   let minutesUntilDeadline: number | null = null;
   
-  if (task.deadline) {
+  if (isTask && task.deadline) {
       const now = new Date();
       const d = new Date(task.deadline);
       daysUntilDeadline = differenceInCalendarDays(d, now);
@@ -99,7 +90,7 @@ export default function TaskItem({ task, style, onClick, viewDate, action }: Tas
 
   // Chip Label Logic
   let chipLabel = '';
-  if (minutesUntilDeadline !== null && task.deadline) {
+  if (minutesUntilDeadline !== null && isTask && (task as AppTask).deadline) {
       if (minutesUntilDeadline < 0) {
           chipLabel = '期限切れ';
       } else if (minutesUntilDeadline < 60) {
@@ -138,34 +129,37 @@ export default function TaskItem({ task, style, onClick, viewDate, action }: Tas
 
   const getDayTimeDisplay = () => {
       // Logic for Event (range) or Alarm (point)
-      if (isAlarm && task.startTime) {
+      if (isAlarm && 'startTime' in task && task.startTime) {
           return format(new Date(task.startTime), 'HH:mm');
       }
 
-      if (!task.startTime || !task.endTime) return null;
-      if (!viewDate) {
-           return `${format(new Date(task.startTime), 'HH:mm')} - ${format(new Date(task.endTime), 'HH:mm')}`;
+      if (isEvent) {
+          if (!task.startTime || !task.endTime) return null;
+          if (!viewDate) {
+               return `${format(new Date(task.startTime), 'HH:mm')} - ${format(new Date(task.endTime), 'HH:mm')}`;
+          }
+
+          const start = new Date(task.startTime);
+          const end = new Date(task.endTime);
+
+          const isStart = isSameDayFn(viewDate, start);
+          const isEnd = isSameDayFn(viewDate, end);
+
+          if (isStart && isEnd) {
+              return `${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}`;
+          } else if (isStart) {
+              return `${format(start, 'HH:mm')} -`;
+          } else if (isEnd) {
+              return `- ${format(end, 'HH:mm')}`;
+          } else {
+              return '-';
+          }
       }
-
-      const start = new Date(task.startTime);
-      const end = new Date(task.endTime);
-
-      const isStart = isSameDayFn(viewDate, start);
-      const isEnd = isSameDayFn(viewDate, end);
-
-      if (isStart && isEnd) {
-          return `${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}`;
-      } else if (isStart) {
-          return `${format(start, 'HH:mm')} -`;
-      } else if (isEnd) {
-          return `- ${format(end, 'HH:mm')}`;
-      } else {
-          return '-';
-      }
+      return null;
   };
 
   const getDeadlineDisplay = () => {
-    if (!task.deadline) return null;
+    if (!isTask || !task.deadline) return null;
     return format(new Date(task.deadline), 'MM/dd(eee) HH:mm', { locale: ja });
   }
 
@@ -260,7 +254,7 @@ export default function TaskItem({ task, style, onClick, viewDate, action }: Tas
                     </Typography>
                     
                     {/* Time Row (Event or Alarm) */}
-                    {(isEvent || isAlarm) && task.startTime && (
+                    {(isEvent || isAlarm) && 'startTime' in task && task.startTime && (
                         <Box display="flex" alignItems="center" gap={0.5} sx={{ opacity: 0.9 }}>
                             <ClockIcon sx={{ fontSize: 12 }} />
                             <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
@@ -283,7 +277,7 @@ export default function TaskItem({ task, style, onClick, viewDate, action }: Tas
                         <Box mt={0.5}>
                             <LinearProgress  
                                 variant="determinate" 
-                                value={Math.min(100, ((task.progress || 0) / (task.maxProgress || 100)) * 100)} 
+                                value={Math.min(100, (taskProgress / taskMaxProgress) * 100)} 
                                 sx={{ 
                                     height: 4, 
                                     borderRadius: 2, 

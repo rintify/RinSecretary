@@ -2,6 +2,7 @@
 
 import Editor, { loader, OnMount } from '@monaco-editor/react';
 import { useEffect, useRef } from 'react';
+import * as monaco from 'monaco-editor';
 import { Box, alpha } from '@mui/material';
 import { MEMO_COLOR } from '@/app/utils/colors';
 
@@ -35,13 +36,13 @@ export default function SharedEditor({
     paddingTop = 8,
     backgroundColor,
 }: SharedEditorProps) {
-    const editorRef = useRef<any>(null);
+    const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
 
     const handleEditorDidMount: OnMount = (editor, monaco) => {
         editorRef.current = editor;
 
         // Define a custom theme
-        const colors: any = {};
+        const colors: Record<string, string> = {};
         if (backgroundColor) {
             colors['editor.background'] = backgroundColor;
         }

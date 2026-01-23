@@ -5,13 +5,14 @@ import { motion, useMotionValue, animate, PanInfo } from 'framer-motion';
 import { addDays, subDays } from 'date-fns';
 import { Box } from '@mui/material';
 import TimeTable from './TimeTable';
-import { TaskLocal } from './TimeTable';
+import { AppTask } from '@/types/task';
+import { CalendarEvent } from '@/types/calendar';
 
 interface TimeTableCarouselProps {
     currentDate: Date;
     onDateChange: (newDate: Date) => void;
     onNewTask: (time?: string) => void;
-    onEditTask: (task: any) => void;
+    onEditTask: (task: AppTask | CalendarEvent) => void;
     refreshTrigger: number;
     // items: TaskLocal[]; // Removed
 }

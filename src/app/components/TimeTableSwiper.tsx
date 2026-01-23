@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { addDays, differenceInCalendarDays } from 'date-fns';
 import { Box } from '@mui/material';
 import TimeTable from './TimeTable';
-import { TaskLocal } from './TimeTable';
+import { AppTask } from '@/types/task';
+import { CalendarEvent } from '@/types/calendar';
 // Import Swiper React components
 import { Swiper, SwiperSlide } from 'swiper/react';
 
@@ -19,7 +20,7 @@ interface TimeTableSwiperProps {
     currentDate: Date;
     onDateChange: (newDate: Date) => void;
     onNewTask: (time?: string) => void;
-    onEditTask: (task: any) => void;
+    onEditTask: (task: AppTask | CalendarEvent) => void;
     refreshTrigger: number | { timestamp: number; force: boolean };
     expiredCount?: number;
     onOpenExpired?: () => void;

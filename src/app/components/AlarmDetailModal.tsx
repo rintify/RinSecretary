@@ -4,22 +4,16 @@ import { Edit as EditIcon, Close as CloseIcon, NotificationsActive as AlarmIcon 
 import { format } from 'date-fns';
 import MarkdownDisplay from './MarkdownDisplay';
 
-interface AlarmLocal {
-    id: string;
-    title: string;
-    memo?: string;
-    startTime?: string | Date; // Used for generic compatibility
-    time?: string | Date;
-}
+import { CalendarEvent } from '@/types/calendar';
 
 interface AlarmDetailModalProps {
-    alarm: AlarmLocal;
+    alarm: CalendarEvent;
     onClose: () => void;
     onEdit: () => void;
 }
 
 export default function AlarmDetailModal({ alarm, onClose, onEdit }: AlarmDetailModalProps) {
-    const time = alarm.startTime || alarm.time;
+    const time = alarm.startTime;
 
     return (
         <Box sx={{ p: 3 }}>

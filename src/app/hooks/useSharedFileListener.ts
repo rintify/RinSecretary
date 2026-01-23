@@ -4,12 +4,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { uploadSharedFile, getLatestSharedFile } from '@/app/actions/shared-file';
 import { ModalType } from '../components/layout/AppHeader';
+import { ModalData } from '../components/modals/ModalController';
 
 import { useGlobalJobs } from '../context/GlobalJobContext';
 import { useToast } from '../context/ToastContext';
 
 interface UseSharedFileListenerProps {
-    onOpenModal: (modal: ModalType, data?: any) => void;
+    onOpenModal: (modal: ModalType, data?: ModalData) => void;
     currentDate: Date;
 }
 
@@ -68,7 +69,8 @@ export function useSharedFileListener({ onOpenModal }: UseSharedFileListenerProp
             sessionStorage.setItem('rin_last_uploaded_id', sharedFile.id);
             onOpenModal('SHARED_ITEM', sharedFile);
             
-        } catch (e: any) {
+        } catch (e: unknown) {
+            const err = e as Error;
             console.error('Upload failed', e);
             updateClientJob(jobId, { status: 'FAILED', error: 'アップロード失敗' });
             showToast('アップロードに失敗しました', 'error');

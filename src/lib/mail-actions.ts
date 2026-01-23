@@ -7,6 +7,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { revalidatePath } from 'next/cache';
+import { GmailMessage } from '@/types/mail';
+import { AiConfig } from '@prisma/client';
 
 export async function saveMailSettings(modelId: string, prompt: string) {
     const session = await auth();
@@ -17,7 +19,7 @@ export async function saveMailSettings(modelId: string, prompt: string) {
         data: {
             mailSummaryModelId: modelId,
             mailSummaryPrompt: prompt
-        } as any
+        }
     });
     return { success: true };
 }
@@ -40,7 +42,7 @@ export async function blockSender(email: string) {
     // Check if simple email check is enough or need better parsing.
     // Assume input is cleaned email.
     try {
-        await (prisma as any).mailBlockedSender.create({
+        await prisma.mailBlockedSender.create({
             data: {
                 userId: session.user.id,
                 email: email
@@ -57,7 +59,7 @@ export async function getBlockedSenders() {
     const session = await auth();
     if (!session?.user?.id) return [];
 
-    const list = await (prisma as any).mailBlockedSender.findMany({
+    const list = await prisma.mailBlockedSender.findMany({
         where: { userId: session.user.id },
         orderBy: { createdAt: 'desc' }
     });
@@ -68,7 +70,7 @@ export async function unblockSender(id: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    await (prisma as any).mailBlockedSender.delete({
+    await prisma.mailBlockedSender.delete({
         where: { 
             id: id,
             userId: session.user.id // Security check
@@ -91,8 +93,8 @@ export interface MailSummaryResult {
 }
 
 export async function generateSummaryFromData(
-    messages: any[], 
-    config: any, 
+    messages: GmailMessage[], 
+    config: AiConfig, 
     mailSummaryPrompt?: string
 ): Promise<MailSummaryResult> {
     if (messages.length === 0) {
@@ -166,23 +168,23 @@ output json only. no markdown code block.
             const textBlock = msg.content.find(c => c.type === 'text');
             resultText = textBlock ? textBlock.text : "";
         }
-    } catch (e) {
+    } catch (e: unknown) {
         console.error("AI Generation Failed", e);
         throw new Error("AI_ERROR");
     }
 
     try {
         const jsonStr = resultText.replace(/```json\n|\n```/g, '').trim();
-        let parsed: any = JSON.parse(jsonStr);
-        let result: MailSummaryResult = { topics: [], otherMessagesSummary: "", otherSenders: [] };
+        const parsed = JSON.parse(jsonStr) as Partial<MailSummaryResult> & { title?: string, summary?: string };
+        const result: MailSummaryResult = { topics: [], otherMessagesSummary: "", otherSenders: [] };
 
         if (parsed.topics) {
             result.topics = parsed.topics;
             result.otherMessagesSummary = parsed.otherMessagesSummary || "";
         } else if (Array.isArray(parsed)) {
-            result.topics = parsed;
+            result.topics = parsed as unknown as TopicCard[];
         } else if (parsed.title && parsed.summary) {
-            result.topics = [parsed];
+            result.topics = [parsed as unknown as TopicCard];
         }
         
         const allSenders = new Map<string, { name: string, email: string }>();
@@ -238,7 +240,7 @@ output json only. no markdown code block.
         result.otherSenders = Array.from(allSenders.values()).filter(s => !topicSenderEmails.has(s.email.toLowerCase()));
 
         return result;
-    } catch (e) {
+    } catch (e: unknown) {
         console.error("JSON Parse Error", e, resultText);
         throw new Error("AI_ERROR");
     }

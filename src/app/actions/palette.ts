@@ -4,7 +4,13 @@ import { devAuth as auth } from '@/lib/dev-auth';
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 
-export async function getPalette() {
+export interface PaletteItem {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export async function getPalette(): Promise<PaletteItem[] | null> {
   const session = await auth();
   if (!session?.user?.id) return null;
 
@@ -16,7 +22,7 @@ export async function getPalette() {
     if (palette) {
         // Parse JSON string
         try {
-            return JSON.parse(palette.palette);
+            return JSON.parse(palette.palette) as PaletteItem[];
         } catch(e) {
             return [];
         }
@@ -37,7 +43,7 @@ export async function getPalette() {
   }
 }
 
-export async function updatePalette(paletteData: any[]) {
+export async function updatePalette(paletteData: PaletteItem[]) {
   const session = await auth();
   if (!session?.user?.id) throw new Error('Unauthorized');
 
@@ -54,7 +60,7 @@ export async function updatePalette(paletteData: any[]) {
     });
     
     revalidatePath('/');
-    return JSON.parse(palette.palette);
+    return JSON.parse(palette.palette) as PaletteItem[];
   } catch (error) {
     console.error('Error updating palette:', error);
     throw new Error('Failed to update palette');

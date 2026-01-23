@@ -16,6 +16,8 @@ import TaskDetailModal from './TaskDetailModal';
 
 import TaskForm from './TaskForm';
 import { useToast } from '@/app/context/ToastContext';
+import { AppTask } from '@/types/task';
+import { CalendarEvent } from '@/types/calendar';
 
 // Transition for full screen dialog
 const Transition = React.forwardRef(function Transition(
@@ -27,37 +29,21 @@ const Transition = React.forwardRef(function Transition(
   return <Slide direction="up" ref={ref} {...props} />;
 });
 
-interface Task {
-    id: string;
-    title: string;
-    deadline?: Date | string; 
-    startTime?: Date | string;
-    endTime?: Date | string;
-    type?: string; 
-    progress?: number; 
-    maxProgress?: number;
-    memo?: string;
-    color?: string;
-    startDate?: Date | string;
-    [key: string]: any;
-}
+// We use AppTask from @/types/task instead
 
 interface ExpiredTaskListModalProps {
     open: boolean;
     onClose: () => void;
-    // We don't need onEditTask anymore as we handle it internally, 
-    // unless we want to use the parent's generic modal system.
-    // But user requested "Stacking", so internal management is better.
-    onEditTask?: (task: any) => void; 
+    onEditTask?: (task: AppTask) => void; 
 }
 
 export default function ExpiredTaskListModal({ open, onClose, onEditTask }: ExpiredTaskListModalProps) {
-    const [tasks, setTasks] = useState<Task[]>([]);
+    const [tasks, setTasks] = useState<AppTask[]>([]);
     const [loading, setLoading] = useState(false);
     const [extendingId, setExtendingId] = useState<string | null>(null);
 
     // Editing State (Stacking)
-    const [editingTask, setEditingTask] = useState<Task | null>(null);
+    const [editingTask, setEditingTask] = useState<AppTask | null>(null);
     const [isEditFormOpen, setIsEditFormOpen] = useState(false);
 
     // Menu State
@@ -70,13 +56,18 @@ export default function ExpiredTaskListModal({ open, onClose, onEditTask }: Expi
         try {
             const data = await getExpiredTasks(30);
              // Map nulls to undefined to match Task interface
-            const mappedData = data.map(t => ({
-                ...t,
-                memo: t.memo || undefined,
-                deadline: t.deadline ? new Date(t.deadline) : undefined,
-                startDate: t.startDate ? new Date(t.startDate) : undefined,
-                createdAt: t.createdAt ? new Date(t.createdAt) : undefined,
-                updatedAt: t.updatedAt ? new Date(t.updatedAt) : undefined,
+            const mappedData: AppTask[] = data.map(t => ({
+                id: t.id,
+                title: t.title,
+                memo: t.memo || null,
+                deadline: t.deadline || new Date(),
+                startDate: t.startDate || new Date(),
+                createdAt: t.createdAt || new Date(),
+                updatedAt: t.updatedAt || new Date(),
+                progress: t.progress || 0,
+                maxProgress: t.maxProgress || 100,
+                checklist: t.checklist || '[]',
+                userId: t.userId
             }));
             setTasks(mappedData);
         } catch (e) {
@@ -140,8 +131,10 @@ export default function ExpiredTaskListModal({ open, onClose, onEditTask }: Expi
         }
     };
 
-    const handleTaskClick = (task: Task) => {
-        setEditingTask(task);
+    const handleTaskClick = (task: AppTask | CalendarEvent) => {
+        if ('deadline' in task) {
+             setEditingTask(task as AppTask);
+        }
     };
 
     const handleDetailClose = () => {

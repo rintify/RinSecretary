@@ -10,16 +10,9 @@ import { format, subHours } from 'date-fns';
 import { createAlarm } from '@/lib/alarm-actions';
 import MarkdownDisplay from './MarkdownDisplay';
 
-interface Task {
-    id: string;
-    title: string;
-    memo?: string;
-    startDate?: string | Date;
-    deadline?: string | Date;
-    progress?: number;
-    maxProgress?: number;
-    checklist?: string;
-}
+import { AppTask } from '@/types/task';
+
+// We use AppTask instead
 
 interface ChecklistItem {
     id?: string;
@@ -28,7 +21,7 @@ interface ChecklistItem {
 }
 
 interface TaskDetailModalProps {
-    task: Task;
+    task: AppTask;
     onClose: () => void;
     onEdit: () => void;
     onUpdate?: () => void; // Trigger refresh

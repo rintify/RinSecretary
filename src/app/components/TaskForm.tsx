@@ -15,12 +15,13 @@ import { Reorder, useDragControls } from 'framer-motion';
 import { useTimeRange } from '../hooks/useTimeRange';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
+import { AppTask } from '@/types/task';
 
 interface TaskFormProps {
     taskId?: string;
     onSuccess?: (date?: Date) => void;
     isModal?: boolean;
-    initialValues?: any;
+    initialValues?: Partial<AppTask>;
     initialDate?: Date;
 }
 
@@ -99,7 +100,7 @@ export default function TaskForm(props: TaskFormProps) {
     useEffect(() => {
         if (taskId && props.initialValues) {
              const task = props.initialValues;
-             setTitle(task.title);
+             if (task.title !== undefined) setTitle(task.title);
              setMemo(task.memo || '');
              if (task.startDate) {
                  setStartDate(format(new Date(task.startDate), "yyyy-MM-dd'T'HH:mm"));
@@ -337,7 +338,7 @@ export default function TaskForm(props: TaskFormProps) {
                     if (e.nativeEvent.isComposing) return;
                     if (e.key === 'Enter') {
                         e.preventDefault();
-                        handleSubmit(e as any);
+                        handleSubmit(e as unknown as React.FormEvent<HTMLFormElement>);
                     }
                 }}
                 size="small"

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { devAuth } from '@/lib/dev-auth';
 import { prisma } from '@/lib/prisma';
 
+import { Prisma } from '@prisma/client';
+
 export const dynamic = 'force-dynamic';
 
 interface SyncRequest {
@@ -23,7 +25,7 @@ export async function POST(req: Request) {
     const sinceDate = lastSyncedAt ? new Date(lastSyncedAt) : new Date(0);
 
     // Build where clause for active attachments
-    const whereClause: any = {
+    const whereClause: Prisma.AttachmentWhereInput = {
         memo: {
             userId: userId
         },
@@ -51,7 +53,7 @@ export async function POST(req: Request) {
     });
 
     // Get deleted attachment IDs since lastSyncedAt
-    const deletedWhereClause: any = {
+    const deletedWhereClause: Prisma.AttachmentWhereInput = {
         memo: {
             userId: userId
         },

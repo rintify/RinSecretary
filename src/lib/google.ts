@@ -2,6 +2,8 @@ import { google } from 'googleapis';
 
 import { prisma } from './prisma';
 import { decode } from 'js-base64';
+import { GmailMessage } from '@/types/mail';
+import { calendar_v3, drive_v3 } from 'googleapis';
 
 // Helper to get the primary Google account (matching user email)
 async function getPrimaryGoogleAccount(userId: string) {
@@ -102,10 +104,11 @@ export async function getGoogleCalendarEvents(userId: string, timeMin?: Date, ti
       orderBy: 'startTime',
     });
 
-    return response.data.items || [];
+    return (response.data.items || []) as calendar_v3.Schema$Event[];
 
-  } catch (error: any) {
-    if (error?.message?.includes('invalid_grant')) {
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    if (err.message?.includes('invalid_grant')) {
       console.warn('getGoogleCalendarEvents: Invalid grant (token expired/revoked). Clearing account to force re-login.');
       // Logic for deleting account on auth error
       // Ideally we only delete if we are SURE which one caused it. 
@@ -129,7 +132,7 @@ export async function getGoogleCalendarEvents(userId: string, timeMin?: Date, ti
   }
 }
 
-export async function createGoogleCalendarEvent(userId: string, eventData: any) {
+export async function createGoogleCalendarEvent(userId: string, eventData: calendar_v3.Schema$Event) {
     try {
         const account = await getPrimaryGoogleAccount(userId);
         if (!account?.access_token) return null;
@@ -152,7 +155,7 @@ export async function createGoogleCalendarEvent(userId: string, eventData: any) 
     }
 }
 
-export async function updateGoogleCalendarEvent(userId: string, eventId: string, eventData: any) {
+export async function updateGoogleCalendarEvent(userId: string, eventId: string, eventData: calendar_v3.Schema$Event) {
      try {
         const account = await getPrimaryGoogleAccount(userId);
         if (!account?.access_token) return null;
@@ -209,7 +212,7 @@ export async function getGmailMessages(userId: string, timeMin: Date, timeMax?: 
              throw new Error("AUTH_ERROR");
         }
 
-        const allMessages: any[] = [];
+        const allMessages: GmailMessage[] = [];
 
         for (const account of accounts) {
             try {
@@ -305,10 +308,10 @@ export async function getGmailMessages(userId: string, timeMin: Date, timeMax?: 
                         const content = fullBody || detail.data.snippet || '';
 
                         return {
-                            id: msg.id,
+                            id: msg.id || '',
                             from,
                             subject,
-                            date,
+                            date: date || '',
                             content: content.substring(0, 2000)
                         };
                      } catch(e) {
@@ -319,9 +322,10 @@ export async function getGmailMessages(userId: string, timeMin: Date, timeMax?: 
                 
                 allMessages.push(...emailDetails.filter(e => e !== null));
 
-            } catch (e: any) {
+            } catch (e: unknown) {
+                const err = e as { message?: string };
                 console.error(`Failed to fetch gmail for account ${account.id}`, e);
-                if (e?.message?.includes('invalid_grant')) {
+                if (err.message?.includes('invalid_grant')) {
                     // Maybe we shouldn't delete immediately if transient, but consistency with old logic:
                      await prisma.account.delete({
                          where: { id: account.id }
@@ -333,7 +337,7 @@ export async function getGmailMessages(userId: string, timeMin: Date, timeMax?: 
 
         return allMessages;
 
-    } catch (e: any) {
+    } catch (e: unknown) {
         // If critical outer error
         throw e;
     }
@@ -368,9 +372,10 @@ export async function findDriveFolder(userId: string, folderName: string, parent
             return res.data.files[0];
         }
         return null;
-    } catch (e: any) {
+    } catch (e: unknown) {
+        const err = e as { message?: string };
         console.error('Failed to find Drive folder', e);
-        if (e?.message?.includes('invalid_grant')) {
+        if (err.message?.includes('invalid_grant')) {
              throw new Error("AUTH_ERROR"); // Re-throw auth error
         }
         return null; // Return null for other errors (e.g. not found)
@@ -389,7 +394,7 @@ export async function createDriveFolder(userId: string, folderName: string, pare
         auth.setCredentials({ access_token: account.access_token, refresh_token: account.refresh_token });
         const drive = google.drive({ version: 'v3', auth });
 
-        const fileMetadata: any = {
+        const fileMetadata: drive_v3.Schema$File = {
             name: folderName,
             mimeType: 'application/vnd.google-apps.folder',
         };
@@ -429,7 +434,7 @@ export async function uploadToGoogleDrive(
         auth.setCredentials({ access_token: account.access_token, refresh_token: account.refresh_token });
         const drive = google.drive({ version: 'v3', auth });
 
-        const fileMetadata: any = {
+        const fileMetadata: drive_v3.Schema$File = {
             name: filename,
         };
         if (parentId) {
@@ -483,9 +488,10 @@ export async function findDriveFile(userId: string, filename: string, parentId?:
             return res.data.files[0];
         }
         return null;
-    } catch (e: any) {
+    } catch (e: unknown) {
+        const err = e as { message?: string };
         console.error('Failed to find Drive file', e);
-         if (e?.message?.includes('invalid_grant')) {
+         if (err.message?.includes('invalid_grant')) {
              throw new Error("AUTH_ERROR");
         }
         return null; 

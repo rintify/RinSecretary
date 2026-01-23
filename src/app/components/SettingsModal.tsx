@@ -73,7 +73,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     const loadConfigs = async () => {
         try {
             const configs = await getAIConfigs();
-            setAiConfigs(configs as any); 
+            if (configs) setAiConfigs(configs as AIConfig[]); 
         } catch(e) {
             console.error("Failed to load AI configs", e);
         }

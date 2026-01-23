@@ -9,6 +9,12 @@ import { TransitionProps } from '@mui/material/transitions';
 import { isSameDay, subDays, format, formatDistanceToNow } from 'date-fns';
 import { ModalType } from '../layout/AppHeader';
 import { ja } from 'date-fns/locale';
+import { AppTask } from '@/types/task';
+import { CalendarEvent } from '@/types/calendar';
+import { isAppTask, isCalendarEvent, isAlarmType, isSharedFile } from '@/types/guards';
+import { Message } from '../AIChatModal';
+import { SharedFile } from './SharedItemModal';
+import { MailSummary } from '@prisma/client';
 
 // Static imports for frequently used lightweight modals
 import TaskForm from '../TaskForm';
@@ -37,7 +43,7 @@ const SharedItemModal = dynamic(() => import('./SharedItemModal'), { ssr: false 
 const LocalSettingsModal = dynamic(() => import('../LocalSettingsModal'), { ssr: false });
 
 const SlideTransition = React.forwardRef(function Transition(
-    props: TransitionProps & { children: React.ReactElement<any, any>; },
+    props: TransitionProps & { children: React.ReactElement; },
     ref: React.Ref<unknown>,
 ) {
     return <Slide direction="up" ref={ref} {...props} />;
@@ -51,15 +57,17 @@ const getBusinessDate = () => {
     return now;
 };
 
+export type ModalData = AppTask | CalendarEvent | SharedFile | { startTime?: string } | { initialMessages?: Message[] } | { id: string } | null;
+
 interface ModalControllerProps {
     activeModal: ModalType;
-    modalData: any;
+    modalData: ModalData;
     currentDate: Date;
-    onCloseModal: (arg?: any) => void;
+    onCloseModal: (arg?: Date | unknown) => void;
     onEditFromDetail: () => void;
     onTaskRefresh: () => void;
     onCalendarRefresh: (force?: boolean) => void;
-    onTaskClick: (task: any) => void;
+    onTaskClick: (task: AppTask | CalendarEvent) => void;
     // Sync Status Dialog
     showSyncModal: boolean;
     onCloseSyncModal: () => void;
@@ -75,7 +83,7 @@ interface ModalControllerProps {
         alarms: Date | null;
     };
     // Mail Summary
-    unreadSummaries: any[];
+    unreadSummaries: MailSummary[];
     showUnreadModal: boolean;
     onCloseUnreadModal: () => void;
 }
@@ -120,9 +128,9 @@ export default function ModalController({
             >
                 <DialogContent sx={{ p: 0 }}>
                     <Suspense fallback={<Box p={4}>Loading...</Box>}>
-                        {activeModal === 'EDIT_TASK' && (
+                        {activeModal === 'EDIT_TASK' && isAppTask(modalData) && (
                             <TaskForm 
-                                taskId={modalData?.id} 
+                                taskId={modalData.id} 
                                 initialValues={modalData}
                                 onSuccess={onCloseModal} 
                                 isModal
@@ -130,21 +138,21 @@ export default function ModalController({
                         )}
                         {activeModal === 'NEW_EVENT' && (
                             <EventForm
-                                initialStartTime={modalData?.startTime}
+                                initialStartTime={modalData && 'startTime' in modalData && typeof modalData.startTime === 'string' ? modalData.startTime : undefined}
                                 onSuccess={onCloseModal}
                                 isModal
                                 initialDate={isSameDay(currentDate, getBusinessDate()) ? new Date() : currentDate}
                             />
                         )}
-                        {activeModal === 'EDIT_EVENT' && (
+                        {activeModal === 'EDIT_EVENT' && isCalendarEvent(modalData) && (
                             <EventForm 
-                                eventId={modalData?.id}
+                                eventId={modalData.id}
                                 initialValues={modalData}
                                 onSuccess={onCloseModal} 
                                 isModal
                             />
                         )}
-                        {activeModal === 'DETAIL_TASK' && (
+                        {activeModal === 'DETAIL_TASK' && isAppTask(modalData) && (
                             <TaskDetailModal
                                 task={modalData}
                                 onClose={onCloseModal}
@@ -152,22 +160,22 @@ export default function ModalController({
                                 onUpdate={onTaskRefresh}
                             />
                         )}
-                        {activeModal === 'DETAIL_EVENT' && (
+                        {activeModal === 'DETAIL_EVENT' && isCalendarEvent(modalData) && (
                             <EventDetailModal
                                 event={modalData}
                                 onClose={onCloseModal}
                                 onEdit={onEditFromDetail}
                             />
                         )}
-                        {activeModal === 'EDIT_ALARM' && (
+                        {activeModal === 'EDIT_ALARM' && isCalendarEvent(modalData) && (
                             <AlarmForm
-                                alarmId={modalData?.id}
+                                alarmId={modalData.id}
                                 initialValues={modalData}
                                 onSuccess={onCloseModal}
                                 isModal
                             />
                         )}
-                        {activeModal === 'DETAIL_ALARM' && (
+                        {activeModal === 'DETAIL_ALARM' && isCalendarEvent(modalData) && (
                             <AlarmDetailModal
                                 alarm={modalData}
                                 onClose={onCloseModal}
@@ -245,7 +253,11 @@ export default function ModalController({
 
             {/* AI Chat Modal */}
             {activeModal === 'AI_CHAT' && (
-                <AIChatModal open={true} onClose={onCloseModal} initialMessages={modalData?.initialMessages} />
+                <AIChatModal 
+                    open={true} 
+                    onClose={onCloseModal} 
+                    initialMessages={modalData && 'initialMessages' in modalData ? (modalData as { initialMessages: Message[] }).initialMessages : undefined} 
+                />
             )}
 
             {/* Local Settings Modal */}
@@ -253,8 +265,8 @@ export default function ModalController({
                 <LocalSettingsModal open={true} onClose={onCloseModal} />
             )}
 
-            {/* Immediate Action Flows */}
-            {activeModal === 'SHARED_ITEM' && (
+            {/* Shared Item Modal */}
+            {activeModal === 'SHARED_ITEM' && isSharedFile(modalData) && (
                 <SharedItemModal
                     open={true}
                     onClose={onCloseModal}

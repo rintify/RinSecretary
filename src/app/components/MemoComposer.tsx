@@ -13,6 +13,7 @@ import { useConflict } from '../context/ConflictContext';
 import { useGlobalJobs } from '../context/GlobalJobContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
+import * as monaco from 'monaco-editor';
 import { db } from '@/lib/db';
 import { syncManager } from '@/lib/sync-manager';
 import { OFFLINE_FILE_SIZE_LIMIT } from '@/lib/constants';
@@ -284,7 +285,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         }
     };
 
-    const editorInstanceRef = useRef<any>(null);
+    const editorInstanceRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     useImperativeHandle(ref, () => ({
@@ -293,8 +294,8 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
         insertContent: (text: string) => {
             if (editorMode === 'monaco' && editorInstanceRef.current) {
                 const editor = editorInstanceRef.current;
-                const contribution = editor.getContribution('snippetController2');
-                if (contribution) {
+                const contribution = editor.getContribution('snippetController2') as { insert: (text: string) => void } | null;
+                if (contribution && typeof contribution.insert === 'function') {
                     contribution.insert(text);
                 } else {
                     const position = editor.getPosition();
@@ -325,14 +326,16 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     }));
 
     const handlePaste = async (e: React.ClipboardEvent | ClipboardEvent) => {
-        const clipboardData = (e as any).clipboardData || (window as any).clipboardData;
+        const clipboardData = ('clipboardData' in e) ? e.clipboardData : (e as unknown as { clipboardData: DataTransfer | null }).clipboardData;
         if (!clipboardData) return;
 
         const items = clipboardData.items;
         for (let i = 0; i < items.length; i++) {
             if (items[i].kind === 'file') {
                 e.preventDefault();
-                (e as any).stopImmediatePropagation?.();
+                if ('stopImmediatePropagation' in e) {
+                    (e as unknown as { stopImmediatePropagation: () => void }).stopImmediatePropagation();
+                }
                 const file = items[i].getAsFile();
                 if (file) await uploadFile(file);
                 return;
@@ -344,7 +347,7 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     useEffect(() => { handlePasteRef.current = handlePaste; });
     
     // Monaco Paste Handling
-    const [editorInstance, setEditorInstance] = useState<any>(null);
+    const [editorInstance, setEditorInstance] = useState<monaco.editor.IStandaloneCodeEditor | null>(null);
     useEffect(() => {
         if (!editorInstance) return;
         const listener = (e: ClipboardEvent) => {
@@ -503,14 +506,16 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
                     updateClientJob(jobId, { status: 'COMPLETED', progress: 100 });
                 }
                 
-            } catch (err: any) {
+            } catch (e: unknown) {
+                const err = e as Error;
                 updateClientJob(jobId, { status: 'FAILED', error: err.message });
                 throw err;
             }
 
-        } catch (e: any) {
-            console.error(e);
-            showToast(e.message || 'アップロードに失敗しました', 'error');
+        } catch (e: unknown) {
+            const err = e as Error;
+            console.error(err);
+            showToast(err.message || 'アップロードに失敗しました', 'error');
         } finally {
             setUploading(false);
         }
@@ -519,8 +524,8 @@ const MemoComposer = forwardRef<MemoComposerRef, MemoComposerProps>(
     const insertMarkdown = (markdown: string) => {
         if (editorMode === 'monaco' && editorInstanceRef.current) {
             const editor = editorInstanceRef.current;
-            const contribution = editor.getContribution('snippetController2');
-            if (contribution) {
+            const contribution = editor.getContribution('snippetController2') as { insert: (text: string) => void } | null;
+            if (contribution && typeof contribution.insert === 'function') {
                 contribution.insert(markdown);
             } else {
                 const position = editor.getPosition();

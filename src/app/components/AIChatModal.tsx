@@ -94,21 +94,24 @@ export default function AIChatModal({ open, onClose, initialMessages }: AIChatMo
     useEffect(() => {
         if (open) {
             getAIConfigs().then(data => {
-                setConfigs(data as any);
+                setConfigs(data.map(c => ({ id: c.id, name: c.name })));
                 if (data.length > 0 && !selectedConfigId) {
                     setSelectedConfigId(data[0].id);
                 }
             });
             scrollToBottom();
         }
-    }, [messages, open]);
+    }, [messages, open, selectedConfigId]);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             const reader = new FileReader();
             reader.onloadend = () => {
-                setAttachments(prev => [...prev, { file, preview: reader.result as string }]);
+                const result = reader.result;
+                if (typeof result === 'string') {
+                    setAttachments(prev => [...prev, { file, preview: result }]);
+                }
             };
             reader.readAsDataURL(file);
         }
@@ -151,7 +154,7 @@ export default function AIChatModal({ open, onClose, initialMessages }: AIChatMo
             // Submit Job
             const job = await submitJob('AI_CHAT', {
                 messages: [...messages, userMsg].map(m => ({ 
-                    role: m.role as 'user'|'assistant', 
+                    role: m.role, 
                     content: m.content,
                     images: m.images
                 })),
@@ -203,7 +206,7 @@ export default function AIChatModal({ open, onClose, initialMessages }: AIChatMo
             };
             pollResult();
 
-        } catch (error: any) {
+        } catch (error) {
             console.error(error);
             setMessages(prev => prev.map(m => 
                 m.id === aiMsgId 
@@ -225,7 +228,7 @@ export default function AIChatModal({ open, onClose, initialMessages }: AIChatMo
     const handleSaveMemo = async () => {
         if (messages.length === 0) return;
         
-        const historyText = messages.map((m: any) => 
+        const historyText = messages.map((m: Message) => 
             `**${m.role === 'user' ? 'User' : 'AI'}**: ${m.content}`
         ).join('\n\n');
         

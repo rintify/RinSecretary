@@ -14,10 +14,11 @@ import CustomTimePicker from './ui/CustomTimePicker';
 import { useTimeRange } from '../hooks/useTimeRange';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
+import { CalendarEvent } from '@/types/calendar';
 
 interface EventFormProps {
     eventId?: string;
-    initialValues?: any;
+    initialValues?: CalendarEvent;
     initialStartTime?: string;
     onSuccess?: (date?: Date) => void;
     isModal?: boolean;
@@ -147,8 +148,8 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
         setPickerConfig(null); 
     };
 
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
+    const handleSubmit = async (e?: React.FormEvent<HTMLFormElement> | React.KeyboardEvent) => {
+        if (e) e.preventDefault();
         setLoading(true);
 
         try {
@@ -254,8 +255,7 @@ export default function EventForm({ eventId, initialValues, initialStartTime, on
                 onKeyDown={(e) => {
                     if (e.nativeEvent.isComposing) return;
                     if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSubmit(e as any);
+                        handleSubmit(e);
                     }
                 }}
                 size="small"

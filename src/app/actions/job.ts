@@ -8,7 +8,7 @@ import { processJob } from '@/lib/job-processor';
 // Job Types
 export type JobType = 'AI_CHAT' | 'BACKUP' | 'MAIL_SUMMARY';
 
-export async function submitJob(type: JobType, payload: any) {
+export async function submitJob(type: JobType, payload: unknown) {
     const session = await devAuth();
     if (!session?.user?.id) throw new Error('Unauthorized');
 

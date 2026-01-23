@@ -131,12 +131,12 @@ const MarkdownDisplay = memo(function MarkdownDisplay({ children, attachments = 
     }, [attachments, onImageClick]);
 
     const markdownComponents = useMemo(() => ({
-        a: ({node, ...props}: any) => {
+        a: ({ node, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { node?: unknown }) => {
             const href = (props.href || '') as string;
             const original = <a {...props} href={href} style={{ color: '#1976d2', textDecoration: 'underline' }} target="_blank" rel="noopener noreferrer" />;
             return renderAttachment(href, original, false);
         },
-        img: (props: any) => {
+        img: ({ node, ...props }: React.ImgHTMLAttributes<HTMLImageElement> & { node?: unknown }) => {
             const src = (props.src || '') as string;
             // For external or any image, use SmartImage for consistent behavior
             return (
@@ -147,8 +147,8 @@ const MarkdownDisplay = memo(function MarkdownDisplay({ children, attachments = 
                 />
             );
         },
-        p: ({node, ...props}: any) => <div {...props} style={{ margin: 0, marginBottom: '0.5em' }} />,
-        pre: ({node, ...props}: any) => (
+        p: ({ node, ...props }: React.HTMLAttributes<HTMLParagraphElement> & { node?: unknown }) => <div {...props} style={{ margin: 0, marginBottom: '0.5em' }} />,
+        pre: ({ node, ...props }: React.HTMLAttributes<HTMLPreElement> & { node?: unknown }) => (
             <pre 
                 {...props} 
                 style={{ 
@@ -162,7 +162,7 @@ const MarkdownDisplay = memo(function MarkdownDisplay({ children, attachments = 
                 }} 
             />
         ),
-        code: ({node, className, children, ...props}: any) => {
+        code: ({ node, className, children, ...props }: React.HTMLAttributes<HTMLElement> & { node?: unknown, className?: string }) => {
             const match = /language-(\w+)/.exec(className || '')
             const isInline = !match && !String(children).includes('\n')
             return isInline ? (
@@ -186,9 +186,9 @@ const MarkdownDisplay = memo(function MarkdownDisplay({ children, attachments = 
                 </code>
             )
         },
-        ol: ({node, ...props}: any) => <ol {...props} style={{ paddingLeft: '1.2rem', marginBlock: '0.5rem' }} />,
-        ul: ({node, ...props}: any) => <ul {...props} style={{ paddingLeft: '1.2rem', marginBlock: '0.5rem' }} />,
-        li: ({node, ...props}: any) => <li {...props} style={{ marginBottom: '0.2rem' }} />
+        ol: ({ node, ...props }: React.OlHTMLAttributes<HTMLOListElement> & { node?: unknown }) => <ol {...props} style={{ paddingLeft: '1.2rem', marginBlock: '0.5rem' }} />,
+        ul: ({ node, ...props }: React.HTMLAttributes<HTMLUListElement> & { node?: unknown }) => <ul {...props} style={{ paddingLeft: '1.2rem', marginBlock: '0.5rem' }} />,
+        li: ({ node, ...props }: React.LiHTMLAttributes<HTMLLIElement> & { node?: unknown }) => <li {...props} style={{ marginBottom: '0.2rem' }} />
     }), [onImageClick, renderAttachment]);
 
     const markdownContent = useMemo(() => (

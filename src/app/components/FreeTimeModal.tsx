@@ -21,6 +21,8 @@ import CustomDatePicker from './ui/CustomDatePicker';
 
 import CustomTimePicker from './ui/CustomTimePicker';
 import { useToast } from '@/app/context/ToastContext';
+import { CalendarEvent, AlarmEvent } from '@/types/calendar';
+import { AppTask } from '@/types/task';
 
 interface FreeTimeModalProps {
     onClose: () => void;
@@ -105,13 +107,13 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             const busySlots: { start: Date, end: Date }[] = [];
 
             // Helper to parse dates
-            const toDate = (d: any) => new Date(d);
+            const toDate = (d: string | Date) => new Date(d);
 
             // Google Events
             // fetchGoogleEvents returns { events: [], fetchedAt: number }
             const googleEvents = googleRes?.events || [];
             if (Array.isArray(googleEvents)) {
-                googleEvents.forEach((e: any) => {
+                (googleEvents as CalendarEvent[]).forEach((e) => {
                     if (e.startTime && e.endTime) {
                         busySlots.push({ start: toDate(e.startTime), end: toDate(e.endTime) });
                     }
@@ -120,19 +122,19 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
 
             // Alarms (Point in time, but maybe treat as a small block? Prompt says "Event + Margin". User didn't specify Alarm duration. Let's assume Alarms take 0 time but margin will apply around it.)
             if (Array.isArray(alarms)) {
-                alarms.forEach((a: any) => {
-                    if (a.time) {
+                (alarms as CalendarEvent[]).forEach((a) => {
+                    if (a.startTime) {
                         // Treat as 0-minute event
-                        busySlots.push({ start: toDate(a.time), end: toDate(a.time) });
+                        busySlots.push({ start: toDate(a.startTime), end: toDate(a.startTime) });
                     }
                 });
             }
 
             // DB Tasks (if they have start/end time, they are events effectively)
             if (Array.isArray(tasksRes)) {
-                tasksRes.forEach((t: any) => {
-                    if (t.startTime && t.endTime) {
-                         busySlots.push({ start: toDate(t.startTime), end: toDate(t.endTime) });
+                (tasksRes as AppTask[]).forEach((t) => {
+                    if (t.startDate && t.deadline) {
+                         busySlots.push({ start: toDate(t.startDate), end: toDate(t.deadline) });
                     }
                 });
             }
@@ -230,9 +232,10 @@ export default function FreeTimeModal({ onClose }: FreeTimeModalProps) {
             showToast('抽出結果をクリップボードにコピーしました', 'success');
             onClose();
 
-        } catch (e: any) {
-            console.error(e);
-            showToast(`抽出に失敗しました: ${e.message || String(e)}`, 'error');
+        } catch (err) {
+            console.error(err);
+            const message = err instanceof Error ? err.message : String(err);
+            showToast(`抽出に失敗しました: ${message}`, 'error');
         } finally {
             setLoading(false);
         }

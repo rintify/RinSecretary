@@ -3,6 +3,7 @@
 import { devAuth as auth } from '@/lib/dev-auth';
 import { prisma } from '@/lib/prisma'; // Assuming prisma instance is exported from here, need to verify
 import { revalidatePath } from 'next/cache';
+import { CalendarEvent } from '@/types/calendar';
 
 export async function getAlarms(start: Date, end: Date) {
   const session = await auth();
@@ -27,13 +28,13 @@ export async function getAlarms(start: Date, end: Date) {
   return alarms.map(alarm => ({
     id: alarm.id,
     title: alarm.title,
-    startTime: alarm.time, // Map to startTime for TimeTable compatibility
-    // No endTime for alarms
-    type: 'ALARM',
+    startTime: alarm.time,
+    endTime: alarm.time, // Same as startTime for Alarms
+    type: 'ALARM' as const,
     memo: alarm.comment,
-    color: '#FF4500', // distinct color, e.g., OrangeRed
+    color: '#FF4500', 
     isSent: alarm.isSent,
-  }));
+  }) as CalendarEvent);
 }
 
 export async function createAlarm(data: { title: string; time: string | Date; comment?: string }) {

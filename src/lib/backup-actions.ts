@@ -55,9 +55,10 @@ export async function manualBackup() {
     try {
         await performBackup(user.id);
         return { success: true };
-    } catch (e: any) {
-        console.error(e);
-        return { success: false, error: e.message };
+    } catch (e: unknown) {
+        const err = e as Error;
+        console.error(err);
+        return { success: false, error: err.message };
     }
 }
 
@@ -77,7 +78,7 @@ export async function performBackup(userId: string) {
         if (!rootFolder || !rootFolder.id) throw new Error('Failed to access backup root folder');
 
         // Helper to upsert file
-        const upsertFile = async (filename: string, content: any, mimeType: string, parentId: string) => {
+        const upsertFile = async (filename: string, content: string | fs.ReadStream, mimeType: string, parentId: string) => {
             const existing = await findDriveFile(userId, filename, parentId);
             if (existing && existing.id) {
                 await updateDriveFile(userId, existing.id, content, mimeType);
@@ -99,7 +100,9 @@ export async function performBackup(userId: string) {
         });
         
         if (user) {
-            const { password, sessions, ...safeUser } = user as any; 
+            // Destructure to remove sensitive info
+            // Since we imported Prisma, we can use it or just avoid any
+            const { password, ...safeUser } = user;
             const settingsJson = JSON.stringify(safeUser, null, 2);
             await upsertFile('UserInfo.json', settingsJson, 'application/json', rootFolder.id);
         }
@@ -170,13 +173,14 @@ export async function performBackup(userId: string) {
         console.log(`Backup completed successfully for user ${userId}`);
         return { success: true, folderName };
 
-    } catch (e: any) {
-        console.error(`Backup failed for user ${userId}`, e);
+    } catch (e: unknown) {
+        const err = e as Error;
+        console.error(`Backup failed for user ${userId}`, err);
         await prisma.backupConfig.upsert({
             where: { userId },
-            update: { lastBackupAt: new Date(), lastStatus: 'FAILED', lastError: e.message },
-            create: { userId, lastBackupAt: new Date(), lastStatus: 'FAILED', lastError: e.message }
+            update: { lastBackupAt: new Date(), lastStatus: 'FAILED', lastError: err.message },
+            create: { userId, lastBackupAt: new Date(), lastStatus: 'FAILED', lastError: err.message }
         });
-        throw e;
+        throw err;
     }
 }

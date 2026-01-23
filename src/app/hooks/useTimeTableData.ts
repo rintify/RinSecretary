@@ -3,7 +3,8 @@ import { addDays, subDays, differenceInMinutes } from 'date-fns';
 import { fetchGoogleEvents, checkPrimaryGoogleAccountStatus } from '@/lib/calendar-actions';
 import { getAlarms } from '@/lib/alarm-actions';
 import { getExpiredTaskCount } from '@/lib/task-actions';
-import { TaskLocal } from '../components/TimeTable';
+import { AppTask } from '@/types/task';
+import { CalendarEvent } from '@/types/calendar';
 
 const FETCH_WINDOW_DAYS = 7;
 const BUFFER_DAYS = 2;
@@ -14,7 +15,7 @@ interface UseTimeTableDataOptions {
 }
 
 interface UseTimeTableDataReturn {
-    items: TaskLocal[];
+    items: (AppTask | CalendarEvent)[];
     expiredCount: number;
     isSyncing: boolean;
     lastSyncedAt: {
@@ -59,7 +60,8 @@ export function useTimeTableData({ currentDate, refreshTrigger }: UseTimeTableDa
                     client: new Date(ts.client)
                 };
             } else if (typeof ts === 'number') {
-                (newTs as any)[key] = new Date(ts);
+                if (key === 'tasks') newTs.tasks = new Date(ts);
+                else if (key === 'alarms') newTs.alarms = new Date(ts);
             }
             
             // Re-calculate global latest
