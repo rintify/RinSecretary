@@ -1,6 +1,0 @@
-
-model SystemSetting {
-  key   String @id
-  value String // JSON or simple string
-  updatedAt DateTime @updatedAt
-}
