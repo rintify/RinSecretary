@@ -87,13 +87,12 @@ model Task {
   startDate   DateTime?
   dueDate     DateTime?
   progress    Int       @default(0) // 進捗率 0-100等
-  categoryId  String?
+  priority    Int       @default(0) // 優先度 (例: 0=なし, 1=低, 2=中, 3=高)
   isCompleted Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category      CategoryMap?    @relation(fields: [categoryId], references: [id])
   checklist     ChecklistItem[]
   alarms        AlarmNotification[]
 }
@@ -117,7 +116,7 @@ model RecurringTask {
   title          String
   description    String?
   cronExpression String   // 実行タイミング (例: 0 9 * * 1)
-  categoryId     String?
+  isActive       Boolean  @default(true) // 有効・無効（一時停止）フラグ
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -132,19 +131,6 @@ model RecurringTemplate {
   orderIdx        Int      @default(0)
 
   recurringTask RecurringTask @relation(fields: [recurringTaskId], references: [id], onDelete: Cascade)
-}
-
-// ------------------------------------
-// 5. スケジュール表示のためのマッピング情報 (Category/Color)
-// ------------------------------------
-model CategoryMap {
-  id        String   @id @default(uuid())
-  name      String
-  colorHex  String   // 例: #FF0000
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  tasks Task[]
 }
 
 // ------------------------------------

@@ -4,9 +4,10 @@ export async function syncData() {
   try {
     // 1. ローカルから未同期のデータ(created, updated, deleted)を抽出
     const unsyncedTasks = await db.tasks.where('_syncStatus').notEqual('synced').toArray();
-
-    // 未同期データがゼロで、なおかつ初回同期等でなければスキップしてもよいが
-    // サーバー側で変更があったデータ（他デバイスからの更新）を受信するために常にフェッチする
+    const unsyncedUserSettings = await db.userSettings.where('_syncStatus').notEqual('synced').toArray();
+    const unsyncedRecurringTasks = await db.recurringTasks.where('_syncStatus').notEqual('synced').toArray();
+    const unsyncedRecurringTemplates = await db.recurringTemplates.where('_syncStatus').notEqual('synced').toArray();
+    const unsyncedNotes = await db.notes.where('_syncStatus').notEqual('synced').toArray();
 
     // 2. 前回同期日時の取得
     const lastSyncedAtStr = localStorage.getItem('rimini_last_synced_at');
@@ -20,6 +21,10 @@ export async function syncData() {
         lastSyncedAt,
         changes: {
           tasks: unsyncedTasks,
+          userSettings: unsyncedUserSettings,
+          recurringTasks: unsyncedRecurringTasks,
+          recurringTemplates: unsyncedRecurringTemplates,
+          notes: unsyncedNotes,
         },
       }),
     });
@@ -34,21 +39,62 @@ export async function syncData() {
     const { pulledChanges, timestamp } = data;
 
     // 4. 送信処理が成功したローカルデータの _syncStatus を 'synced' へ更新
-    if (unsyncedTasks.length > 0) {
+    const markSynced = async <T extends { id: string }>(
+      table:
+        | typeof db.tasks
+        | typeof db.userSettings
+        | typeof db.recurringTasks
+        | typeof db.recurringTemplates
+        | typeof db.notes,
+      items: T[],
+    ) => {
+      if (items.length === 0) return;
+      await db.transaction('rw', table, async () => {
+        for (const item of items) {
+          await table.update(item.id, { _syncStatus: 'synced' });
+        }
+      });
+    };
+
+    await markSynced(db.tasks, unsyncedTasks);
+    await markSynced(db.userSettings, unsyncedUserSettings);
+    await markSynced(db.recurringTasks, unsyncedRecurringTasks);
+    await markSynced(db.recurringTemplates, unsyncedRecurringTemplates);
+    await markSynced(db.notes, unsyncedNotes);
+
+    // 5. サーバーから受信した新しい/更新されたデータをローカルDBにマージ (UPSERT)
+    if (pulledChanges?.tasks?.length) {
       await db.transaction('rw', db.tasks, async () => {
-        for (const t of unsyncedTasks) {
-          // ID指定で直接アップデート
-          await db.tasks.update(t.id, { _syncStatus: 'synced' });
+        for (const item of pulledChanges.tasks) {
+          await db.tasks.put(item);
         }
       });
     }
-
-    // 5. サーバーから受信した新しい/更新されたデータをローカルDBにマージ (UPSERT)
-    if (pulledChanges?.tasks && pulledChanges.tasks.length > 0) {
-      await db.transaction('rw', db.tasks, async () => {
-        for (const serverTask of pulledChanges.tasks) {
-          // サーバーからのデータで上書きし、ステータスはsyncedとなる
-          await db.tasks.put(serverTask);
+    if (pulledChanges?.userSettings?.length) {
+      await db.transaction('rw', db.userSettings, async () => {
+        for (const item of pulledChanges.userSettings) {
+          await db.userSettings.put(item);
+        }
+      });
+    }
+    if (pulledChanges?.recurringTasks?.length) {
+      await db.transaction('rw', db.recurringTasks, async () => {
+        for (const item of pulledChanges.recurringTasks) {
+          await db.recurringTasks.put(item);
+        }
+      });
+    }
+    if (pulledChanges?.recurringTemplates?.length) {
+      await db.transaction('rw', db.recurringTemplates, async () => {
+        for (const item of pulledChanges.recurringTemplates) {
+          await db.recurringTemplates.put(item);
+        }
+      });
+    }
+    if (pulledChanges?.notes?.length) {
+      await db.transaction('rw', db.notes, async () => {
+        for (const item of pulledChanges.notes) {
+          await db.notes.put(item);
         }
       });
     }

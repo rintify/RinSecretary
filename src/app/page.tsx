@@ -2,15 +2,39 @@
 
 import { useState } from 'react';
 import { db, LocalTask } from '@/lib/db';
-import { Box, Button, Container, List, ListItem, ListItemText, TextField, Typography, Checkbox } from '@mui/material';
+import {
+  Box,
+  Button,
+  Container,
+  List,
+  ListItem,
+  ListItemText,
+  TextField,
+  Typography,
+  Checkbox,
+  ListItemButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Chip,
+} from '@mui/material';
 import { useSession, signOut } from 'next-auth/react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useSync } from '@/hooks/useSync';
 import { v4 as uuidv4 } from 'uuid';
+import Link from 'next/link';
 
 export default function DashboardPage() {
   const { data: session } = useSession();
   const [newTaskTitle, setNewTaskTitle] = useState('');
+
+  // 編集ダイアログ用ステート
+  const [selectedTask, setSelectedTask] = useState<LocalTask | null>(null);
 
   // Dexieの変更をリアルタイムに検知して再レンダリングする
   const tasks = useLiveQuery(() => db.tasks.orderBy('createdAt').reverse().toArray()) || [];
@@ -25,6 +49,9 @@ export default function DashboardPage() {
     const newTask: LocalTask = {
       id: uuidv4(),
       title: newTaskTitle,
+      description: null,
+      dueDate: null,
+      priority: 0,
       isCompleted: false,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -41,9 +68,29 @@ export default function DashboardPage() {
       isCompleted: !isCompleted,
       // eslint-disable-next-line
       updatedAt: Date.now(),
-      // 既にcreatedの場合はcreatedのまま、それ以外はupdatedにする等の制御が本来必要
       _syncStatus: 'updated',
     });
+  };
+
+  const handleOpenTask = (task: LocalTask) => {
+    setSelectedTask(task);
+  };
+
+  const handleCloseTask = () => {
+    setSelectedTask(null);
+  };
+
+  const handleSaveTask = async () => {
+    if (!selectedTask) return;
+    await db.tasks.update(selectedTask.id, {
+      title: selectedTask.title,
+      description: selectedTask.description || null,
+      priority: selectedTask.priority,
+      dueDate: selectedTask.dueDate || null,
+      updatedAt: Date.now(),
+      _syncStatus: 'updated',
+    });
+    setSelectedTask(null);
   };
 
   const handleClearData = async () => {
@@ -56,9 +103,20 @@ export default function DashboardPage() {
         <Typography variant="h4" component="h1">
           ホームダッシュボード
         </Typography>
-        <Button variant="outlined" color="inherit" onClick={() => signOut()}>
-          ログアウト
-        </Button>
+        <Box>
+          <Button component={Link} href="/recurring" color="inherit" sx={{ mr: 1 }} data-testid="recurring-link">
+            定期タスク
+          </Button>
+          <Button component={Link} href="/notes" color="inherit" sx={{ mr: 1 }} data-testid="notes-link">
+            ノート
+          </Button>
+          <Button component={Link} href="/settings" color="inherit" sx={{ mr: 1 }} data-testid="settings-link">
+            設定
+          </Button>
+          <Button variant="outlined" color="inherit" onClick={() => signOut()}>
+            ログアウト
+          </Button>
+        </Box>
       </Box>
 
       {session?.user && (
@@ -118,8 +176,33 @@ export default function DashboardPage() {
                 onChange={() => handleToggleTask(task.id, task.isCompleted)}
                 inputProps={{ 'aria-label': 'タスクの完了状態を切り替える' }}
                 data-testid={`task-checkbox-${task.id}`}
+                sx={{ mr: 1 }}
               />
-              <ListItemText primary={task.title} sx={{ textDecoration: task.isCompleted ? 'line-through' : 'none' }} />
+              <ListItemButton onClick={() => handleOpenTask(task)} data-testid={`task-edit-button-${task.id}`}>
+                <ListItemText
+                  primary={task.title}
+                  secondary={
+                    <Box component="span" sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+                      {task.priority > 0 && (
+                        <Chip
+                          size="small"
+                          label={['', '低', '中', '高'][task.priority]}
+                          color={task.priority === 3 ? 'error' : task.priority === 2 ? 'warning' : 'info'}
+                          data-testid={`task-priority-${task.id}`}
+                        />
+                      )}
+                      {task.dueDate && (
+                        <Chip
+                          size="small"
+                          label={`期限: ${new Date(task.dueDate).toLocaleDateString()}`}
+                          data-testid={`task-due-${task.id}`}
+                        />
+                      )}
+                    </Box>
+                  }
+                  sx={{ textDecoration: task.isCompleted ? 'line-through' : 'none' }}
+                />
+              </ListItemButton>
             </ListItem>
           ))}
           {tasks.length === 0 && (
@@ -135,6 +218,65 @@ export default function DashboardPage() {
           </Button>
         </Box>
       </Box>
+
+      {/* タスク詳細編集ダイアログ */}
+      {selectedTask && (
+        <Dialog open={Boolean(selectedTask)} onClose={handleCloseTask} fullWidth maxWidth="sm">
+          <DialogTitle>タスクの編集</DialogTitle>
+          <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              label="タイトル"
+              fullWidth
+              value={selectedTask.title}
+              onChange={(e) => setSelectedTask({ ...selectedTask, title: e.target.value })}
+              data-testid="edit-task-title"
+            />
+            <TextField
+              label="詳細メモ"
+              fullWidth
+              multiline
+              rows={3}
+              value={selectedTask.description || ''}
+              onChange={(e) => setSelectedTask({ ...selectedTask, description: e.target.value })}
+              data-testid="edit-task-desc"
+            />
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <FormControl fullWidth>
+                <InputLabel>優先度</InputLabel>
+                <Select
+                  label="優先度"
+                  value={selectedTask.priority}
+                  onChange={(e) => setSelectedTask({ ...selectedTask, priority: Number(e.target.value) })}
+                  data-testid="edit-task-priority"
+                >
+                  <MenuItem value={0}>なし</MenuItem>
+                  <MenuItem value={1}>低</MenuItem>
+                  <MenuItem value={2}>中</MenuItem>
+                  <MenuItem value={3}>高</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                label="期限"
+                type="date"
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+                value={selectedTask.dueDate ? new Date(selectedTask.dueDate).toISOString().split('T')[0] : ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedTask({ ...selectedTask, dueDate: val ? new Date(val).getTime() : null });
+                }}
+                data-testid="edit-task-due"
+              />
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseTask}>キャンセル</Button>
+            <Button variant="contained" onClick={handleSaveTask} data-testid="save-task-btn">
+              保存
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Container>
   );
 }
