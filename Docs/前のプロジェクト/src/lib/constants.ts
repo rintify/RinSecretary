@@ -1,3 +1,0 @@
-export const SERVER_MAX_STORAGE_BYTES = 3 * 1024 * 1024 * 1024; // 3GB
-export const OFFLINE_FILE_SIZE_LIMIT = 5 * 1024 * 1024; // 5MB
-export const CLIENT_MAX_STORAGE_BYTES = 500 * 1024 * 1024; // 500MB
