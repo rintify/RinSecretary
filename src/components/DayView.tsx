@@ -2,13 +2,14 @@
 
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Box, Typography, Divider } from '@mui/material';
-import { format } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import dayjs from 'dayjs';
+import 'dayjs/locale/ja';
 import { db } from '@/lib/db';
 import { getDayRange } from '@/lib/date-utils';
 import EventCard from '@/components/cards/EventCard';
 import TaskCard from '@/components/cards/TaskCard';
 import AlarmCard from '@/components/cards/AlarmCard';
+import { useDialogStore } from '@/store/dialog';
 import type { LocalEvent, LocalTask, LocalAlarm } from '@/lib/db';
 
 interface DayViewProps {
@@ -21,6 +22,7 @@ interface DayViewProps {
 
 export default function DayView({ date, dayStartHour = 4, onEventTap, onTaskTap, onAlarmTap }: DayViewProps) {
   const { start, end } = getDayRange(date, dayStartHour);
+  const { openEventDialog } = useDialogStore();
 
   // Dexie.js からリアルタイムにデータ取得
   const events = useLiveQuery(
@@ -55,7 +57,7 @@ export default function DayView({ date, dayStartHour = 4, onEventTap, onTaskTap,
     return items.sort((a, b) => a.sortTime - b.sortTime);
   })();
 
-  const dateLabel = format(date, 'M月d日 (E)', { locale: ja });
+  const dateLabel = dayjs(date).tz().format('M月D日 (ddd)');
 
   return (
     <Box
@@ -88,7 +90,13 @@ export default function DayView({ date, dayStartHour = 4, onEventTap, onTaskTap,
 
       {timelineItems.map((entry) => {
         if (entry.type === 'event') {
-          return <EventCard key={entry.item.id} event={entry.item} onTap={onEventTap} />;
+          return (
+            <EventCard
+              key={entry.item.id}
+              event={entry.item}
+              onTap={onEventTap || (() => openEventDialog(entry.item.id))}
+            />
+          );
         }
         return <AlarmCard key={entry.item.id} alarm={entry.item} onTap={onAlarmTap} />;
       })}

@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { addDays, differenceInCalendarDays } from 'date-fns';
 import { Box } from '@mui/material';
+import dayjs from 'dayjs';
+import 'dayjs/locale/ja';
 import DayView from './DayView';
 
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -32,7 +33,7 @@ export default function DaySwiper({ currentDate, onDateChange, dayStartHour = 4 
   // 外部からの日付変更をSwiperに反映
   useEffect(() => {
     if (!swiperRef.current) return;
-    const diff = differenceInCalendarDays(currentDate, anchorDate);
+    const diff = dayjs(currentDate).tz().startOf('day').diff(dayjs(anchorDate).tz().startOf('day'), 'day');
     const targetIndex = INITIAL_INDEX + diff;
     if (swiperRef.current.activeIndex !== targetIndex) {
       swiperRef.current.slideTo(targetIndex, 0, false);
@@ -68,8 +69,9 @@ export default function DaySwiper({ currentDate, onDateChange, dayStartHour = 4 
   const handleSlideChange = useCallback(
     (swiper: SwiperClass) => {
       const diff = swiper.activeIndex - INITIAL_INDEX;
-      const newDate = addDays(anchorDate, diff);
-      if (differenceInCalendarDays(newDate, currentDate) !== 0) {
+      const newDate = dayjs(anchorDate).tz().add(diff, 'day').toDate();
+      const diffCurrent = dayjs(newDate).tz().startOf('day').diff(dayjs(currentDate).tz().startOf('day'), 'day');
+      if (diffCurrent !== 0) {
         onDateChange(newDate);
       }
     },
@@ -99,7 +101,7 @@ export default function DaySwiper({ currentDate, onDateChange, dayStartHour = 4 
         }}
         onSwiper={(swiper) => {
           swiperRef.current = swiper;
-          const diff = differenceInCalendarDays(currentDate, anchorDate);
+          const diff = dayjs(currentDate).tz().startOf('day').diff(dayjs(anchorDate).tz().startOf('day'), 'day');
           if (diff !== 0) {
             swiper.slideTo(INITIAL_INDEX + diff, 0, false);
           }
@@ -112,7 +114,7 @@ export default function DaySwiper({ currentDate, onDateChange, dayStartHour = 4 
       >
         {slides.map((slideIndex) => {
           const diff = slideIndex - INITIAL_INDEX;
-          const slideDate = addDays(anchorDate, diff);
+          const slideDate = dayjs(anchorDate).tz().add(diff, 'day').toDate();
           return (
             <SwiperSlide key={slideIndex} virtualIndex={slideIndex}>
               <Box sx={{ height: '100%', overflow: 'hidden' }}>

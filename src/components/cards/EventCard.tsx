@@ -1,6 +1,6 @@
 'use client';
 
-import { format } from 'date-fns';
+import dayjs from 'dayjs';
 import { Box, Typography, Chip } from '@mui/material';
 import { EVENT_COLOR } from '@/lib/colors';
 import type { LocalEvent } from '@/lib/db';
@@ -11,8 +11,8 @@ interface EventCardProps {
 }
 
 export default function EventCard({ event, onTap }: EventCardProps) {
-  const startTime = format(event.startAt, 'HH:mm');
-  const endTime = format(event.endAt, 'HH:mm');
+  const startTime = dayjs(event.startAt).tz().format('HH:mm');
+  const endTime = dayjs(event.endAt).tz().format('HH:mm');
 
   return (
     <Box

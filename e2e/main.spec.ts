@@ -10,11 +10,27 @@ test.describe('メイン画面', () => {
     await expect(page.locator('[data-testid="app-header"]')).toBeVisible({ timeout: 5000 });
   });
 
-  test('ヘッダーに日付が表示される', async ({ page }) => {
+  test('昼間（12:00）の場合、当日の日付がヘッダーに表示されること', async ({ page }) => {
+    await page.clock.install({ time: new Date('2024-03-01T12:00:00+09:00') });
+    await page.reload();
     await expect(page.locator('[data-testid="header-date"]')).toBeVisible({ timeout: 5000 });
-    // 日付は MM/dd (曜日) 形式
-    const dateText = await page.locator('[data-testid="header-date"]').textContent({ timeout: 5000 });
-    expect(dateText).toMatch(/\d{2}\/\d{2}/);
+    await expect(page.locator('[data-testid="header-date"]')).toHaveText('03/01 (金)');
+  });
+
+  test('深夜帯（03:00）の場合、前日の日付がヘッダーに表示されること', async ({ page }) => {
+    // 営業日の開始が4:00の場合、3/2の3:00は3/1扱いになるはず
+    await page.clock.install({ time: new Date('2024-03-02T03:00:00+09:00') });
+    await page.reload();
+    await expect(page.locator('[data-testid="header-date"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="header-date"]')).toHaveText('03/01 (金)');
+  });
+
+  test('早朝（05:00）の場合、当日の日付がヘッダーに表示されること', async ({ page }) => {
+    // 営業日の開始が4:00の場合、3/2の5:00は3/2扱いになるはず
+    await page.clock.install({ time: new Date('2024-03-02T05:00:00+09:00') });
+    await page.reload();
+    await expect(page.locator('[data-testid="header-date"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="header-date"]')).toHaveText('03/02 (土)');
   });
 
   test('FABボタンが表示される', async ({ page }) => {

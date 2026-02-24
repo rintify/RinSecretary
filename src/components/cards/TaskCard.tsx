@@ -1,6 +1,6 @@
 'use client';
 
-import { format } from 'date-fns';
+import dayjs from 'dayjs';
 import { Box, Typography, Chip } from '@mui/material';
 import { TASK_COLOR } from '@/lib/colors';
 import type { LocalTask } from '@/lib/db';
@@ -11,7 +11,7 @@ interface TaskCardProps {
 }
 
 export default function TaskCard({ task, onTap }: TaskCardProps) {
-  const deadlineTime = format(task.deadline, 'HH:mm');
+  const deadlineTime = dayjs(task.deadline).tz().format('HH:mm');
 
   return (
     <Box

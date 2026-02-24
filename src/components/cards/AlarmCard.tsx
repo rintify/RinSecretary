@@ -1,6 +1,6 @@
 'use client';
 
-import { format } from 'date-fns';
+import dayjs from 'dayjs';
 import { Box, Typography } from '@mui/material';
 import { Notifications as AlarmIcon } from '@mui/icons-material';
 import { ALARM_COLOR } from '@/lib/colors';
@@ -13,7 +13,7 @@ interface AlarmCardProps {
 
 /** アラームカード: 枠無しでスペースを取らないシンプルなデザイン */
 export default function AlarmCard({ alarm, onTap }: AlarmCardProps) {
-  const notifyTime = format(alarm.notifyAt, 'HH:mm');
+  const notifyTime = dayjs(alarm.notifyAt).tz().format('HH:mm');
 
   return (
     <Box

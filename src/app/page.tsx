@@ -3,11 +3,19 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Typography } from '@mui/material';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import AppHeader from '@/components/layout/AppHeader';
 import DaySwiper from '@/components/DaySwiper';
 import ActionFabs from '@/components/layout/ActionFabs';
 import type { FabAction } from '@/components/layout/ActionFabs';
 import { getBusinessDate } from '@/lib/date-utils';
+import { useDialogStore } from '@/store/dialog';
+import EventDialog from '@/components/dialogs/EventDialog';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 interface UserInfo {
   id: string;
@@ -15,6 +23,7 @@ interface UserInfo {
   nickname: string;
   plan: string;
   dayStartHour: number;
+  timezone: string;
 }
 
 export default function HomePage() {
@@ -22,6 +31,8 @@ export default function HomePage() {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(() => getBusinessDate());
+
+  const { openEventDialog } = useDialogStore();
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -31,6 +42,8 @@ export default function HomePage() {
       })
       .then((u) => {
         setUser(u);
+        // グローバルなdayjsのデフォルトタイムゾーンを設定
+        dayjs.tz.setDefault(u.timezone);
         // ユーザーのdayStartHourで営業日を再計算
         setCurrentDate(getBusinessDate(u.dayStartHour));
       })
@@ -40,19 +53,25 @@ export default function HomePage() {
       .finally(() => setLoading(false));
   }, [router]);
 
-  const handleFabAction = useCallback((action: FabAction) => {
-    // TODO: モーダル実装後に各アクションを接続する
-    switch (action) {
-      case 'NEW_TASK':
-      case 'NEW_EVENT':
-      case 'NEW_ALARM':
-        // 将来的にモーダルを開く
-        break;
-      case 'MEMOS':
-        // 将来的にメモ一覧ページに遷移
-        break;
-    }
-  }, []);
+  const handleFabAction = useCallback(
+    (action: FabAction) => {
+      switch (action) {
+        case 'NEW_TASK':
+          // 将来的にタスクモーダルを開く
+          break;
+        case 'NEW_EVENT':
+          openEventDialog();
+          break;
+        case 'NEW_ALARM':
+          // 将来的にアラームモーダルを開く
+          break;
+        case 'MEMOS':
+          // 将来的にメモ一覧ページに遷移
+          break;
+      }
+    },
+    [openEventDialog],
+  );
 
   if (loading) {
     return (
@@ -76,6 +95,8 @@ export default function HomePage() {
         <DaySwiper currentDate={currentDate} onDateChange={setCurrentDate} dayStartHour={user.dayStartHour} />
         <ActionFabs onAction={handleFabAction} />
       </Box>
+
+      <EventDialog />
     </Box>
   );
 }
