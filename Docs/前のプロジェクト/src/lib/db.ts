@@ -1,0 +1,71 @@
+import Dexie, { Table } from 'dexie';
+
+export interface ClientMemo {
+    id: string;
+    title: string;
+    content: string; // isFullContent=falseの場合は、一覧表示用の短い文字列または空文字が入る可能性あり
+    createdAt: Date;
+    updatedAt: Date;
+    userId: string;
+    thumbnailPath?: string | null;
+    
+    // Sync Metadata
+    isDirty?: boolean; // 未同期の変更があるか（ローカルで編集された）
+    isDeleted?: boolean; // 削除済み（同期待ち）か
+    
+    // LRU & Display Metadata
+    lastAccessedAt: Date; // 最終閲覧日時（LRU用）
+    isFullContent: boolean; // サーバーから詳細（全文）を取得済みか。Falseなら一覧用データのみ。
+}
+
+export interface ClientAttachment {
+    id: string;
+    memoId: string;
+    fileName: string;
+    mimeType: string;
+    fileSize: number;
+    createdAt: Date;
+    filePath?: string; // Server Path (e.g. /api/uploads/...)
+    
+    
+    // File Content
+    blob?: Blob; // ローカルでのファイル実体。LRU対象になりうる
+    localUrl?: string; // Blob URL for display
+    isDirty?: boolean; // 未アップロードのファイルか
+    isDeleted?: boolean; // 削除済み（同期待ち）か
+    
+    lastAccessedAt: Date; // 添付ファイルのLRU用
+}
+
+export interface SyncState {
+    key: string; // 'lastSyncTime' etc
+    value: any;
+}
+
+export class RinSecretaryDatabase extends Dexie {
+    memos!: Table<ClientMemo>;
+    attachments!: Table<ClientAttachment>;
+    syncState!: Table<SyncState>;
+
+    constructor() {
+        super('RinSecretaryDB');
+        
+        // バージョンアップ: スキーマ変更時はバージョンを上げてください
+        // Version 1 initialized just now, so we can overwrite or update 
+        this.version(4).stores({
+            memos: 'id, userId, updatedAt, isDirty, isDeleted, lastAccessedAt', // Added isDeleted
+            attachments: 'id, memoId, isDirty, lastAccessedAt',
+            syncState: 'key'
+        });
+
+        // 別のタブやSWでDBのバージョンが上がった場合、コネクションを閉じる
+        this.on('versionchange', () => {
+            this.close();
+            console.log('[Dexie] DB version changed elsewhere, closing connection.');
+            // 必要に応じてページリロードを促す
+        });
+    }
+}
+
+
+export const db = new RinSecretaryDatabase();
