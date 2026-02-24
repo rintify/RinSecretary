@@ -16,7 +16,7 @@ test.describe('ログインページ', () => {
     await page.locator('[data-testid="login-password-input"]').fill('testpassword123', { timeout: 5000 });
     await page.locator('[data-testid="login-submit-button"]').click({ timeout: 5000 });
 
-    await expect(page.locator('[data-testid="welcome-message"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="app-header"]')).toBeVisible({ timeout: 5000 });
   });
 
   test('不正な認証情報でエラーが表示される', async ({ page }) => {
@@ -41,9 +41,10 @@ test.describe('ログインページ', () => {
     await page.locator('[data-testid="login-password-input"]').fill('testpassword123', { timeout: 5000 });
     await page.locator('[data-testid="login-submit-button"]').click({ timeout: 5000 });
 
-    await expect(page.locator('[data-testid="welcome-message"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="app-header"]')).toBeVisible({ timeout: 5000 });
 
-    await page.locator('[data-testid="logout-button"]').click({ timeout: 5000 });
+    await page.locator('[data-testid="menu-button"]').click({ timeout: 5000 });
+    await page.locator('[data-testid="menu-logout"]').click({ timeout: 5000 });
     await expect(page).toHaveURL(/\/login/, { timeout: 5000 });
   });
 });

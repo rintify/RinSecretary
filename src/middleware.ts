@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 /** 認証不要のパスパターン */
-const PUBLIC_PATHS = ['/login', '/api/auth/', '/api/e2e/'];
+const PUBLIC_PATHS = ['/login', '/register', '/api/auth/', '/api/e2e/'];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((path) => pathname.startsWith(path));

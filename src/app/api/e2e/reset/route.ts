@@ -16,6 +16,9 @@ export async function POST() {
   try {
     // 全テーブルのデータを削除（外部キー制約順）
     await prisma.session.deleteMany();
+    await prisma.event.deleteMany();
+    await prisma.task.deleteMany();
+    await prisma.alarm.deleteMany();
     await prisma.systemSetting.deleteMany();
     await prisma.user.deleteMany();
 

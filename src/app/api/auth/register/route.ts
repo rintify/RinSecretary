@@ -8,7 +8,8 @@ interface RegisterRequest {
   password: string;
 }
 
-const MAX_NAME_LENGTH = 50;
+const MIN_NAME_LENGTH = 3;
+const MAX_NAME_LENGTH = 15;
 const MAX_NICKNAME_LENGTH = 50;
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -21,8 +22,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'すべての項目を入力してください' }, { status: 400 });
     }
 
-    if (name.length > MAX_NAME_LENGTH) {
-      return NextResponse.json({ error: `ユーザー名は${MAX_NAME_LENGTH}文字以内で入力してください` }, { status: 400 });
+    if (name.length < MIN_NAME_LENGTH || name.length > MAX_NAME_LENGTH) {
+      return NextResponse.json(
+        { error: `ユーザーIDは${MIN_NAME_LENGTH}文字以上${MAX_NAME_LENGTH}文字以内で入力してください` },
+        { status: 400 },
+      );
+    }
+
+    if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+      return NextResponse.json(
+        { error: 'ユーザーIDには半角英数字、ハイフン、アンダースコアのみ使用できます' },
+        { status: 400 },
+      );
     }
 
     if (nickname.length > MAX_NICKNAME_LENGTH) {
