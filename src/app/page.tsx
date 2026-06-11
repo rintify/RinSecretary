@@ -11,8 +11,8 @@ import DaySwiper from '@/components/DaySwiper';
 import ActionFabs from '@/components/layout/ActionFabs';
 import type { FabAction } from '@/components/layout/ActionFabs';
 import { getBusinessDate } from '@/lib/date-utils';
-import { useDialogStore } from '@/store/dialog';
 import EventDialog from '@/components/dialogs/EventDialog';
+import NiceModal from '@ebay/nice-modal-react';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -31,8 +31,6 @@ export default function HomePage() {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(() => getBusinessDate());
-
-  const { openEventDialog } = useDialogStore();
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -53,25 +51,22 @@ export default function HomePage() {
       .finally(() => setLoading(false));
   }, [router]);
 
-  const handleFabAction = useCallback(
-    (action: FabAction) => {
-      switch (action) {
-        case 'NEW_TASK':
-          // 将来的にタスクモーダルを開く
-          break;
-        case 'NEW_EVENT':
-          openEventDialog();
-          break;
-        case 'NEW_ALARM':
-          // 将来的にアラームモーダルを開く
-          break;
-        case 'MEMOS':
-          // 将来的にメモ一覧ページに遷移
-          break;
-      }
-    },
-    [openEventDialog],
-  );
+  const handleFabAction = useCallback((action: FabAction) => {
+    switch (action) {
+      case 'NEW_TASK':
+        // 将来的にタスクモーダルを開く
+        break;
+      case 'NEW_EVENT':
+        NiceModal.show(EventDialog);
+        break;
+      case 'NEW_ALARM':
+        // 将来的にアラームモーダルを開く
+        break;
+      case 'MEMOS':
+        // 将来的にメモ一覧ページに遷移
+        break;
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -95,8 +90,6 @@ export default function HomePage() {
         <DaySwiper currentDate={currentDate} onDateChange={setCurrentDate} dayStartHour={user.dayStartHour} />
         <ActionFabs onAction={handleFabAction} />
       </Box>
-
-      <EventDialog />
     </Box>
   );
 }

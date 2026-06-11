@@ -5,6 +5,7 @@ import { AppRouterCacheProvider } from '@mui/material-nextjs/v14-appRouter';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import GlobalStyles from '@mui/material/GlobalStyles';
+import NiceModal from '@ebay/nice-modal-react';
 
 const theme = createTheme({
   spacing: 6.4,
@@ -72,9 +73,11 @@ export default function ThemeRegistry({ children }: { children: React.ReactNode 
   return (
     <AppRouterCacheProvider>
       <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <GlobalStyles styles={globalUserSelectStyles} />
-        {children}
+        <NiceModal.Provider>
+          <CssBaseline />
+          <GlobalStyles styles={globalUserSelectStyles} />
+          {children}
+        </NiceModal.Provider>
       </ThemeProvider>
     </AppRouterCacheProvider>
   );

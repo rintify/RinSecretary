@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -16,7 +16,7 @@ import {
 import { AccessTime as AccessTimeIcon } from '@mui/icons-material';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ja';
-import { useDialogStore } from '@/store/dialog';
+import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { db } from '@/lib/db';
 import { createId } from '@paralleldrive/cuid2';
 import CustomDatePicker from '../ui/CustomDatePicker';
@@ -25,8 +25,8 @@ import CustomTimePicker from '../ui/CustomTimePicker';
 // localeをセット
 dayjs.locale('ja');
 
-export default function EventDialog() {
-  const { isEventDialogOpen, editingEventId, closeEventDialog } = useDialogStore();
+export default NiceModal.create(({ editingEventId }: { editingEventId?: string | null }) => {
+  const modal = useModal();
 
   const [title, setTitle] = useState('');
   const [startAt, setStartAt] = useState<Date | null>(new Date());
@@ -36,12 +36,14 @@ export default function EventDialog() {
   // Picker State
   const [pickerConfig, setPickerConfig] = useState<{ type: 'date' | 'time'; target: 'start' | 'end' } | null>(null);
 
-  // エラー状態の管理 (dayjsでの比較)
-  const isTimeError = startAt && endAt && dayjs(startAt).isAfter(dayjs(endAt).subtract(1, 'ms'));
+  // エラー状態の管理 (dayjsでの比較をメモ化)
+  const isTimeError = useMemo(() => {
+    return startAt && endAt && dayjs(startAt).isAfter(dayjs(endAt).subtract(1, 'ms'));
+  }, [startAt, endAt]);
 
   // 編集モード時の初期データ読み込み、または新規作成時の初期化
   useEffect(() => {
-    if (isEventDialogOpen && editingEventId) {
+    if (modal.visible && editingEventId) {
       db.events.get(editingEventId).then((event) => {
         if (event) {
           setTitle(event.title);
@@ -50,8 +52,7 @@ export default function EventDialog() {
           setMemo(event.memo || '');
         }
       });
-    } else if (isEventDialogOpen) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+    } else if (modal.visible) {
       setTitle('');
 
       const defaultStart = dayjs.tz().startOf('hour').add(1, 'hour');
@@ -61,7 +62,7 @@ export default function EventDialog() {
       setEndAt(defaultEnd.toDate());
       setMemo('');
     }
-  }, [isEventDialogOpen, editingEventId]);
+  }, [modal.visible, editingEventId]);
 
   const handleSave = async () => {
     if (!title.trim() || !startAt || !endAt || isTimeError) return;
@@ -86,7 +87,7 @@ export default function EventDialog() {
         updatedAt: now,
       });
     }
-    closeEventDialog();
+    modal.hide();
   };
 
   const handleDateSelect = (newDate: Date) => {
@@ -127,18 +128,14 @@ export default function EventDialog() {
     return dayjs(date).tz().format('HH:mm');
   };
 
-  if (isEventDialogOpen) {
-    console.log('[DEBUG EventDialog]', {
-      title,
-      startAt: startAt?.toISOString(),
-      endAt: endAt?.toISOString(),
-      isTimeError,
-      titleTrimmed: !!title.trim(),
-    });
-  }
-
   return (
-    <Dialog open={isEventDialogOpen} onClose={closeEventDialog} maxWidth="sm" fullWidth>
+    <Dialog
+      open={modal.visible}
+      onClose={() => modal.hide()}
+      TransitionProps={{ onExited: () => modal.remove() }}
+      maxWidth="sm"
+      fullWidth
+    >
       <DialogTitle>{editingEventId ? 'イベントを編集' : 'イベントを作成'}</DialogTitle>
       <DialogContent dividers>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 1 }}>
@@ -263,7 +260,7 @@ export default function EventDialog() {
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={closeEventDialog} data-testid="event-cancel-button">
+        <Button onClick={() => modal.hide()} data-testid="event-cancel-button">
           キャンセル
         </Button>
         <Button
@@ -277,4 +274,4 @@ export default function EventDialog() {
       </DialogActions>
     </Dialog>
   );
-}
+});
